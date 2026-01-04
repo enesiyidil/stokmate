@@ -1,12 +1,15 @@
 package com.stokmate.service;
 
 import com.stokmate.domain.ActivityType;
+import org.springframework.http.ResponseEntity;
 import com.stokmate.domain.ApprovalStatus;
 import com.stokmate.domain.Customer;
+import com.stokmate.domain.DeliveryStatus;
 import com.stokmate.domain.Order;
 import com.stokmate.domain.OrderProduct;
 import com.stokmate.domain.OrderStatus;
 import com.stokmate.domain.OrderType;
+import com.stokmate.domain.ProblemType;
 import com.stokmate.domain.Sale;
 import com.stokmate.domain.SaleProduct;
 import com.stokmate.domain.SaleStatus;
@@ -260,6 +263,127 @@ public class ShipmentService {
                                                 ? shipment.getApprovedBy().getFirstName() + " "
                                                                 + shipment.getApprovedBy().getLastName()
                                                 : null)
+                                .deliveryNotes(shipment != null ? shipment.getDeliveryNotes() : null)
+                                .signedDocumentUrl(shipment != null ? shipment.getSignedDocumentPath() : null)
+                                .deliveryPhotoUrls(shipment != null && shipment.getDeliveryPhotoPaths() != null
+                                                ? new ArrayList<>(shipment.getDeliveryPhotoPaths())
+                                                : null)
+                                .build();
+        }
+
+        /**
+         * Get detailed shipment information by Shipment ID
+         */
+        @Transactional
+        public ShipmentDetailsResponse getShipmentDetailsByShipmentId(UUID shipmentId) {
+                Shipment shipment = shipmentRepository.findById(shipmentId)
+                                .orElseThrow(() -> new NotFoundException("Shipment not found"));
+                Order order = shipment.getOrder();
+
+                // Build customer info
+                ShipmentDetailsResponse.CustomerInfo customerInfo = null;
+                if (order.getCustomer() != null) {
+                        Customer c = order.getCustomer();
+                        customerInfo = ShipmentDetailsResponse.CustomerInfo.builder()
+                                        .name(c.getFirstName() + " " + c.getLastName())
+                                        .phone(c.getPhone())
+                                        .address(c.getFullAddress())
+                                        .build();
+                } else if (order.getProsapContractNameSurname() != null) {
+                        customerInfo = ShipmentDetailsResponse.CustomerInfo.builder()
+                                        .name(order.getProsapContractNameSurname())
+                                        .phone("")
+                                        .address("")
+                                        .build();
+                }
+
+                // Build sales consultant info
+                ShipmentDetailsResponse.UserInfo consultantInfo = null;
+                if (order.getSalesConsultant() != null) {
+                        consultantInfo = ShipmentDetailsResponse.UserInfo.builder()
+                                        .id(order.getSalesConsultant().getId().toString())
+                                        .name(order.getSalesConsultant().getFirstName() + " "
+                                                        + order.getSalesConsultant().getLastName())
+                                        .build();
+                }
+
+                // Build driver info
+                ShipmentDetailsResponse.UserInfo driverInfo = null;
+                if (shipment.getShippedBy() != null) {
+                        driverInfo = ShipmentDetailsResponse.UserInfo.builder()
+                                        .id(shipment.getShippedBy().getId().toString())
+                                        .name(shipment.getShippedBy().getFirstName() + " "
+                                                        + shipment.getShippedBy().getLastName())
+                                        .build();
+                }
+
+                // Build vehicle info
+                ShipmentDetailsResponse.VehicleInfo vehicleInfo = null;
+                if (shipment.getVehicle() != null) {
+                        vehicleInfo = ShipmentDetailsResponse.VehicleInfo.builder()
+                                        .id(shipment.getVehicle().getId().toString())
+                                        .licensePlate(shipment.getVehicle().getLicensePlate())
+                                        .vehicleType(shipment.getVehicle().getVehicleType())
+                                        .build();
+                }
+
+                // Build product details
+                List<ShipmentDetailsResponse.ProductShipmentDetail> productDetails = shipment.getItems().stream()
+                                .map(si -> {
+                                        OrderProduct op = si.getOrderProduct();
+                                        int totalQty = op.getQuantity().intValue();
+                                        int shippedQty = op.getShippedQuantity() != null
+                                                        ? op.getShippedQuantity().intValue()
+                                                        : 0;
+                                        int pendingQty = si.getShippedQuantity(); // Quantity in this shipment
+                                        // remaining is total - shipped (since shipped includes this shipment's qty if
+                                        // finalized, or we adjust logic)
+                                        // If status is COMPLETED, shippedQty includes this.
+                                        // If status is PENDING, shippedQty might NOT include this depending on logic.
+                                        // But our finalizeShipment updates shippedQty.
+
+                                        int remainingQty = Math.max(0, totalQty - shippedQty);
+
+                                        return ShipmentDetailsResponse.ProductShipmentDetail.builder()
+                                                        .productCode(op.getProductCode())
+                                                        .productName(op.getProductName())
+                                                        .totalQuantity(totalQty)
+                                                        .shippedQuantity(shippedQty)
+                                                        .pendingQuantity(pendingQty)
+                                                        .remainingQuantity(remainingQty)
+                                                        .build();
+                                })
+                                .collect(Collectors.toList());
+
+                return ShipmentDetailsResponse.builder()
+                                .orderId(order.getId().toString())
+                                .shipmentId(shipment.getId().toString())
+                                .orderNo(order.getOrderNo())
+                                .orderType("ORDER")
+                                .orderDate(java.time.LocalDateTime.ofInstant(order.getCreatedAt(),
+                                                java.time.ZoneId.systemDefault()))
+                                .contractNo(order.getProsapContractNo())
+                                .customer(customerInfo)
+                                .salesConsultant(consultantInfo)
+                                .driver(driverInfo)
+                                .vehicle(vehicleInfo)
+                                .products(productDetails)
+                                .shipmentStatus(shipment.getStatus().toString())
+                                .plannedShipmentDate(shipment.getPlannedShipmentDate())
+                                .approvedBy(shipment.getApprovedBy() != null
+                                                ? shipment.getApprovedBy().getFirstName() + " "
+                                                                + shipment.getApprovedBy().getLastName()
+                                                : null)
+                                .deliveryStatus(shipment.getDeliveryStatus() != null
+                                                ? shipment.getDeliveryStatus().toString()
+                                                : null)
+                                .problemType(shipment.getProblemType() != null ? shipment.getProblemType().toString()
+                                                : null)
+                                .deliveryNotes(shipment.getDeliveryNotes())
+                                .signedDocumentUrl(shipment.getSignedDocumentPath())
+                                .deliveryPhotoUrls(shipment.getDeliveryPhotoPaths() != null
+                                                ? new ArrayList<>(shipment.getDeliveryPhotoPaths())
+                                                : null)
                                 .build();
         }
 
@@ -411,7 +535,14 @@ public class ShipmentService {
                 // Check if all products in the order are fully shipped
                 Order order = shipment.getOrder();
                 boolean allProductsShipped = order.getProducts().stream()
-                                .allMatch(op -> op.getShippedQuantity() >= op.getAcceptedQuantity());
+                                .allMatch(op -> {
+                                        BigDecimal shipped = op.getShippedQuantity() != null ? op.getShippedQuantity()
+                                                        : BigDecimal.ZERO;
+                                        BigDecimal accepted = op.getAcceptedQuantity() != null
+                                                        ? op.getAcceptedQuantity()
+                                                        : BigDecimal.ZERO;
+                                        return shipped.compareTo(accepted) >= 0;
+                                });
 
                 if (allProductsShipped) {
                         order.setStatus(OrderStatus.DELIVERED);
@@ -702,6 +833,39 @@ public class ShipmentService {
                                 .shipmentsCount(shipments.size())
                                 .pendingShipments((int) pendingShipments)
                                 .build();
+        }
+
+        /**
+         * Get signed document resource
+         */
+        public ResponseEntity<org.springframework.core.io.Resource> getSignedDocument(UUID shipmentId) {
+                Shipment shipment = shipmentRepository.findById(shipmentId)
+                                .orElseThrow(() -> new NotFoundException("Shipment not found"));
+
+                String path = shipment.getSignedDocumentPath();
+                if (path == null) {
+                        throw new NotFoundException("No signed document found for this shipment");
+                }
+
+                java.io.InputStream inputStream = storageService.download(path);
+                org.springframework.core.io.InputStreamResource resource = new org.springframework.core.io.InputStreamResource(
+                                inputStream);
+
+                String filename = path.substring(path.lastIndexOf("/") + 1);
+                String contentType = "application/octet-stream";
+                if (filename.toLowerCase().endsWith(".pdf")) {
+                        contentType = "application/pdf";
+                } else if (filename.toLowerCase().endsWith(".jpg") || filename.toLowerCase().endsWith(".jpeg")) {
+                        contentType = "image/jpeg";
+                } else if (filename.toLowerCase().endsWith(".png")) {
+                        contentType = "image/png";
+                }
+
+                return ResponseEntity.ok()
+                                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
+                                                "inline; filename=\"" + filename + "\"")
+                                .contentType(org.springframework.http.MediaType.parseMediaType(contentType))
+                                .body(resource);
         }
 
         /**

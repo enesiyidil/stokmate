@@ -24,8 +24,9 @@ public interface ShipmentRepository extends JpaRepository<Shipment, UUID> {
                         "shippedBy", "approvedBy", "vehicle" })
         List<Shipment> findBySaleId(UUID saleId);
 
-        @Override
         @EntityGraph(attributePaths = { "order", "order.salesConsultant", "order.customer", "order.products", "sale",
                         "shippedBy", "approvedBy", "vehicle" })
         Optional<Shipment> findById(UUID id);
+
+        List<Shipment> findByOrder(com.stokmate.domain.Order order);
 }
