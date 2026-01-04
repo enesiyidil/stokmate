@@ -1,0 +1,743 @@
+import { ArrowLeft, Package, User, FileText, CheckCircle, XCircle, Clock, Upload, Download, Activity, Edit, Eye } from 'lucide-react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { useCancelOrderMutation, useUploadInvoiceMutation, useGetInvoiceUrlQuery, useGetOrderQuery, useUpdateSalesConsultantMutation, useApproveShipmentMutation, useListOrdersQuery } from '../../services/orderApi'
+import { useCreatePartialShipmentMutation, useListReadyShipmentsQuery } from '../../services/shipmentApi'
+import { useGetOrderActivitiesQuery } from '../../services/orderActivityApi'
+import { useListOrderReceiptsQuery } from '../../services/orderReceiptApi'
+import { formatDistanceToNow } from 'date-fns'
+import { tr } from 'date-fns/locale'
+import { useTopbar } from '../../context/TopbarContext'
+import { useEffect, useState, useMemo } from 'react'
+import { useAppSelector } from '../../hooks/useAuth'
+import { useGetSalesConsultantsQuery } from '../../services/userApi'
+import CustomerModal from '../../components/customers/CustomerModal'
+
+export default function OrderDetailsPage() {
+    const { id } = useParams<{ id: string }>()
+    const navigate = useNavigate()
+    const { setTopbarContent } = useTopbar()
+    const { data: order, isLoading, refetch } = useGetOrderQuery(id!)
+    const { data: activities = [] } = useGetOrderActivitiesQuery(id!)
+    const { data: receipts = [] } = useListOrderReceiptsQuery({ orderId: id! })
+    const [cancelOrder, { isLoading: isCanceling }] = useCancelOrderMutation()
+    const [uploadInvoice] = useUploadInvoiceMutation()
+    const { data: invoiceData } = useGetInvoiceUrlQuery(id!, { skip: !order?.hasInvoice })
+    const [updateSalesConsultant] = useUpdateSalesConsultantMutation()
+    const { data: salesConsultants = [] } = useGetSalesConsultantsQuery()
+    const [approveShipment, { isLoading: isApproving }] = useApproveShipmentMutation()
+
+    // Fetch active shipments for quantity validation
+    const { data: pendingOrders = [] } = useListOrdersQuery({ status: 'PENDING_SHIPMENT_APPROVAL' })
+    const { data: readyShipments = [] } = useListReadyShipmentsQuery()
+
+    // Filter shipments relevant to this order
+    const pendingShipments = useMemo(() => {
+        return Array.isArray(pendingOrders) ? pendingOrders.filter((o: any) => o.id === id || o.orderId === id) : []
+    }, [pendingOrders, id])
+
+    const user = useAppSelector(state => state.auth.user)
+
+    const [showSalesConsultantModal, setShowSalesConsultantModal] = useState(false)
+    const [selectedConsultantId, setSelectedConsultantId] = useState<string>('')
+
+    // Shipment modal state
+    const [showShipmentModal, setShowShipmentModal] = useState(false)
+    const [shipmentQuantities, setShipmentQuantities] = useState<Record<string, number>>({})
+    const [shipmentNotes, setShipmentNotes] = useState<string>('')
+    const [isCreatingShipment, setIsCreatingShipment] = useState(false)
+    const [createPartialShipment] = useCreatePartialShipmentMutation()
+
+    const [showCustomerModal, setShowCustomerModal] = useState(false)
+
+    // Check if user can ship products (for customer-specific orders)
+    const canEdit = useMemo(() => {
+        if (!order || !user) return false
+        if (order.orderType !== 'CUSTOMER_SPECIFIC') return false
+        if (user.role === 'ADMIN' || user.role === 'MUDUR') return true
+        if (user.role === 'MAGAZA_CALISAN' && order.salesConsultant?.id === user.id) return true
+        return false
+    }, [order, user])
+
+    const shippableProducts = useMemo(() => {
+        if (!order?.products) return []
+
+        // Calculate pending quantities from active shipments
+        const pendingInShipments: Record<string, number> = {}
+        const activeShipments = [...pendingShipments, ...readyShipments]
+
+        activeShipments.forEach((shipment: any) => {
+            // Check if shipment is active (not approved/completed - although ready/pending lists already imply this)
+            if (shipment.status !== 'APPROVED' && shipment.status !== 'COMPLETED') {
+                shipment.items?.forEach((item: any) => {
+                    if (item.orderProductId) {
+                        pendingInShipments[item.orderProductId] = (pendingInShipments[item.orderProductId] || 0) + item.shippedQuantity
+                    }
+                })
+            }
+        })
+
+        return order.products.filter(p => {
+            if (!p.acceptedQuantity || p.acceptedQuantity <= 0) return false
+            const shipped = p.shippedQuantity || 0
+            const pending = pendingInShipments[p.id] || 0
+            // Available = Accepted - Shipped - PendingInShipments
+            return (p.acceptedQuantity - shipped - pending) > 0
+        })
+    }, [order?.products, pendingShipments, readyShipments])
+
+    // Calculate effective remaining for modal
+    const getEffectiveRemaining = (product: any) => {
+        const accepted = product.acceptedQuantity || 0
+        const shipped = product.shippedQuantity || 0
+
+        // Calculate pending from active shipments
+        const activeShipments = [...pendingShipments, ...readyShipments]
+        let pending = 0
+        activeShipments.forEach((shipment: any) => {
+            shipment.items?.forEach((item: any) => {
+                if (item.orderProductId === product.id) {
+                    pending += item.shippedQuantity
+                }
+            })
+        })
+
+        return Math.max(0, accepted - shipped - pending)
+    }
+
+    // Check if user is admin or manager
+    const isAdminOrManager = useMemo(() => {
+        return user?.role === 'ADMIN' || user?.role === 'MUDUR'
+    }, [user])
+
+    // Helper to get pending quantity
+    const getPendingQuantity = (productId: string) => {
+        return receipts
+            .filter(r => r.orderProductId === productId && r.status === 'PENDING_APPROVAL')
+            .reduce((sum, r) => sum + r.receivedQuantity, 0)
+    }
+
+    const handleCancelOrder = async () => {
+        if (!confirm('Bu siparişi iptal etmek istediğinizden emin misiniz?')) return
+        try {
+            await cancelOrder(order!.id).unwrap()
+        } catch (error) {
+            alert('Sipariş iptal edilirken bir hata oluştu')
+        }
+    }
+
+    const handleAcceptProducts = () => {
+        navigate('/products/accept-order', {
+            state: { orderId: order!.id, orderNo: order!.orderNo, products: order!.products }
+        })
+    }
+
+    const handleInvoiceUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+        const formData = new FormData()
+        formData.append('file', file)
+        try {
+            await uploadInvoice({ id: order!.id, file: formData }).unwrap()
+            alert('Fatura başarıyla yüklendi')
+        } catch (error) {
+            alert('Fatura yüklenirken bir hata oluştu')
+        }
+    }
+
+    const handleOpenSalesConsultantModal = () => {
+        setSelectedConsultantId(order?.salesConsultant?.id || '')
+        setShowSalesConsultantModal(true)
+    }
+
+    const handleSaveSalesConsultant = async () => {
+        if (!id) return
+
+        try {
+            await updateSalesConsultant({
+                orderId: id,
+                data: {
+                    salesConsultantId: selectedConsultantId || undefined
+                }
+            }).unwrap()
+            setShowSalesConsultantModal(false)
+            alert('Satış danışmanı güncellendi')
+        } catch (error) {
+            console.error('Failed to update sales consultant:', error)
+            alert('Güncelleme başarısız oldu')
+        }
+    }
+
+    const handleOpenShipmentModal = () => {
+        const initialQuantities: Record<string, number> = {}
+        // Initialize with 0
+        shippableProducts.forEach(p => {
+            initialQuantities[p.id] = 0
+        })
+        setShipmentQuantities(initialQuantities)
+        setShipmentNotes('')
+        setShowShipmentModal(true)
+    }
+
+    const handleSubmitShipment = async () => {
+        if (!id) return
+
+        const itemsToShip = Object.entries(shipmentQuantities)
+            .filter(([_, qty]) => qty > 0)
+            .map(([productId, qty]) => ({
+                orderProductId: productId,
+                quantityToShip: qty
+            }))
+
+        if (itemsToShip.length === 0) {
+            alert('Lütfen en az bir ürün için miktar giriniz')
+            return
+        }
+
+        setIsCreatingShipment(true)
+        try {
+            await createPartialShipment({
+                orderId: id,
+                productShipments: itemsToShip,
+                notes: shipmentNotes
+            }).unwrap()
+
+            setShowShipmentModal(false)
+            // Reload page to refresh all data including shipped quantities
+            window.location.reload()
+        } catch (error) {
+            console.error('Failed to create shipment:', error)
+            alert('Sevk talebi oluşturulamadı')
+        } finally {
+            setIsCreatingShipment(false)
+        }
+    }
+
+    useEffect(() => {
+        if (order) {
+            const statusBadge = getStatusBadge()
+            const StatusIcon = statusBadge.icon
+
+            setTopbarContent({
+                title: order.orderNo,
+                description: 'Sipariş Detayı',
+                icon: <Package className="w-8 h-8" />,
+                showFiltersInTopbar: true,
+                actions: (
+                    <div className="flex items-center gap-3">
+                        <span className={`px-3 py-1 rounded-lg text-sm font-medium border flex items-center gap-2 ${statusBadge.className}`}>
+                            <StatusIcon className="w-4 h-4" />
+                            {statusBadge.label}
+                        </span>
+                        {order.productsAccepted && (
+                            <span className="px-3 py-1 bg-green-100 text-green-800 rounded-lg text-sm font-medium border border-green-400 flex items-center gap-2">
+                                <CheckCircle className="w-4 h-4" />
+                                <span className="hidden lg:inline">Ürünler Kabul Edildi</span>
+                                <span className="lg:hidden">Kabul Edildi</span>
+                            </span>
+                        )}
+                        {order.status !== 'IPTAL_EDILDI' && order.status !== 'CANCELLED' && order.status !== 'TAMAMLANDI' && order.status !== 'COMPLETED' && (
+                            <button onClick={handleCancelOrder} disabled={isCanceling} className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-red-500 to-pink-600 text-white rounded-lg hover:from-red-600 hover:to-pink-700 transition-all disabled:opacity-50">
+                                <XCircle className="w-4 h-4" />
+                                <span className="hidden lg:inline">İptal Et</span>
+                            </button>
+                        )}
+                        {(order.status === 'TAMAMLANDI' || order.status === 'COMPLETED') && !order.productsAccepted && (
+                            <button onClick={handleAcceptProducts} className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all">
+                                <CheckCircle className="w-4 h-4" />
+                                <span className="hidden lg:inline">Ürünleri Kabul Et</span>
+                            </button>
+                        )}
+                        {order.status === 'PENDING_SHIPMENT_APPROVAL' && isAdminOrManager && (
+                            <button
+                                onClick={async () => {
+                                    if (!confirm('Bu sevkiyatı onaylamak istediğinize emin misiniz?')) return
+                                    try {
+                                        await approveShipment(order.id).unwrap()
+                                        alert('Sevkiyat onaylandı!')
+                                        refetch()
+                                    } catch (error: any) {
+                                        alert('Hata: ' + (error?.data?.message || 'Bir hata oluştu'))
+                                    }
+                                }}
+                                disabled={isApproving}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:from-green-600 hover:to-emerald-700 transition-all disabled:opacity-50"
+                            >
+                                <CheckCircle className="w-4 h-4" />
+                                <span className="hidden lg:inline">{isApproving ? 'Onaylanıyor...' : 'Sevkiyatı Onayla'}</span>
+                            </button>
+                        )}
+                    </div>
+                ),
+                filters: (
+                    <button onClick={() => navigate('/orders')} className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors">
+                        <ArrowLeft className="w-4 h-4" />
+                        Geri
+                    </button>
+                )
+            })
+        }
+
+        return () => setTopbarContent(null)
+    }, [order, setTopbarContent, navigate, isCanceling])
+
+    if (isLoading || !order) {
+        return <div className="flex items-center justify-center min-h-screen"><p className="text-white text-xl">Yükleniyor...</p></div>
+    }
+
+    const getStatusBadge = () => {
+        const status = order.status
+        if (status === 'CREATED') return { label: 'Oluşturuldu', icon: Clock, className: 'bg-purple-500/30 to-indigo-500/30 text- border-purple-400/30' }
+        if (['DEVAM_EDIYOR', 'PENDING_ACCEPTANCE', 'PARTIALLY_ACCEPTED'].includes(status)) {
+            return { label: 'Devam Ediyor', icon: Clock, className: 'bg-blue-500/30 to-cyan-500/30 text- border-blue-400/30' }
+        }
+        if (status === 'PENDING_SHIPMENT_APPROVAL') {
+            return { label: 'Sevk Onayı Bekliyor', icon: Clock, className: 'bg-orange-500/30 to-amber-500/30 text- border-orange-400/30 animate-pulse' }
+        }
+        if (status === 'SHIPMENT_APPROVED') {
+            return { label: 'Sevke Hazır', icon: CheckCircle, className: 'bg-teal-500/30 to-emerald-500/30 text- border-teal-400/30' }
+        }
+        if (['IN_SHIPMENT', 'PARTIALLY_SHIPPED'].includes(status)) {
+            return { label: 'Sevkiyatta', icon: Clock, className: 'bg-yellow-500/30 to-orange-500/30 text- border-yellow-400/30' }
+        }
+        if (['TAMAMLANDI', 'COMPLETED', 'DELIVERED', 'ACCEPTED'].includes(status)) {
+            return { label: 'Tamamlandı', icon: CheckCircle, className: 'bg-green-500/30 to-emerald-500/30 text- border-green-400/30' }
+        }
+        if (['IPTAL_EDILDI', 'CANCELLED'].includes(status)) {
+            return { label: 'İptal Edildi', icon: XCircle, className: 'bg-red-500/30 to-pink-500/30 text- border-red-400/30' }
+        }
+        return { label: 'Bilinmiyor', icon: Clock, className: 'bg-gray-500/30 to-slate-500/30 text- border-gray-400/30' }
+    }
+
+    const formatDate = (dateStr: string) => new Date(dateStr).toLocaleDateString('tr-TR')
+
+    return (
+        <div className="min-h-screen">
+            <div className="p-6 space-y-6">
+                {/* Order Info Card */}
+                <div className="backdrop-blur-xl bg-white border border-amber-200 rounded-2xl shadow-2xl p-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div>
+                            <p className="text-xs text-amber-700 mb-1">Sözleşme No</p>
+                            <p className="text-amber-900 font-medium">{order.prosapContractNo}</p>
+                        </div>
+                        <div>
+                            <p className="text-xs text-amber-700 mb-1">Sipariş Tarihi</p>
+                            <p className="text-amber-900 font-medium">{formatDate(order.orderDate)}</p>
+                        </div>
+                        <div>
+                            <p className="text-xs text-amber-700 mb-1">Sözleşme Ad Soyad</p>
+                            <p className="text-amber-900 font-medium">{order.prosapContractNameSurname}</p>
+                        </div>
+                        <div>
+                            <p className="text-xs text-amber-700 mb-1">Sipariş Tipi</p>
+                            <p className="text-amber-900 font-medium">
+                                {order.orderType === 'STOCK' ? '📦 Stok Siparişi' :
+                                    order.orderType === 'CUSTOMER_SPECIFIC' ? '👤 Müşteriye Özel' :
+                                        order.orderType === 'AFTER_SALES_SERVICE' ? '🔧 Satış Sonrası Hizmet' : order.orderType}
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Sales Consultant Info - Only for CUSTOMER_SPECIFIC orders */}
+                    {order.orderType === 'CUSTOMER_SPECIFIC' && (
+                        <div className="mt-4 pt-4 border-t border-amber-200">
+                            <div className="flex items-center justify-between mb-3">
+                                <p className="text-sm font-semibold text-amber-800">👨‍💼 Satış Danışmanı</p>
+                                {isAdminOrManager && (
+                                    <button
+                                        onClick={handleOpenSalesConsultantModal}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 text-amber-800 rounded-lg hover:bg-amber-200 transition-all text-xs font-medium"
+                                    >
+                                        <Edit className="w-3.5 h-3.5" />
+                                        {order.salesConsultant ? 'Değiştir' : 'Ata'}
+                                    </button>
+                                )}
+                            </div>
+                            {order.salesConsultant ? (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                    <div>
+                                        <p className="text-xs text-amber-700 mb-1">Ad Soyad</p>
+                                        <p className="text-amber-900 font-medium">{order.salesConsultant.firstName} {order.salesConsultant.lastName}</p>
+                                    </div>
+                                    {order.salesConsultant.email && (
+                                        <div>
+                                            <p className="text-xs text-amber-700 mb-1">E-posta</p>
+                                            <p className="text-amber-900 font-medium">{order.salesConsultant.email}</p>
+                                        </div>
+                                    )}
+                                    {order.salesConsultant.phone && (
+                                        <div>
+                                            <p className="text-xs text-amber-700 mb-1">Telefon</p>
+                                            <p className="text-amber-900 font-medium">{order.salesConsultant.phone}</p>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="text-center py-4">
+                                    <p className="text-amber-700 text-sm">Henüz satış danışmanı atanmamış</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                {/* 2 Column Layout: Left Fixed, Right Scrollable */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    {/* Left Column - Fixed */}
+                    <div className="lg:col-span-4 space-y-6">
+                        {/* Customer Info */}
+                        {order.customer && (
+                            <div className="backdrop-blur-xl bg-white border border-amber-200 rounded-2xl shadow-2xl p-6 space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-lg font-semibold text-amber-900 flex items-center gap-2">
+                                        <User className="w-5 h-5" />
+                                        Müşteri Bilgileri
+                                    </h3>
+                                    <button
+                                        onClick={() => setShowCustomerModal(true)}
+                                        className="p-1.5 hover:bg-amber-100 text-amber-600 rounded-lg transition-colors"
+                                        title="Müşteri Bilgilerini Düzenle"
+                                    >
+                                        <Edit className="w-4 h-4" />
+                                    </button>
+                                </div>
+                                <div className="space-y-3">
+                                    <div>
+                                        <p className="text-xs text-amber-700">Ad Soyad</p>
+                                        <p className="text-amber-900 font-medium">{order.customer.firstName} {order.customer.lastName}</p>
+                                    </div>
+                                    {order.customer.phone && (
+                                        <div>
+                                            <p className="text-xs text-amber-700">Telefon</p>
+                                            <p className="text-amber-900">{order.customer.phone}</p>
+                                        </div>
+                                    )}
+                                    {order.customer.email && (
+                                        <div>
+                                            <p className="text-xs text-amber-700">E-posta</p>
+                                            <p className="text-amber-900">{order.customer.email}</p>
+                                        </div>
+                                    )}
+                                    {order.customer.city && (
+                                        <div>
+                                            <p className="text-xs text-amber-700">Şehir</p>
+                                            <p className="text-amber-900">{order.customer.city}</p>
+                                        </div>
+                                    )}
+                                    {order.customer.fullAddress && (
+                                        <div>
+                                            <p className="text-xs text-amber-700">Adres</p>
+                                            <p className="text-amber-900 text-sm">{order.customer.fullAddress}</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Invoice */}
+                        <div className="backdrop-blur-xl bg-white border border-amber-200 rounded-2xl shadow-2xl p-6 space-y-4">
+                            <h3 className="text-lg font-semibold text-amber-900 flex items-center gap-2">
+                                <FileText className="w-5 h-5" />
+                                Fatura
+                            </h3>
+                            {order.hasInvoice ? (
+                                <div className="space-y-3">
+                                    <div className="flex items-center gap-2 text-green-400"><CheckCircle className="w-5 h-5" /><span>Fatura mevcut</span></div>
+                                    {invoiceData && (
+                                        <div className="flex gap-2">
+                                            <a href={invoiceData.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 bg-purple-100 text-purple-900 rounded-lg hover:bg-purple-200 transition-colors border border-purple-400">
+                                                <Eye className="w-4 h-4" />
+                                                Görüntüle
+                                            </a>
+                                            <a href={invoiceData.url} download className="flex items-center gap-2 px-4 py-2 bg-blue-100 text-blue-900 rounded-lg hover:bg-blue-200 transition-colors border border-blue-400">
+                                                <Download className="w-4 h-4" />
+                                                İndir
+                                            </a>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div>
+                                    <p className="text-sm text-amber-700 mb-3">Henüz fatura yüklenmemiş</p>
+                                    <label className="flex items-center gap-2 px-4 py-2 bg-purple-100 text-purple-900 rounded-lg hover:bg-purple-200 transition-colors cursor-pointer border border-purple-400">
+                                        <Upload className="w-4 h-4" />
+                                        Fatura Yükle
+                                        <input type="file" className="hidden" onChange={handleInvoiceUpload} accept=".pdf,.jpg,.jpeg,.png" />
+                                    </label>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Right Column - Scrollable */}
+                    <div className="lg:col-span-8 space-y-6">
+                        {/* Products */}
+                        <div className="backdrop-blur-xl bg-white border border-amber-200 rounded-2xl shadow-2xl p-6">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-lg font-semibold text-amber-900 flex items-center gap-2">
+                                    <Package className="w-5 h-5" />
+                                    Ürünler ({order.products.length})
+                                </h3>
+                                {shippableProducts.length > 0 && canEdit && (
+                                    <button
+                                        onClick={handleOpenShipmentModal}
+                                        className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-blue-500 to-cyan-600 text-white rounded-lg hover:from-blue-600 hover:to-cyan-700 transition-all text-sm font-medium shadow-md"
+                                    >
+                                        <Package className="w-4 h-4" />
+                                        Sevke Sun
+                                    </button>
+                                )}
+                            </div>
+                            <div className="space-y-3">
+                                {order.products.map((product) => {
+                                    const pendingQty = getPendingQuantity(product.id)
+                                    const acceptedQty = product.acceptedQuantity || 0
+                                    const totalQty = product.quantity
+                                    const shippedQty = product.shippedQuantity || 0
+                                    const isCustomerSpecific = order.orderType === 'CUSTOMER_SPECIFIC'
+
+                                    return (
+                                        <div key={product.id} className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                                            <div className="grid grid-cols-3 gap-4 mb-3">
+                                                <div><p className="text-xs text-amber-700">Ürün Adı</p><p className="text-amber-900">{product.productName}</p></div>
+                                                <div><p className="text-xs text-amber-700">Toplam Miktar</p><p className="text-amber-900 font-medium">{totalQty}</p></div>
+                                                <div>
+                                                    <p className="text-xs text-amber-700">Durum</p>
+                                                    <div className="flex flex-col">
+                                                        <span className="text-green-400 font-medium">{acceptedQty} Kabul</span>
+                                                        {isCustomerSpecific && shippedQty > 0 && (
+                                                            <span className="text-blue-400 text-xs font-medium">
+                                                                {shippedQty} Sevk Edildi
+                                                            </span>
+                                                        )}
+                                                        {pendingQty > 0 && (
+                                                            <span className="text-yellow-400 text-xs font-medium animate-pulse">
+                                                                + {pendingQty} Bekleyen
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Acceptance Progress */}
+                                            <div className="mt-3">
+                                                <div className="flex items-center justify-between text-xs text-amber-700 mb-1">
+                                                    <span>Kabul İlerlemesi</span>
+                                                    <div className="flex gap-2">
+                                                        <span>{Math.round(((Number(acceptedQty)) / Number(totalQty)) * 100)}%</span>
+                                                        {pendingQty > 0 && <span className="text-yellow-400">({Math.round(((Number(acceptedQty) + pendingQty) / Number(totalQty)) * 100)}%)</span>}
+                                                    </div>
+                                                </div>
+                                                <div className="w-full bg-white/10 rounded-full h-2 flex overflow-hidden">
+                                                    <div className="bg-gradient-to-r from-green-500 to-emerald-600 h-2 transition-all" style={{ width: `${Math.min(((Number(acceptedQty)) / Number(totalQty)) * 100, 100)}%` }} />
+                                                    {pendingQty > 0 && (
+                                                        <div className="bg-yellow-500/50 h-2 transition-all striped-bg" style={{ width: `${Math.min((pendingQty / Number(totalQty)) * 100, 100)}%` }} />
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Shipment Progress - Only for Customer Specific Orders */}
+                                            {isCustomerSpecific && acceptedQty > 0 && (
+                                                <>
+                                                    <div className="mt-3">
+                                                        <div className="flex items-center justify-between text-xs text-blue-700 mb-1">
+                                                            <span>Sevk İlerlemesi</span>
+                                                            <span>{Math.round((shippedQty / acceptedQty) * 100)}%</span>
+                                                        </div>
+                                                        <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
+                                                            <div className="bg-gradient-to-r from-blue-500 to-cyan-600 h-2 transition-all" style={{ width: `${Math.min((shippedQty / acceptedQty) * 100, 100)}%` }} />
+                                                        </div>
+                                                    </div>
+
+                                                </>
+                                            )}
+                                        </div>
+                                    )
+                                })}</div>
+                        </div>
+
+                        {/* Activities */}
+                        <div className="backdrop-blur-xl bg-white border border-amber-200 rounded-2xl shadow-2xl p-6">
+                            <h3 className="text-lg font-semibold text-amber-900 flex items-center gap-2 mb-4">
+                                <Activity className="w-5 h-5" />
+                                Sipariş Olayları ({activities.length})
+                            </h3>
+                            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+                                {activities.length > 0 ? (
+                                    activities.map((activity, index) => (
+                                        <div key={activity.id} className="relative pl-6">
+                                            {index !== activities.length - 1 && <div className="absolute left-2 top-8 bottom-0 w-0.5 bg-gradient-to-b from-amber-400 to-transparent" />}
+                                            <div className="absolute left-0 top-1.5 w-4 h-4 rounded-full bg-amber-600 border-2 border-white" />
+                                            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="flex-1">
+                                                        <p className="text-amber-900 font-medium text-sm">{activity.description}</p>
+                                                        <div className="flex items-center gap-3 mt-1 text-xs text-amber-700">
+                                                            <span className="flex items-center gap-1">
+                                                                <User className="w-3 h-3" />
+                                                                {activity.userFullName || activity.userEmail}
+                                                            </span>
+                                                            <span className="flex items-center gap-1">
+                                                                <Clock className="w-3 h-3" />
+                                                                {formatDistanceToNow(new Date(activity.createdAt), { addSuffix: true, locale: tr })}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    <span className="text-xs text-purple-400 font-mono">
+                                                        {(() => {
+                                                            const labels: Record<string, string> = {
+                                                                'CREATED': 'Oluşturuldu', 'UPDATED': 'Güncellendi', 'STATUS_CHANGED': 'Durum Değişti',
+                                                                'COMPLETED': 'Tamamlandı', 'CANCELLED': 'İptal Edildi', 'INVOICE_UPLOADED': 'Fatura Yüklendi',
+                                                                'INVOICE_DELETED': 'Fatura Silindi', 'PRODUCTS_ACCEPTED': 'Ürünler Kabul Edildi',
+                                                                'PRODUCT_ACCEPTED': 'Ürün Kabul Edildi', 'SHIPMENT_CREATED': 'Sevkiyat Oluşturuldu',
+                                                                'SHIPMENT_UPDATED': 'Sevkiyat Güncellendi', 'NOTE_ADDED': 'Not Eklendi',
+                                                                'ORDER_UPDATED': 'Sipariş Güncellendi', 'SHIPMENT_APPROVED': 'Sevk Onaylandı'
+                                                            }
+                                                            return labels[activity.activityType] || activity.activityType.replace(/_/g, ' ')
+                                                        })()}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <p className="text-center text-amber-700 py-8">Henüz aktivite bulunmuyor</p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Sales Consultant Selection Modal */}
+            {showSalesConsultantModal && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-white border border-amber-200 rounded-2xl shadow-2xl w-full max-w-md p-6">
+                        <h3 className="text-xl font-bold text-amber-900 mb-4">Satış Danışmanı Seç</h3>
+                        <select
+                            value={selectedConsultantId}
+                            onChange={(e) => setSelectedConsultantId(e.target.value)}
+                            className="w-full px-4 py-3 bg-white border border-amber-300 rounded-lg text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-500 mb-4"
+                        >
+                            <option value="">-- Seçiniz (Kaldır) --</option>
+                            {salesConsultants.map(sc => (
+                                <option key={sc.id} value={sc.id}>
+                                    {sc.firstName} {sc.lastName}
+                                </option>
+                            ))}
+                        </select>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setShowSalesConsultantModal(false)}
+                                className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                            >
+                                İptal
+                            </button>
+                            <button
+                                onClick={handleSaveSalesConsultant}
+                                className="flex-1 px-4 py-2 bg-gradient-to-r from-amber-600 to-orange-600 text-white rounded-lg hover:from-amber-700 hover:to-orange-700 transition-all font-medium"
+                            >
+                                Kaydet
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Shipment Modal */}
+            {showShipmentModal && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-white border border-blue-200 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+                        <div className="p-6 border-b border-blue-100">
+                            <h3 className="text-xl font-bold text-blue-900">Kısmi Sevk Talebi</h3>
+                            <p className="text-sm text-blue-600 mt-1">Sevk etmek istediğiniz ürünlerin miktarını giriniz.</p>
+                        </div>
+
+                        <div className="p-6 overflow-y-auto flex-1 space-y-6">
+                            {/* Products List */}
+                            <div className="space-y-4">
+                                {shippableProducts.map(product => {
+                                    const accepted = product.acceptedQuantity || 0
+                                    const effectiveRemaining = getEffectiveRemaining(product)
+                                    const currentQty = shipmentQuantities[product.id] || 0
+
+                                    return (
+                                        <div key={product.id} className="p-4 bg-blue-50/50 border border-blue-100 rounded-xl">
+                                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                                <div className="flex-1">
+                                                    <p className="font-medium text-blue-900">{product.productName}</p>
+                                                    <div className="flex items-center gap-3 mt-1 text-sm">
+                                                        <span className="text-blue-600">Sevk Edilebilir: <span className="font-bold">{effectiveRemaining}</span></span>
+                                                        <span className="text-gray-400">|</span>
+                                                        <span className="text-gray-600">Kabul: {accepted}</span>
+                                                    </div>
+                                                </div>
+                                                <div className="w-full md:w-32">
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        max={effectiveRemaining}
+                                                        value={currentQty}
+                                                        onChange={(e) => {
+                                                            const val = Math.min(Math.max(0, Number(e.target.value)), effectiveRemaining)
+                                                            setShipmentQuantities(prev => ({ ...prev, [product.id]: val }))
+                                                        }}
+                                                        className="w-full px-3 py-2 bg-white border border-blue-200 rounded-lg text-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500 text-center font-medium"
+                                                        placeholder="0"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+
+                            {/* Notes */}
+                            <div>
+                                <label className="block text-sm font-medium text-blue-900 mb-2">
+                                    Notlar (Opsiyonel)
+                                </label>
+                                <textarea
+                                    value={shipmentNotes}
+                                    onChange={(e) => setShipmentNotes(e.target.value)}
+                                    rows={3}
+                                    className="w-full px-4 py-3 bg-white border border-blue-300 rounded-lg text-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="Sevk ile ilgili notlar..."
+                                />
+                            </div>
+                        </div>
+
+                        <div className="p-6 border-t border-blue-100 bg-gray-50 rounded-b-2xl flex gap-3">
+                            <button
+                                onClick={() => setShowShipmentModal(false)}
+                                disabled={isCreatingShipment}
+                                className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-medium disabled:opacity-50"
+                            >
+                                İptal
+                            </button>
+                            <button
+                                onClick={handleSubmitShipment}
+                                disabled={isCreatingShipment}
+                                className="flex-1 px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-700 text-white rounded-lg hover:from-blue-700 hover:to-cyan-800 transition-all font-medium disabled:opacity-50 shadow-lg shadow-blue-500/30"
+                            >
+                                {isCreatingShipment ? 'Gönderiliyor...' : 'Sevke Sun'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Customer Modal */}
+            {order?.customer && (
+                <CustomerModal
+                    isOpen={showCustomerModal}
+                    onClose={() => {
+                        setShowCustomerModal(false)
+                        refetch()
+                    }}
+                    customer={order.customer}
+                />
+            )}
+        </div>
+    )
+}
