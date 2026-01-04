@@ -93,6 +93,13 @@ public class ShipmentController {
         return ResponseEntity.ok(shipmentService.getShipmentDetails(orderId));
     }
 
+    @GetMapping("/details/shipment/{shipmentId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MUDUR', 'MAGAZA_CALISAN', 'DEPO_CALISAN')")
+    public ResponseEntity<ShipmentDetailsResponse> getShipmentDetailsByShipmentId(
+            @PathVariable("shipmentId") UUID shipmentId) {
+        return ResponseEntity.ok(shipmentService.getShipmentDetailsByShipmentId(shipmentId));
+    }
+
     @PostMapping("/{orderId}/plan")
     @PreAuthorize("hasAnyRole('ADMIN', 'MUDUR', 'MAGAZA_CALISAN', 'DEPO_CALISAN')")
     public ResponseEntity<Void> planShipment(
@@ -172,6 +179,23 @@ public class ShipmentController {
             e.printStackTrace();
             throw e;
         }
+    }
+
+    /**
+     * Download signed delivery document
+     */
+    @GetMapping("/{shipmentId}/signed-document")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MUDUR', 'MAGAZA_CALISAN', 'DEPO_CALISAN')")
+    public ResponseEntity<org.springframework.core.io.Resource> getSignedDocument(
+            @PathVariable("shipmentId") UUID shipmentId) {
+
+        // This service method should return Resource and MediaType string
+        // Since we don't have a Pair/Tuple class handy, we'll let service return byte[]
+        // and handle here or
+        // delegate resource creation to Controller.
+        // Let's implement getting the InputStreamResource from service.
+
+        return shipmentService.getSignedDocument(shipmentId);
     }
 
     /**
