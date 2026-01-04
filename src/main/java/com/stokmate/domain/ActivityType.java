@@ -1,0 +1,16 @@
+package com.stokmate.domain;
+
+public enum ActivityType {
+    CREATED,
+    COMPLETED,
+    CANCELLED,
+    INVOICE_UPLOADED,
+    INVOICE_DELETED,
+    PRODUCTS_ACCEPTED,
+    PRODUCT_ACCEPTED,
+    SHIPMENT_CREATED,
+    SHIPMENT_UPDATED,
+    NOTE_ADDED,
+    ORDER_UPDATED,
+    SHIPMENT_APPROVED
+}
