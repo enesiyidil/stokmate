@@ -42,6 +42,8 @@ public class OrderResponse {
 
     private com.stokmate.domain.OrderType orderType;
 
+    private com.stokmate.domain.Brand brand; // Brand from first product
+
     private boolean productsAccepted;
 
     @JsonProperty("invoiceFileKey")

@@ -207,7 +207,7 @@ public class UserService {
             String location, String department, String search) {
 
         return userRepository.findAll().stream()
-                .filter(user -> user.getRole() == com.stokmate.domain.Role.MAGAZA_CALISAN)
+                .filter(user -> user.getRole() == com.stokmate.domain.Role.STORE_EMPLOYEE)
                 .filter(user -> user.isActive())
                 .filter(user -> !user.isDeleted()) // Exclude deleted users
                 .filter(user -> location == null || location.isEmpty() ||

@@ -28,14 +28,14 @@ public class RequestController {
 
     private final RequestService requestService;
 
-    @PreAuthorize("hasAnyRole('MAGAZA_CALISAN','MAGAZA_SORUMLU')")
+    @PreAuthorize("hasAnyRole('STORE_EMPLOYEE','STORE_MANAGER')")
     @PostMapping
     public RequestResponse create(@Valid @RequestBody RequestCreateRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
         return requestService.create(request, principal.getUser());
     }
 
-    @PreAuthorize("hasAnyRole('MAGAZA_CALISAN','MAGAZA_SORUMLU')")
+    @PreAuthorize("hasAnyRole('STORE_EMPLOYEE','STORE_MANAGER')")
     @GetMapping
     public List<RequestResponse> listOwn(@AuthenticationPrincipal UserPrincipal principal) {
         return requestService.listOwn(principal.getUser());

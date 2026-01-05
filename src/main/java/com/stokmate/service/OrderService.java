@@ -39,6 +39,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import com.stokmate.domain.OrderStatus;
 import com.stokmate.domain.ActivityType;
+import com.stokmate.domain.Brand;
 import com.stokmate.domain.Customer;
 import com.stokmate.domain.Product;
 import com.stokmate.domain.ProductArrival;
@@ -272,10 +273,17 @@ public class OrderService {
         // Add products to order
         for (OrderProductCreateRequest productRequest : request.getProducts()) {
             OrderProduct product = orderProductMapper.toEntity(productRequest);
+            // DEBUG: Log brand value
+            log.info("OrderProduct brand after mapping: {} for product: {}", product.getBrand(),
+                    product.getProductName());
             order.addProduct(product);
         }
 
         Order savedOrder = orderRepository.save(order);
+
+        // DEBUG: Log brands after saving
+        savedOrder.getProducts().forEach(
+                p -> log.info("Saved OrderProduct brand: {} for product: {}", p.getBrand(), p.getProductName()));
 
         // Log activity
         orderActivityService.logActivity(savedOrder, ActivityType.CREATED,
@@ -846,14 +854,14 @@ public class OrderService {
      * Check if user can update partial delivery for an order
      */
     private boolean canUpdatePartialDelivery(Order order, com.stokmate.domain.User user) {
-        // Admin and MUDUR can always update
+        // Admin and MANAGER can always update
         if (user.getRole() == com.stokmate.domain.Role.ADMIN ||
-                user.getRole() == com.stokmate.domain.Role.MUDUR) {
+                user.getRole() == com.stokmate.domain.Role.MANAGER) {
             return true;
         }
 
-        // Sales consultant can update their own orders
-        if (user.getRole() == com.stokmate.domain.Role.MAGAZA_CALISAN &&
+        // Sales consultant (STORE_EMPLOYEE) can update their own orders
+        if (user.getRole() == com.stokmate.domain.Role.STORE_EMPLOYEE &&
                 order.getSalesConsultant() != null &&
                 order.getSalesConsultant().getId().equals(user.getId())) {
             return true;
@@ -902,8 +910,8 @@ public class OrderService {
             salesConsultant = userRepository.findById(salesConsultantId)
                     .orElseThrow(() -> new NotFoundException("Sales consultant not found"));
 
-            // Verify the user is actually a sales consultant (MAGAZA_CALISAN role)
-            if (salesConsultant.getRole() != com.stokmate.domain.Role.MAGAZA_CALISAN) {
+            // Verify the user is actually a sales consultant (STORE_EMPLOYEE role)
+            if (salesConsultant.getRole() != com.stokmate.domain.Role.STORE_EMPLOYEE) {
                 throw new BadRequestException("Selected user is not a sales consultant");
             }
         }
@@ -922,5 +930,93 @@ public class OrderService {
                 orderId, salesConsultant != null ? salesConsultant.getId() : "removed");
 
         return orderMapper.toResponse(saved);
+    }
+
+    @Transactional
+    public OrderResponse updateBrand(UUID orderId, Brand brand) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new NotFoundException("Order not found"));
+
+        // Update brand for all products in the order
+        order.getProducts().forEach(product -> {
+            product.setBrand(brand);
+            log.info("Updated brand to {} for product: {}", brand, product.getProductName());
+        });
+
+        Order savedOrder = orderRepository.save(order);
+
+        // Log activity
+        orderActivityService.logActivity(savedOrder, ActivityType.ORDER_UPDATED,
+                "Sipariş markası güncellendi: " + brand);
+
+        return orderMapper.toResponse(savedOrder);
+    }
+
+    /**
+     * Check if all products in the order are fully shipped and mark order as
+     * COMPLETED
+     * Called after shipment completion/approval
+     */
+    @Transactional
+    public void checkAndCompleteOrder(UUID orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new NotFoundException("Order not found"));
+
+        // Skip if already completed or cancelled
+        if (order.getStatus() == OrderStatus.COMPLETED || order.getStatus() == OrderStatus.CANCELLED) {
+            log.info("Order {} already in final state: {}", orderId, order.getStatus());
+            return;
+        }
+
+        // Check if all products are fully shipped
+        boolean allShipped = order.getProducts().stream()
+                .allMatch(product -> {
+                    BigDecimal quantity = product.getQuantity() != null ? product.getQuantity() : BigDecimal.ZERO;
+                    BigDecimal shipped = product.getShippedQuantity() != null ? product.getShippedQuantity()
+                            : BigDecimal.ZERO;
+                    return shipped.compareTo(quantity) >= 0;
+                });
+
+        if (allShipped) {
+            order.setStatus(OrderStatus.COMPLETED);
+            orderRepository.save(order);
+
+            orderActivityService.logActivity(order, ActivityType.ORDER_UPDATED,
+                    "Sipariş tamamlandı - Tüm ürünler sevk edildi");
+
+            log.info("Order {} marked as COMPLETED - all products shipped", orderId);
+        } else {
+            // Ensure order is IN_PROGRESS if not completed
+            if (order.getStatus().getSimplifiedStatus() != OrderStatus.IN_PROGRESS) {
+                order.setStatus(OrderStatus.IN_PROGRESS);
+                orderRepository.save(order);
+            }
+        }
+    }
+
+    /**
+     * Update product shipped quantity and check for order completion
+     */
+    @Transactional
+    public void updateProductShippedQuantity(UUID orderProductId, BigDecimal shippedQuantity) {
+        // Find order product
+        Order order = orderRepository.findAll().stream()
+                .filter(o -> o.getProducts().stream().anyMatch(p -> p.getId().equals(orderProductId)))
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("Order product not found"));
+
+        OrderProduct product = order.getProducts().stream()
+                .filter(p -> p.getId().equals(orderProductId))
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("Order product not found"));
+
+        BigDecimal currentShipped = product.getShippedQuantity() != null ? product.getShippedQuantity()
+                : BigDecimal.ZERO;
+        product.setShippedQuantity(currentShipped.add(shippedQuantity));
+
+        orderRepository.save(order);
+
+        // Check if order should be completed
+        checkAndCompleteOrder(order.getId());
     }
 }

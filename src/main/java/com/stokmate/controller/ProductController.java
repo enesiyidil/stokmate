@@ -34,19 +34,20 @@ public class ProductController {
 
     private final ProductService productService;
 
-    @PreAuthorize("hasAnyRole('ADMIN','MUDUR','DEPO_SORUMLU')")
+    // Create: OPERATIONS_MANAGER, DIRECTOR, MANAGER, ADMIN
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','DIRECTOR','OPERATIONS_MANAGER')")
     @PostMapping
     public ProductResponse create(@Valid @RequestBody ProductRequest request) {
         return productService.create(request);
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN','DEPO')")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','DIRECTOR','OPERATIONS_MANAGER')")
     @PostMapping("/batch")
     public List<ProductResponse> createBatch(@Valid @RequestBody List<ProductRequest> requests) {
         return productService.createBatch(requests);
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN','DEPO')")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','DIRECTOR','OPERATIONS_MANAGER')")
     @PutMapping("/{id}")
     public ProductResponse update(@PathVariable UUID id, @Valid @RequestBody ProductRequest request) {
         return productService.update(id, request);
@@ -70,7 +71,7 @@ public class ProductController {
         return productService.decreaseStock(id, request);
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN','MUDUR','DEPO_SORUMLU','DEPO_CALISAN','MAGAZA_SORUMLU','MAGAZA_CALISAN')")
+    // View: All authenticated users
     @GetMapping
     public Page<ProductResponse> list(@RequestParam(value = "name", required = false) String name,
             @RequestParam(value = "brand", required = false) String brand,
@@ -79,49 +80,46 @@ public class ProductController {
         return productService.list(name, brand, activeForSale, pageable);
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN','DEPO','USER')")
     @GetMapping("/{id}")
     public ProductResponse get(@PathVariable UUID id) {
         return productService.get(id);
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN','DEPO','USER')")
     @GetMapping("/search")
     public Page<ProductResponse> search(@RequestParam("q") String q, Pageable pageable) {
         return productService.search(q, pageable);
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN','DEPO','USER')")
     @GetMapping("/similar")
     public Page<ProductResponse> similar(@RequestParam("name") String name, Pageable pageable) {
         return productService.similar(name, pageable);
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN','MUDUR','DEPO_SORUMLU')")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','DIRECTOR','OPERATIONS_MANAGER')")
     @PostMapping("/{id}/image")
     public ProductResponse uploadImage(@PathVariable("id") UUID id, @RequestParam("file") MultipartFile file) {
         return productService.uploadImage(id, file);
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN','MUDUR','DEPO_SORUMLU')")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','DIRECTOR','OPERATIONS_MANAGER')")
     @DeleteMapping("/{id}/image")
     public ProductResponse deleteImage(@PathVariable("id") UUID id) {
         return productService.deleteImage(id);
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN','MUDUR')")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
     @GetMapping("/{id}/details")
     public ProductDetailsResponse getDetails(@PathVariable("id") UUID id) {
         return productService.getDetails(id);
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN','MUDUR')")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
     @GetMapping("/{id}/events")
     public List<ProductEventResponse> getEvents(@PathVariable("id") UUID id) {
         return productService.getEvents(id);
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN','MUDUR')")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
     @GetMapping("/{id}/price-history")
     public List<ProductPriceHistoryResponse> getPriceHistory(@PathVariable("id") UUID id) {
         return productService.getPriceHistory(id);

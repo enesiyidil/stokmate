@@ -14,5 +14,5 @@ public class RegisterRequest {
     @NotBlank
     private String email;
 
-    private Role role = Role.MAGAZA_CALISAN;
+    private Role role = Role.STORE_EMPLOYEE;
 }

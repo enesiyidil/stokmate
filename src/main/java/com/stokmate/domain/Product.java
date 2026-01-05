@@ -4,6 +4,8 @@ import com.stokmate.domain.base.AuditableEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.EnumType;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -34,7 +36,9 @@ public class Product extends AuditableEntity {
     private String code;
 
     private String description;
-    private String brand;
+
+    @Enumerated(EnumType.STRING)
+    private Brand brand;
 
     private String imageUrl;
 

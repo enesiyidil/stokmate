@@ -18,7 +18,7 @@ public class ProductResponse {
     private String name;
     private String code;
     private String description;
-    private String brand;
+    private com.stokmate.domain.Brand brand;
     private String imageUrl;
     private boolean activeForSale;
     private BigDecimal stockQuantity;

@@ -29,6 +29,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return buildError(HttpStatus.UNAUTHORIZED, "Authentication failed", ex.getMessage());
     }
 
+    @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    public ResponseEntity<Object> handleAccessDenied(org.springframework.security.access.AccessDeniedException ex) {
+        return buildError(HttpStatus.FORBIDDEN, "Yetkiniz bulunmamaktadır", ex.getMessage());
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Object> handleOther(Exception ex) {
         return buildError(HttpStatus.INTERNAL_SERVER_ERROR, "Unexpected error", ex.getMessage());

@@ -98,6 +98,16 @@ public class ProductAcceptanceService {
             Product product = productRepository.findByCode(orderProduct.getProductCode()).orElse(null);
 
             if (product != null) {
+                // Update brand from order if product doesn't have one or if order specifies a
+                // brand
+                Brand orderBrand = orderProduct.getBrand();
+                if (orderBrand != null && (product.getBrand() == null || product.getBrand() != orderBrand)) {
+                    log.info("Updating product {} brand from {} to {}",
+                            product.getCode(), product.getBrand(), orderBrand);
+                    product.setBrand(orderBrand);
+                    productRepository.save(product);
+                }
+
                 // Create ProductEvent for stock increase
                 com.stokmate.domain.ProductEvent productEvent = new com.stokmate.domain.ProductEvent();
                 productEvent.setProduct(product);
@@ -191,13 +201,21 @@ public class ProductAcceptanceService {
     }
 
     private void checkAndCompleteOrder(Order order) {
+        // With simplified status system, order stays IN_PROGRESS until all products are
+        // SHIPPED
+        // This method now just ensures order is in valid state (not auto-completing on
+        // acceptance)
         boolean allAccepted = order.getProducts().stream()
                 .allMatch(OrderProduct::isFullyAccepted);
 
-        if (allAccepted && order.getStatus() != OrderStatus.COMPLETED) {
-            log.info("Auto-completing order {} - all products accepted", order.getOrderNo());
-            order.setStatus(OrderStatus.COMPLETED);
-            orderRepository.save(order);
+        if (allAccepted) {
+            log.info("All products accepted for order {} - order remains IN_PROGRESS until shipped",
+                    order.getOrderNo());
+            // Order stays IN_PROGRESS, will be completed by shipment finalization
+            if (order.getStatus() == OrderStatus.PENDING_ACCEPTANCE) {
+                order.setStatus(OrderStatus.IN_PROGRESS);
+                orderRepository.save(order);
+            }
         }
     }
 }

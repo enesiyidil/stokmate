@@ -6,6 +6,7 @@ import com.stokmate.dto.auth.RegisterRequest;
 import com.stokmate.dto.auth.OtpLoginRequest;
 import com.stokmate.dto.auth.PasswordUpdateRequest;
 import com.stokmate.dto.auth.ForgotPasswordRequest;
+import com.stokmate.dto.auth.TwoFactorVerifyRequest;
 import com.stokmate.dto.user.UserResponse;
 import com.stokmate.security.UserPrincipal;
 import com.stokmate.service.AuthService;
@@ -52,5 +53,21 @@ public class AuthController {
     public boolean updatePassword(@AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody PasswordUpdateRequest request) {
         return authService.updatePassword(principal.getUser(), request);
+    }
+
+    /**
+     * Verify 2FA code and complete login
+     */
+    @PostMapping("/verify-2fa")
+    public AuthResponse verify2FA(@Valid @RequestBody TwoFactorVerifyRequest request) {
+        return authService.verify2FA(request);
+    }
+
+    /**
+     * Complete 2FA setup for first-time users
+     */
+    @PostMapping("/complete-setup")
+    public AuthResponse completeSetup(@Valid @RequestBody TwoFactorVerifyRequest request) {
+        return authService.completeSetup(request);
     }
 }

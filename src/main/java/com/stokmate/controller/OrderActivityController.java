@@ -23,7 +23,7 @@ public class OrderActivityController {
 
     private final OrderActivityService orderActivityService;
 
-    @PreAuthorize("hasAnyRole('ADMIN','MUDUR','DEPO_SORUMLU','DEPO_CALISAN','MAGAZA_SORUMLU','MAGAZA_CALISAN')")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','DIRECTOR','STORE_MANAGER','STORE_EMPLOYEE','OPERATIONS_MANAGER')")
     @GetMapping("/order/{orderId}")
     @Operation(summary = "Get activities for an order", description = "Retrieves all activities (create, complete, cancel, accept products) for a specific order")
     public List<OrderActivityResponse> getOrderActivities(
@@ -39,7 +39,7 @@ public class OrderActivityController {
         return orderActivityService.getUserActivities(userId);
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN','MUDUR','DEPO_SORUMLU','DEPO_CALISAN','MAGAZA_SORUMLU','MAGAZA_CALISAN')")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','DIRECTOR','STORE_MANAGER','STORE_EMPLOYEE','OPERATIONS_MANAGER')")
     @GetMapping("/me")
     @Operation(summary = "Get current user's activities", description = "Retrieves all order activities performed by the currently authenticated user")
     public List<OrderActivityResponse> getMyActivities() {

@@ -17,20 +17,20 @@ public class StoreEmployeeController {
 
     private final StoreEmployeeService storeEmployeeService;
 
-    @PreAuthorize("hasAnyRole('ADMIN', 'MUDUR')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     @PostMapping("/{storeId}/employees")
     public StoreEmployeeResponse assignEmployee(@PathVariable("storeId") String storeId,
             @Valid @RequestBody StoreEmployeeRequest request) {
         return storeEmployeeService.assignEmployeeToStore(storeId, request);
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN', 'MUDUR')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     @DeleteMapping("/{storeId}/employees/{userId}")
     public void removeEmployee(@PathVariable("storeId") String storeId, @PathVariable("userId") String userId) {
         storeEmployeeService.removeEmployeeFromStore(storeId, userId);
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN', 'MUDUR', 'DEPO_SORUMLU', 'MAGAZA_SORUMLU')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'OPERATIONS_MANAGER', 'STORE_MANAGER')")
     @GetMapping("/{storeId}/employees")
     public List<StoreEmployeeResponse> getStoreEmployees(@PathVariable("storeId") String storeId) {
         return storeEmployeeService.getStoreEmployees(storeId);

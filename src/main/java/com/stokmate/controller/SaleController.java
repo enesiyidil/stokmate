@@ -26,15 +26,16 @@ public class SaleController {
 
   private final SaleService saleService;
 
+  // Create/View/Update: STORE_MANAGER, STORE_EMPLOYEE, DIRECTOR, MANAGER, ADMIN
   @PostMapping
-  @PreAuthorize("hasAnyRole('ADMIN', 'MUDUR', 'MAGAZA_SORUMLU', 'MAGAZA_CALISAN')")
+  @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE')")
   @Operation(summary = "Create new sale")
   public SaleResponse create(@RequestBody SaleRequest request, @AuthenticationPrincipal UserPrincipal principal) {
     return saleService.create(request, principal.getUser());
   }
 
   @GetMapping
-  @PreAuthorize("hasAnyRole('ADMIN', 'MUDUR', 'MAGAZA_SORUMLU', 'MAGAZA_CALISAN')")
+  @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE')")
   @Operation(summary = "List sales with filters")
   public List<SaleResponse> list(
       @RequestParam(name = "status", required = false) SaleStatus status,
@@ -43,14 +44,14 @@ public class SaleController {
   }
 
   @GetMapping("/{id}")
-  @PreAuthorize("hasAnyRole('ADMIN', 'MUDUR', 'MAGAZA_SORUMLU', 'MAGAZA_CALISAN')")
+  @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE')")
   @Operation(summary = "Get sale details")
   public SaleResponse getById(@PathVariable("id") UUID id) {
     return saleService.getById(id);
   }
 
   @PutMapping("/{id}/status")
-  @PreAuthorize("hasAnyRole('ADMIN', 'MUDUR', 'MAGAZA_SORUMLU', 'MAGAZA_CALISAN')")
+  @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE')")
   @Operation(summary = "Update sale status")
   public SaleResponse updateStatus(
       @PathVariable("id") UUID id,
@@ -60,7 +61,7 @@ public class SaleController {
   }
 
   @PostMapping(value = "/{id}/contract", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-  @PreAuthorize("hasAnyRole('ADMIN', 'MUDUR', 'MAGAZA_SORUMLU', 'MAGAZA_CALISAN')")
+  @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE')")
   @Operation(summary = "Upload contract file")
   public SaleResponse uploadContract(
       @PathVariable("id") UUID id,
@@ -69,15 +70,16 @@ public class SaleController {
     return saleService.uploadContract(id, file, principal.getUser());
   }
 
+  // Delete: DIRECTOR, MANAGER, ADMIN
   @DeleteMapping("/{id}/contract")
-  @PreAuthorize("hasAnyRole('ADMIN', 'MUDUR')")
+  @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR')")
   @Operation(summary = "Delete contract file")
   public void deleteContract(@PathVariable("id") UUID id, @AuthenticationPrincipal UserPrincipal principal) {
     saleService.deleteContract(id, principal.getUser());
   }
 
   @GetMapping("/{id}/events")
-  @PreAuthorize("hasAnyRole('ADMIN', 'MUDUR', 'MAGAZA_SORUMLU', 'MAGAZA_CALISAN')")
+  @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE')")
   @Operation(summary = "Get sale event history")
   public List<SaleEventResponse> getEvents(@PathVariable("id") UUID id) {
     return saleService.getEvents(id);

@@ -78,6 +78,18 @@ public class OrderProductResponse {
     @JsonProperty("paymentConditionDefinition")
     private String paymentConditionDefinition;
 
+    @JsonProperty("brand")
+    private com.stokmate.domain.Brand brand;
+
     @JsonProperty("quantity")
     private BigDecimal quantity;
+
+    @JsonProperty("shippedQuantity")
+    private BigDecimal shippedQuantity;
+
+    @JsonProperty("pendingShipmentQuantity")
+    private BigDecimal pendingShipmentQuantity;
+
+    @JsonProperty("availableForShipmentQuantity")
+    private BigDecimal availableForShipmentQuantity;
 }

@@ -29,6 +29,11 @@ public class Vehicle {
     @Column(nullable = false, length = 50)
     private String vehicleType; // Araç tipi (Kamyon, Kamyonet, Panelvan, vb.)
 
+    @Column(nullable = false)
+    private boolean deleted = false;
+
+    private java.time.Instant deletionDate;
+
     @CreationTimestamp
     @Column(updatable = false)
     private LocalDateTime createdAt;
