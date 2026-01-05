@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useLoginMutation, useLoginWithOtpMutation, useForgotPasswordMutation } from '../../api/auth.api'
+import { useLoginMutation, useLoginWithOtpMutation, useForgotPasswordMutation, useVerify2FAMutation } from '../../api/auth.api'
 import { useAppDispatch } from '../../hooks/useAuth'
 import { setCredentials } from '../../store/authSlice'
-import { Lock, Mail, ArrowRight, Sparkles, Key, CheckCircle } from 'lucide-react'
+import { Lock, Mail, ArrowRight, Sparkles, Key, CheckCircle, Shield } from 'lucide-react'
 import { useUi } from '../../context/UiContext'
+import { TwoFactorSetupModal } from '../../components/auth/TwoFactorSetupModal'
 
 export default function LoginPage() {
     const { currentBg, logo } = useUi()
@@ -13,15 +14,20 @@ export default function LoginPage() {
     const [login, { isLoading: isLoginLoading }] = useLoginMutation()
     const [loginWithOtp, { isLoading: isOtpLoading }] = useLoginWithOtpMutation()
     const [forgotPassword, { isLoading: isForgotLoading }] = useForgotPasswordMutation()
+    const [verify2FA, { isLoading: is2FALoading }] = useVerify2FAMutation()
 
-    const [view, setView] = useState<'login' | 'forgot-password' | 'otp-input'>('login')
+    const [view, setView] = useState<'login' | 'forgot-password' | 'otp-input' | '2fa-input'>('login')
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [otpCode, setOtpCode] = useState('')
+    const [twoFACode, setTwoFACode] = useState('')
+    const [showSetupModal, setShowSetupModal] = useState(false)
+    const [setupData, setSetupData] = useState<{ qrCodeImage?: string, totpSecret?: string }>({})
+    const [setupEmail, setSetupEmail] = useState('')
     const [error, setError] = useState('')
     const [successMessage, setSuccessMessage] = useState('')
 
-    const isLoading = isLoginLoading || isOtpLoading || isForgotLoading
+    const isLoading = isLoginLoading || isOtpLoading || isForgotLoading || is2FALoading
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -37,6 +43,22 @@ export default function LoginPage() {
                 navigate('/profile/update')
             } else {
                 const result = await login({ email, password }).unwrap()
+                // Check if 2FA setup is required first
+                if (result.requiresSetup) {
+                    setSetupEmail(email)
+                    setSetupData({
+                        qrCodeImage: result.qrCodeImage,
+                        totpSecret: result.totpSecret
+                    })
+                    setShowSetupModal(true)
+                    return
+                }
+                // Check if 2FA is required
+                if (result.requiresTwoFactor) {
+                    setView('2fa-input')
+                    setSuccessMessage('Lütfen Google Authenticator kodunuzu girin')
+                    return
+                }
                 dispatch(setCredentials(result))
                 navigate('/dashboard')
             }
@@ -70,6 +92,18 @@ export default function LoginPage() {
         }
     }
 
+    const handleVerify2FA = async (e: React.FormEvent) => {
+        e.preventDefault()
+        setError('')
+        try {
+            const result = await verify2FA({ email, code: twoFACode }).unwrap()
+            dispatch(setCredentials(result))
+            navigate('/dashboard')
+        } catch (err: any) {
+            setError(err?.data?.message || '2FA kodu doğrulanamadı. Lütfen kontrol edin.')
+        }
+    }
+
     return (
         <div className="min-h-screen relative overflow-hidden">
             {/* Dynamic Background with Fade */}
@@ -88,11 +122,23 @@ export default function LoginPage() {
                         <div className="inline-flex items-center justify-center w-24 h-24 bg-white/10 border border-white/20 rounded-2xl shadow-2xl mb-4 animate-bounce-slow overflow-hidden p-3 backdrop-blur-md">
                             <img src={logo} alt="StokMate Logo" className="w-full h-full object-contain drop-shadow-md" />
                         </div>
-                        <h1 className="text-4xl font-bold text-amber-900 mb-2 flex items-center justify-center gap-2 drop-shadow-sm">
-                            StokMate
-                            <Sparkles className="w-6 h-6 text-amber-600 animate-pulse" />
-                        </h1>
-                        <p className="text-amber-800 font-medium">Modern Stok Yönetim Sistemi</p>
+                        <div className="flex items-center justify-center gap-3 mb-2">
+                            <h1 className="text-4xl font-bold text-amber-900 flex items-center gap-2 drop-shadow-sm animate-fade-in">
+                                StokMate
+                            </h1>
+                            <span
+                                className="text-2xl font-semibold text-amber-900 border-l-2 border-amber-600 pl-3"
+                                style={{ animation: 'glow 3s ease-in-out infinite' }}
+                            >
+                                StokMate
+                            </span>
+                        </div>
+                        <p
+                            className="text-stone-900 font-bold text-base"
+                            style={{ animation: 'floatText 2.5s ease-in-out infinite', textShadow: '0 1px 3px rgba(255,255,255,0.9), 0 0 10px rgba(255,255,255,0.5)' }}
+                        >
+                            Modern Stok Yönetim Sistemi
+                        </p>
                     </div>
 
                     <div className="backdrop-blur-md bg-white/80 border border-white/40 rounded-3xl shadow-2xl p-8 animate-slide-up ring-1 ring-white/50">
@@ -244,13 +290,73 @@ export default function LoginPage() {
                             </form>
                         )}
 
+                        {view === '2fa-input' && (
+                            <form onSubmit={handleVerify2FA} className="space-y-6">
+                                <h2 className="text-xl font-semibold text-amber-900 text-center mb-4 flex items-center justify-center gap-2">
+                                    <Shield className="w-5 h-5" />
+                                    İki Faktörlü Doğrulama
+                                </h2>
+                                <p className="text-sm text-amber-700 text-center mb-4">
+                                    Google Authenticator uygulamasındaki 6 haneli kodu girin.
+                                </p>
+                                <div className="group">
+                                    <label className="block text-sm font-medium text-amber-800 mb-2">Doğrulama Kodu</label>
+                                    <div className="relative">
+                                        <Shield className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-amber-600" />
+                                        <input
+                                            type="text"
+                                            required
+                                            maxLength={6}
+                                            value={twoFACode}
+                                            onChange={(e) => setTwoFACode(e.target.value.replace(/\D/g, ''))}
+                                            className="w-full pl-12 pr-4 py-3.5 bg-white border border-amber-300 rounded-xl text-amber-900 placeholder-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all font-mono tracking-widest text-center text-lg"
+                                            placeholder="000000"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="flex flex-col gap-3">
+                                    <button
+                                        type="submit"
+                                        disabled={isLoading || twoFACode.length !== 6}
+                                        className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-semibold py-3.5 px-6 rounded-xl transition-all shadow-lg hover:shadow-2xl disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {isLoading ? 'Doğrulanıyor...' : 'Doğrula ve Giriş Yap'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setView('login')}
+                                        className="text-amber-700 hover:text-amber-900 text-sm font-medium py-2"
+                                    >
+                                        İptal
+                                    </button>
+                                </div>
+                            </form>
+                        )}
+
                     </div>
 
-                    <p className="text-center text-amber-700 text-sm mt-6 animate-fade-in">
-                        © 2025 StokMate. Tüm hakları saklıdır.
+                    <p className="text-center text-stone-900 font-medium text-sm mt-6 animate-fade-in">
+                        © 2026 StokMate. Tüm hakları saklıdır.
                     </p>
                 </div>
             </div>
+
+            {/* 2FA Setup Modal */}
+            <TwoFactorSetupModal
+                isOpen={showSetupModal}
+                email={setupEmail}
+                qrCodeImage={setupData.qrCodeImage}
+                secret={setupData.totpSecret}
+                onClose={() => {
+                    setShowSetupModal(false)
+                    setView('login')
+                }}
+                onSuccess={() => {
+                    setShowSetupModal(false)
+                    // After setup, user is logged in with token
+                    navigate('/dashboard')
+                }}
+            />
         </div>
     )
 }

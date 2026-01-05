@@ -1,7 +1,7 @@
 import { Package, Truck, CheckCircle, Clock } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useListReadyShipmentsQuery, useGetCompletedAwaitingApprovalQuery, useGetApprovedShipmentsQuery } from '../../services/shipmentApi'
+import { useListReadyShipmentsQuery, useGetCompletedAwaitingApprovalQuery, useGetApprovedShipmentsQuery, useApproveShipmentMutation, useFinalizeShipmentMutation } from '../../services/shipmentApi'
 import { useListOrdersQuery } from '../../services/orderApi'
 import { useTopbar } from '../../context/TopbarContext'
 
@@ -9,15 +9,43 @@ const ShipmentOperationsPage: React.FC = () => {
     const { setTopbarContent } = useTopbar()
     const navigate = useNavigate()
     const [activeTab, setActiveTab] = useState<'pending' | 'ready' | 'completed'>('pending')
-    const { data: pendingOrders = [], isLoading: loadingPending } = useListOrdersQuery({ status: 'PENDING_SHIPMENT_APPROVAL' })
-    const { data: readyShipments = [], isLoading: loadingReady } = useListReadyShipmentsQuery()
-    const { data: completedShipments = [], isLoading: loadingCompleted } = useGetCompletedAwaitingApprovalQuery()
-    const { data: approvedShipments = [], isLoading: loadingApproved } = useGetApprovedShipmentsQuery()
+    const { data: pendingOrders = [], isLoading: loadingPending, refetch: refetchPending } = useListOrdersQuery({ status: 'PENDING_SHIPMENT_APPROVAL' })
+    const { data: readyShipments = [], isLoading: loadingReady, refetch: refetchReady } = useListReadyShipmentsQuery()
+    const [approveShipmentMutation] = useApproveShipmentMutation()
+    const [finalizeShipmentMutation] = useFinalizeShipmentMutation()
+    const { data: completedShipments = [], isLoading: loadingCompleted, refetch: refetchCompleted } = useGetCompletedAwaitingApprovalQuery()
+    const { data: approvedShipments = [], isLoading: loadingApproved, refetch: refetchApproved } = useGetApprovedShipmentsQuery()
 
     const pendingApprovals = Array.isArray(pendingOrders) ? pendingOrders : []
     const shipments = Array.isArray(readyShipments) ? readyShipments : []
     const completed = [...(Array.isArray(completedShipments) ? completedShipments : []), ...(Array.isArray(approvedShipments) ? approvedShipments : [])]
     const loading = activeTab === 'pending' ? loadingPending : activeTab === 'ready' ? loadingReady : (loadingCompleted || loadingApproved)
+
+    const handleApproveShipment = async (orderId: string) => {
+        if (!confirm('Bu sevkiyatı onaylamak istediğinizden emin misiniz?')) return
+        try {
+            await approveShipmentMutation(orderId).unwrap()
+            alert('Sevkiyat başarıyla onaylandı!')
+            refetchPending()
+            refetchReady()
+        } catch (error: any) {
+            alert('Hata: ' + (error.data?.message || 'Onaylama başarısız'))
+        }
+    }
+
+    // Finalize/approve a COMPLETED shipment
+    const handleFinalizeShipment = async (shipmentId: string) => {
+        if (!confirm('Bu sevkiyatı onaylamak istediğinizden emin misiniz?')) return
+        try {
+            await finalizeShipmentMutation(shipmentId).unwrap()
+            alert('Sevkiyat başarıyla onaylandı!')
+            refetchCompleted()
+            refetchApproved()
+            refetchReady()
+        } catch (error: any) {
+            alert('Hata: ' + (error.data?.message || 'Onaylama başarısız'))
+        }
+    }
 
     useEffect(() => {
         const getStatusInfo = () => {
@@ -119,7 +147,11 @@ const ShipmentOperationsPage: React.FC = () => {
                                                     <span className="text-amber-900 font-medium">{order.orderNo}</span>
                                                 </td>
                                                 <td className="py-3 px-4">
-                                                    <span className="text-amber-900">{order.customerName}</span>
+                                                    <span className="text-amber-900">
+                                                        {order.customer
+                                                            ? `${order.customer.firstName || ''} ${order.customer.lastName || ''}`.trim() || order.customer.name
+                                                            : order.customerName || '-'}
+                                                    </span>
                                                 </td>
                                                 <td className="py-3 px-4">
                                                     <span className="text-amber-700">
@@ -127,12 +159,20 @@ const ShipmentOperationsPage: React.FC = () => {
                                                     </span>
                                                 </td>
                                                 <td className="py-3 px-4 text-right">
-                                                    <button
-                                                        onClick={() => navigate(`/orders/${order.id || order.orderId}`)}
-                                                        className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium transition-all"
-                                                    >
-                                                        Detaya Git
-                                                    </button>
+                                                    <div className="flex items-center justify-end gap-2">
+                                                        <button
+                                                            onClick={() => handleApproveShipment(order.id)}
+                                                            className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium transition-all"
+                                                        >
+                                                            Onayla
+                                                        </button>
+                                                        <button
+                                                            onClick={() => navigate(`/orders/${order.id || order.orderId}`)}
+                                                            className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium transition-all"
+                                                        >
+                                                            Detaya Git
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}
@@ -258,16 +298,26 @@ const ShipmentOperationsPage: React.FC = () => {
                                                         ? 'bg-green-400 text-green-900 border-green-600'
                                                         : 'bg-blue-400 text-blue-900 border-blue-600'
                                                         }`}>
-                                                        {shipment.status === 'APPROVED' ? 'Onaylandı' : 'Tamamlandı'}
+                                                        {shipment.status === 'APPROVED' ? 'Onaylandı' : 'Tamamlandı (Onay Bekliyor)'}
                                                     </span>
                                                 </td>
                                                 <td className="py-3 px-4 text-right">
-                                                    <button
-                                                        onClick={() => navigate(`/shipment/${shipment.id || shipment.orderId}?type=SHIPMENT`)}
-                                                        className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium transition-all"
-                                                    >
-                                                        Detaya Git
-                                                    </button>
+                                                    <div className="flex gap-2 justify-end">
+                                                        {shipment.status === 'COMPLETED' && (
+                                                            <button
+                                                                onClick={() => handleFinalizeShipment(shipment.id)}
+                                                                className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium transition-all"
+                                                            >
+                                                                Onayla
+                                                            </button>
+                                                        )}
+                                                        <button
+                                                            onClick={() => navigate(`/shipment/${shipment.id || shipment.orderId}?type=SHIPMENT`)}
+                                                            className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium transition-all"
+                                                        >
+                                                            Detaya Git
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}

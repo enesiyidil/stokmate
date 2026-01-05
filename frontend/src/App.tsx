@@ -24,6 +24,10 @@ import ShipmentDetailsPage from './pages/shipment/ShipmentDetailsPage'
 
 import SaleDetailsPage from './pages/sales/SaleDetailsPage';
 import VehiclesPage from './pages/VehiclesPage'
+import { EventsPage } from './pages/events/EventsPage'
+import { ProtectedRoute as RoleProtectedRoute } from './components/auth/ProtectedRoute'
+import NotFoundPage from './pages/NotFoundPage'
+import AccessDeniedModal from './components/common/AccessDeniedModal'
 
 // Placeholder components
 
@@ -48,50 +52,55 @@ const Unauthorized = () => (
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/unauthorized" element={<Unauthorized />} />
+    <>
+      <AccessDeniedModal />
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/unauthorized" element={<Unauthorized />} />
 
-        {/* Protected routes with sidebar */}
-        <Route element={<ProtectedRoute />}>
-          <Route element={<SidebarLayout><Outlet /></SidebarLayout>}>
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/profile" element={<ProfilePage />} />
-            <Route path="/profile/update" element={<ProfileUpdatePage />} />
-            <Route path="/orders" element={<OrdersPage />} />
-            <Route path="/orders/:id" element={<OrderDetailsPage />} />
-            <Route path="/order-receipts" element={<OrderReceiptsPage />} />
-            <Route path="/products" element={<ProductsPage />} />
-            <Route path="/products/accept-order" element={<ProductAcceptancePage />} />
-            <Route path="/sales" element={<SalesPage />} />
-            <Route path="/sales/:id" element={<SaleDetailsPage />} />
-            <Route path="/sales/:id" element={<SaleDetailsPage />} />
-            <Route path="/shipment" element={<ShipmentOperationsPage />} />
-            <Route path="/shipment/:orderId" element={<ShipmentDetailsPage />} />
-            <Route path="/requests" element={<RequestsPage />} />
-            <Route path="/customers" element={<CustomersPage />} />
-            <Route path="/reports" element={<ReportsPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
+          {/* Protected routes with sidebar */}
+          <Route element={<ProtectedRoute />}>
+            <Route element={<SidebarLayout><Outlet /></SidebarLayout>}>
+              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/profile/update" element={<ProfileUpdatePage />} />
+              <Route path="/orders" element={<OrdersPage />} />
+              <Route path="/orders/:id" element={<OrderDetailsPage />} />
+              <Route path="/order-receipts" element={<OrderReceiptsPage />} />
+              <Route path="/products" element={<ProductsPage />} />
+              <Route path="/products/accept-order" element={<ProductAcceptancePage />} />
+              <Route path="/sales" element={<SalesPage />} />
+              <Route path="/sales/:id" element={<SaleDetailsPage />} />
+              <Route path="/sales/:id" element={<SaleDetailsPage />} />
+              <Route path="/shipment" element={<ShipmentOperationsPage />} />
+              <Route path="/shipment/:orderId" element={<ShipmentDetailsPage />} />
+              <Route path="/requests" element={<RequestsPage />} />
+              <Route path="/customers" element={<CustomersPage />} />
+              <Route path="/reports" element={<ReportsPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
 
-            {/* Admin/Manager only routes */}
-            <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'MUDUR']} />}>
-              <Route path="/users" element={<UsersPage />} />
-              <Route path="/stores" element={<StoresPage />} />
-              <Route path="/stores/:id" element={<StoreDetailsPage />} />
-              <Route path="/products/:id" element={<ProductDetailsPage />} />
-            </Route>
+              {/* Admin/Manager only routes */}
+              <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'MANAGER']} />}>
+                <Route path="/users" element={<UsersPage />} />
+                <Route path="/events" element={<EventsPage />} />
+                <Route path="/stores" element={<StoresPage />} />
+                <Route path="/stores/:id" element={<StoreDetailsPage />} />
+                <Route path="/products/:id" element={<ProductDetailsPage />} />
+              </Route>
 
-            {/* Admin/Manager/Warehouse Manager routes */}
-            <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'MUDUR', 'DEPO_SORUMLU']} />}>
-              <Route path="/vehicles" element={<VehiclesPage />} />
+              {/* Admin/Manager/Warehouse Manager routes */}
+              <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'MANAGER', 'OPERATIONS_MANAGER', 'LOGISTICS_MANAGER']} />}>
+                <Route path="/vehicles" element={<VehiclesPage />} />
+              </Route>
             </Route>
           </Route>
-        </Route>
 
-        <Route path="/" element={<Navigate to="/login" replace />} />
-      </Routes>
-    </BrowserRouter>
+          <Route path="/" element={<Navigate to="/login" replace />} />
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
+      </BrowserRouter>
+    </>
   )
 }
 

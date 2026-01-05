@@ -6,6 +6,7 @@ import { useGetAllUsersQuery } from '../services/userApi'
 import AddOrderModal from '../components/orders/AddOrderModal'
 import BulkUploadModal from '../components/orders/BulkUploadModal'
 import { useTopbar } from '../context/TopbarContext'
+import BrandBadge from '../components/common/BrandBadge'
 
 export default function OrdersPage() {
     const navigate = useNavigate()
@@ -232,13 +233,11 @@ export default function OrdersPage() {
     }, [showAddMenu, statusFilter, typeFilter, consultantFilter, salesConsultants, setTopbarContent])
 
     const getStatusBadge = (status: string) => {
-        // Simplify status display for list view - detailed status shown in detail modal
+        // Simplified 3-state status system: IN_PROGRESS, COMPLETED, CANCELLED
         switch (status) {
             case 'TAMAMLANDI':
             case 'COMPLETED':
             case 'DELIVERED':
-            case 'ACCEPTED':
-            case 'SHIPMENT_APPROVED':
                 return {
                     label: 'Tamamlandı',
                     icon: CheckCircle,
@@ -251,7 +250,9 @@ export default function OrdersPage() {
                     icon: XCircle,
                     className: 'bg-red-100 text-red-800 border-red-400'
                 }
-            // All other statuses show as "Devam Ediyor"
+            // All other statuses (IN_PROGRESS, legacy statuses) show as "Devam Ediyor"
+            case 'IN_PROGRESS':
+            case 'DEVAM_EDIYOR':
             default:
                 return {
                     label: 'Devam Ediyor',
@@ -292,6 +293,7 @@ export default function OrdersPage() {
                                 <tr className="border-b border-amber-200/50 bg-amber-50/50">
                                     <th className="px-6 py-4 text-left text-sm font-semibold text-amber-900">Sipariş No</th>
                                     <th className="px-6 py-4 text-left text-sm font-semibold text-amber-900">Tür</th>
+                                    <th className="px-6 py-4 text-left text-sm font-semibold text-amber-900">Marka</th>
                                     <th className="px-6 py-4 text-left text-sm font-semibold text-amber-900">Sözleşme No</th>
                                     <th className="px-6 py-4 text-left text-sm font-semibold text-amber-900">Ad Soyad</th>
                                     <th className="px-6 py-4 text-left text-sm font-semibold text-amber-900">Satış Danışmanı</th>
@@ -304,7 +306,7 @@ export default function OrdersPage() {
                             <tbody>
                                 {orders.length === 0 ? (
                                     <tr>
-                                        <td colSpan={9} className="px-6 py-12 text-center text-amber-700">
+                                        <td colSpan={10} className="px-6 py-12 text-center text-amber-700">
                                             {statusFilter ? 'Bu durumda sipariş bulunamadı' : 'Henüz sipariş bulunmuyor'}
                                         </td>
                                     </tr>
@@ -345,6 +347,13 @@ export default function OrdersPage() {
                                                         }`}>
                                                         {order.orderType === 'STOCK' ? 'STOK' : order.orderType === 'CUSTOMER_SPECIFIC' ? 'MÜŞTERİ' : order.orderType}
                                                     </span>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    {order.brand ? (
+                                                        <BrandBadge brand={order.brand} />
+                                                    ) : (
+                                                        <span className="text-amber-400">-</span>
+                                                    )}
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     <p className="text-amber-700">{order.prosapContractNo}</p>

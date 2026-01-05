@@ -5,7 +5,7 @@ import { useGetMeQuery } from '../api/auth.api'
 import { setUser } from '../store/authSlice'
 
 interface ProtectedRouteProps {
-    allowedRoles?: Array<'ADMIN' | 'MUDUR' | 'DEPO' | 'DEPO_SORUMLU' | 'DEPO_CALISAN' | 'MAGAZA_SORUMLU' | 'MAGAZA_CALISAN' | 'SATIS_DANISMANI' | 'USER'>
+    allowedRoles?: Array<'ADMIN' | 'MANAGER' | 'DIRECTOR' | 'OPERATIONS_MANAGER' | 'LOGISTICS_MANAGER' | 'STORE_MANAGER' | 'STORE_EMPLOYEE'>
 }
 
 export default function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {

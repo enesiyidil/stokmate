@@ -3,6 +3,7 @@ import { X, Upload, FileSpreadsheet, CheckCircle, Save, AlertCircle, Loader, Edi
 import { useExtractFromExcelMutation, useCreateOrderMutation, type OrderGroupData } from '../../services/orderApi'
 import { type CustomerResponse } from '../../services/customerApi'
 import axiosInstance from '../../services/axiosInstance'
+import { BRANDS, getBrandLabel, getBrandColor, type Brand } from '../../constants/brandConstants'
 
 interface Props {
     onClose: () => void
@@ -39,6 +40,7 @@ export default function BulkUploadModal({ onClose, onSuccess }: Props) {
     const [tempEditedOrder, setTempEditedOrder] = useState<OrderWithStatus | null>(null)
     const [salesConsultants, setSalesConsultants] = useState<{ id: string; name: string }[]>([])
     const [customerSearchQueries, setCustomerSearchQueries] = useState<Map<string, string>>(new Map())
+    const [selectedBrand, setSelectedBrand] = useState<Brand | null>(null)
 
     // Load sales consultants on mount
     useEffect(() => {
@@ -189,6 +191,7 @@ export default function BulkUploadModal({ onClose, onSuccess }: Props) {
                         productCode: p.productCode,
                         productName: p.productName,
                         quantity: p.quantity,
+                        brand: selectedBrand,
                         // Include all price/discount fields
                         specName: p.specName,
                         productGroupDefinition: p.productGroupDefinition,
@@ -447,6 +450,39 @@ export default function BulkUploadModal({ onClose, onSuccess }: Props) {
                         </div>
                     ) : step === 'select' || step === 'processing' ? (
                         <div className="space-y-4">
+                            {/* Brand Selection - After extraction */}
+                            {step === 'select' && (
+                                <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-6">
+                                    <label className="block text-sm font-semibold text-amber-900 mb-3">
+                                        Marka Seçimi *
+                                    </label>
+                                    <p className="text-xs text-amber-700 mb-4">
+                                        Seçilen marka, tüm siparişlerdeki tüm ürünlere uygulanacaktır.
+                                    </p>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        {BRANDS.map(brand => (
+                                            <button
+                                                key={brand}
+                                                type="button"
+                                                onClick={() => setSelectedBrand(brand)}
+                                                className={`px-4 py-3 rounded-lg font-medium transition-all ${selectedBrand === brand
+                                                    ? 'ring-2 ring-offset-2 shadow-lg transform scale-105'
+                                                    : 'hover:shadow-md hover:scale-102'
+                                                    }`}
+                                                style={{
+                                                    backgroundColor: selectedBrand === brand ? getBrandColor(brand) : '#fff',
+                                                    color: selectedBrand === brand ? '#fff' : getBrandColor(brand),
+                                                    borderColor: getBrandColor(brand),
+                                                    borderWidth: '2px'
+                                                }}
+                                            >
+                                                {getBrandLabel(brand)}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="flex items-center justify-between p-4 bg-amber-50 rounded-xl">
                                 <div>
                                     {step === 'select' ? (
@@ -745,7 +781,7 @@ export default function BulkUploadModal({ onClose, onSuccess }: Props) {
                             </button>
                             <button
                                 onClick={handleSaveSelected}
-                                disabled={selectedOrders.size === 0}
+                                disabled={selectedOrders.size === 0 || isSaving || !selectedBrand}
                                 className="flex items-center gap-2 px-6 py-2 bg-gradient-to-r from-amber-700 to-orange-700 text-white rounded-lg hover:from-amber-800 hover:to-orange-800 transition-all disabled:opacity-50 shadow-md"
                             >
                                 <Save className="w-4 h-4" />

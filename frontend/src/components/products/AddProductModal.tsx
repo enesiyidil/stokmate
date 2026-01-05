@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { X, Package, Save, Upload, Trash2, Image as ImageIcon } from 'lucide-react'
 import { useCreateProductMutation, useUpdateProductMutation, useUploadProductImageMutation, useDeleteProductImageMutation, type ProductRequest, type ProductResponse } from '../../services/productApi'
 import ImageCropperModal from './ImageCropperModal'
+import { BRANDS, getBrandLabel, type Brand } from '../../constants/brandConstants'
 
 interface Props {
     product?: ProductResponse | null
@@ -24,7 +25,7 @@ export default function AddProductModal({ product, onClose, onSuccess }: Props) 
         name: '',
         code: '',
         description: '',
-        brand: '',
+        brand: undefined,
         activeForSale: true,
         stockQuantity: 0,
         vatRate: 20,
@@ -222,15 +223,21 @@ export default function AddProductModal({ product, onClose, onSuccess }: Props) 
 
                                     <div>
                                         <label className="block text-sm font-medium text-amber-700 mb-2">
-                                            Marka
+                                            Marka *
                                         </label>
-                                        <input
-                                            type="text"
-                                            value={formData.brand}
-                                            onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
-                                            className="w-full px-4 py-2 bg-white border border-amber-300 rounded-lg text-amber-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                                            placeholder="Örn: Dell"
-                                        />
+                                        <select
+                                            required
+                                            value={formData.brand || ''}
+                                            onChange={(e) => setFormData({ ...formData, brand: (e.target.value as Brand) || undefined })}
+                                            className="w-full px-4 py-2 bg-white border border-amber-300 rounded-lg text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                                        >
+                                            <option value="">Marka Seçin</option>
+                                            {BRANDS.map(brand => (
+                                                <option key={brand} value={brand}>
+                                                    {getBrandLabel(brand)}
+                                                </option>
+                                            ))}
+                                        </select>
                                     </div>
 
                                     <div className="col-span-2">

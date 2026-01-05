@@ -9,7 +9,7 @@ interface AddUserModalProps {
 
 export default function AddUserModal({ onClose, onSuccess }: AddUserModalProps) {
     const [email, setEmail] = useState('')
-    const [role, setRole] = useState('MAGAZA_CALISAN')
+    const [role, setRole] = useState('STORE_EMPLOYEE')
     const [error, setError] = useState('')
     const [success, setSuccess] = useState(false)
     const [createUser, { isLoading }] = useCreateUserMutation()
@@ -89,12 +89,12 @@ export default function AddUserModal({ onClose, onSuccess }: AddUserModalProps) 
                             onChange={(e) => setRole(e.target.value)}
                             className="w-full px-4 py-3 bg-white border border-amber-300 rounded-lg text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-500 [&>option]:text-gray-900 [&>option]:bg-white"
                         >
-                            <option value="MAGAZA_CALISAN">Mağaza Çalışan</option>
-                            <option value="MAGAZA_SORUMLU">Mağaza Sorumlu</option>
-                            <option value="DEPO_CALISAN">Depo Çalışan</option>
-                            <option value="DEPO_SORUMLU">Depo Sorumlu</option>
-                            <option value="MUDUR">Müdür</option>
-                            <option value="ADMIN">Admin</option>
+                            <option value="STORE_EMPLOYEE">Mağaza Çalışanı</option>
+                            <option value="STORE_MANAGER">Mağaza Sorumlusu</option>
+                            <option value="LOGISTICS_MANAGER">Lojistik Yöneticisi</option>
+                            <option value="OPERATIONS_MANAGER">Operasyon Yöneticisi</option>
+                            <option value="DIRECTOR">Direktör</option>
+                            <option value="MANAGER">Craft (Yönetici)</option>
                         </select>
                     </div>
 

@@ -80,15 +80,17 @@ export default function UsersPage() {
         switch (role) {
             case 'ADMIN':
                 return 'Admin'
-            case 'MUDUR':
-                return 'Müdür'
-            case 'DEPO_SORUMLU':
-                return 'Depo Sorumlusu'
-            case 'DEPO_CALISAN':
-                return 'Depo Çalışanı'
-            case 'MAGAZA_SORUMLU':
+            case 'MANAGER':
+                return 'Craft (Yönetici)'
+            case 'DIRECTOR':
+                return 'Direktör'
+            case 'OPERATIONS_MANAGER':
+                return 'Operasyon Yöneticisi'
+            case 'LOGISTICS_MANAGER':
+                return 'Lojistik Yöneticisi'
+            case 'STORE_MANAGER':
                 return 'Mağaza Sorumlusu'
-            case 'MAGAZA_CALISAN':
+            case 'STORE_EMPLOYEE':
                 return 'Mağaza Çalışanı'
             default:
                 return role
@@ -99,13 +101,14 @@ export default function UsersPage() {
         switch (role) {
             case 'ADMIN':
                 return 'bg-purple-100 text-purple-800 border-purple-400'
-            case 'MUDUR':
+            case 'MANAGER':
+            case 'DIRECTOR':
                 return 'bg-indigo-100 text-indigo-800 border-indigo-400'
-            case 'DEPO_SORUMLU':
-            case 'DEPO_CALISAN':
+            case 'OPERATIONS_MANAGER':
+            case 'LOGISTICS_MANAGER':
                 return 'bg-blue-100 text-blue-800 border-blue-400'
-            case 'MAGAZA_SORUMLU':
-            case 'MAGAZA_CALISAN':
+            case 'STORE_MANAGER':
+            case 'STORE_EMPLOYEE':
                 return 'bg-green-100 text-green-800 border-green-400'
             default:
                 return 'bg-gray-100 text-gray-800 border-gray-400'

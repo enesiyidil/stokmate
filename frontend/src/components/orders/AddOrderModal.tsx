@@ -5,6 +5,7 @@ import { useListCustomersQuery, type CustomerRequest } from '../../services/cust
 import { useGetSalesConsultantsQuery } from '../../services/userApi'
 import SearchableSelect from '../common/SearchableSelect'
 import { cities, districts, neighborhoods } from '../../data/turkeyLocations'
+import { BRANDS, getBrandLabel, getBrandColor, type Brand } from '../../constants/brandConstants'
 
 interface Props {
     onClose: () => void
@@ -29,6 +30,7 @@ export default function AddOrderModal({ onClose, onSuccess }: Props) {
     const [selectedCustomerId, setSelectedCustomerId] = useState('')
     const [selectedSalesConsultantId, setSelectedSalesConsultantId] = useState('')
     const [selectedParentOrderId, setSelectedParentOrderId] = useState('')
+    const [selectedBrand, setSelectedBrand] = useState<Brand | null>(null)
 
     // Fetch parent orders for SSH if customer is selected
     const { data: parentOrders = [] } = useGetOrdersByCustomerQuery(selectedCustomerId, {
@@ -117,6 +119,7 @@ export default function AddOrderModal({ onClose, onSuccess }: Props) {
                     productCode: p.productCode,
                     productName: p.productName,
                     quantity: Number(p.quantity),
+                    brand: selectedBrand,
                 }
 
                 // Add pricing fields if enabled
@@ -234,6 +237,36 @@ export default function AddOrderModal({ onClose, onSuccess }: Props) {
                                 >
                                     SSH
                                 </button>
+                            </div>
+                        </div>
+
+                        {/* Brand Selection */}
+                        <div className="space-y-4">
+                            <h3 className="text-lg font-semibold text-amber-900">Marka Seçimi *</h3>
+                            <p className="text-sm text-amber-700">
+                                Seçilen marka, bu siparişte ekleyeceğiniz tüm ürünlere uygulanacaktır.
+                            </p>
+                            <div className="grid grid-cols-3 gap-3">
+                                {BRANDS.map(brand => (
+                                    <button
+                                        key={brand}
+                                        type="button"
+                                        onClick={() => setSelectedBrand(brand)}
+                                        className={`px-4 py-3 rounded-lg font-medium transition-all ${selectedBrand === brand
+                                                ? 'ring-2 ring-offset-2 shadow-lg transform scale-105'
+                                                : 'hover:shadow-md hover:scale-102'
+                                            }`}
+                                        style={{
+                                            backgroundColor: selectedBrand === brand ? getBrandColor(brand) : '#fff',
+                                            color: selectedBrand === brand ? '#fff' : getBrandColor(brand),
+                                            borderColor: getBrandColor(brand),
+                                            borderWidth: '2px',
+                                            ringColor: getBrandColor(brand)
+                                        }}
+                                    >
+                                        {getBrandLabel(brand)}
+                                    </button>
+                                ))}
                             </div>
                         </div>
 

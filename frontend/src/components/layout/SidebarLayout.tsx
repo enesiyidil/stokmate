@@ -25,6 +25,7 @@ import { useAppDispatch, useAppSelector } from '../../hooks/useAuth'
 import { logout } from '../../store/authSlice'
 import { TopbarProvider, useTopbar } from '../../context/TopbarContext'
 import { useUi } from '../../context/UiContext'
+import { getRoleDisplayName } from '../../constants/roles'
 
 interface MenuItem {
     name: string
@@ -39,13 +40,13 @@ const menuItems: MenuItem[] = [
         name: 'Siparişler',
         icon: ShoppingCart,
         path: '/orders',
-        roles: ['ADMIN', 'MUDUR', 'DEPO_SORUMLU', 'DEPO_CALISAN']
+        roles: ['ADMIN', 'MANAGER', 'DIRECTOR', 'OPERATIONS_MANAGER', 'STORE_MANAGER']
     },
     {
         name: 'Ürün Kabuller',
         icon: ClipboardCheck,
         path: '/order-receipts',
-        roles: ['ADMIN', 'MUDUR', 'DEPO_SORUMLU']
+        roles: ['ADMIN', 'MANAGER', 'DIRECTOR', 'OPERATIONS_MANAGER']
     },
     { name: 'Ürünler', icon: Package, path: '/products' },
     { name: 'Satışlar', icon: ShoppingBag, path: '/sales' },
@@ -53,43 +54,49 @@ const menuItems: MenuItem[] = [
         name: 'Sevkiyat',
         icon: TruckIcon,
         path: '/shipment',
-        roles: ['ADMIN', 'MUDUR', 'DEPO_SORUMLU', 'DEPO_CALISAN', 'MAGAZA_SORUMLU', 'MAGAZA_CALISAN']
+        roles: ['ADMIN', 'MANAGER', 'DIRECTOR', 'OPERATIONS_MANAGER', 'LOGISTICS_MANAGER', 'STORE_MANAGER', 'STORE_EMPLOYEE']
     },
     {
         name: 'Talepler',
         icon: MessageSquare,
         path: '/requests',
-        roles: ['ADMIN', 'MUDUR', 'DEPO_SORUMLU', 'MAGAZA_SORUMLU']
+        roles: ['ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER']
     },
     {
         name: 'Müşteriler',
         icon: UserCircle,
         path: '/customers',
-        roles: ['ADMIN', 'MUDUR', 'DEPO_SORUMLU', 'MAGAZA_SORUMLU']
+        roles: ['ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER']
     },
     {
         name: 'Kullanıcılar',
         icon: Users,
         path: '/users',
-        roles: ['ADMIN', 'MUDUR']
+        roles: ['ADMIN', 'MANAGER']
     },
     {
         name: 'Mağazalar',
         icon: Store,
         path: '/stores',
-        roles: ['ADMIN', 'MUDUR']
+        roles: ['ADMIN', 'MANAGER', 'DIRECTOR']
     },
     {
         name: 'Araçlar',
         icon: TruckIcon,
         path: '/vehicles',
-        roles: ['ADMIN', 'MUDUR', 'DEPO_SORUMLU']
+        roles: ['ADMIN', 'MANAGER', 'DIRECTOR', 'OPERATIONS_MANAGER', 'LOGISTICS_MANAGER']
+    },
+    {
+        name: 'Olaylar',
+        icon: Bell,
+        path: '/events',
+        roles: ['ADMIN', 'MANAGER']
     },
     {
         name: 'Raporlar',
         icon: FileText,
         path: '/reports',
-        roles: ['ADMIN', 'MUDUR']
+        roles: ['ADMIN', 'MANAGER']
     },
 ]
 
@@ -202,12 +209,7 @@ function SidebarLayoutContent({ children }: SidebarLayoutProps) {
                                             }
                                         </p>
                                         <p className="text-xs text-amber-200">
-                                            {user?.role === 'ADMIN' ? 'Admin' :
-                                                user?.role === 'MUDUR' ? 'Müdür' :
-                                                    user?.role === 'DEPO_SORUMLU' ? 'Depo Sorumlu' :
-                                                        user?.role === 'DEPO_CALISAN' ? 'Depo Çalışan' :
-                                                            user?.role === 'MAGAZA_SORUMLU' ? 'Mağaza Sorumlu' :
-                                                                user?.role === 'MAGAZA_CALISAN' ? 'Mağaza Çalışan' : user?.role}
+                                            {getRoleDisplayName(user?.role || '')}
                                         </p>
                                     </div>
                                 )}

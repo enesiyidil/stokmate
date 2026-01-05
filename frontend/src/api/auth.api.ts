@@ -10,11 +10,15 @@ interface OtpLoginRequest {
     code: string
 }
 
-type UserRole = 'ADMIN' | 'MUDUR' | 'DEPO_SORUMLU' | 'DEPO_CALISAN' | 'MAGAZA_SORUMLU' | 'MAGAZA_CALISAN'
+type UserRole = 'ADMIN' | 'MANAGER' | 'DIRECTOR' | 'OPERATIONS_MANAGER' | 'LOGISTICS_MANAGER' | 'STORE_MANAGER' | 'STORE_EMPLOYEE'
 
-interface LoginResponse {
+interface AuthResponse {
     token: string
-    user: {
+    requiresTwoFactor?: boolean
+    requiresSetup?: boolean
+    qrCodeImage?: string
+    totpSecret?: string
+    user?: {
         id: string
         email: string
         firstName: string | null
@@ -37,18 +41,25 @@ interface MeResponse {
 
 export const authApi = api.injectEndpoints({
     endpoints: (builder) => ({
-        login: builder.mutation<LoginResponse, LoginRequest>({
+        login: builder.mutation<AuthResponse, LoginRequest>({
             query: (credentials) => ({
                 url: '/auth/login',
                 method: 'POST',
                 body: credentials,
             }),
         }),
-        loginWithOtp: builder.mutation<LoginResponse, OtpLoginRequest>({
+        loginWithOtp: builder.mutation<AuthResponse, OtpLoginRequest>({
             query: (credentials) => ({
                 url: '/auth/login/otp',
                 method: 'POST',
                 body: credentials,
+            }),
+        }),
+        verify2FA: builder.mutation<AuthResponse, { email: string; code: string }>({
+            query: (body) => ({
+                url: '/auth/verify-2fa',
+                method: 'POST',
+                body,
             }),
         }),
         forgotPassword: builder.mutation<boolean, { email: string }>({
@@ -71,4 +82,11 @@ export const authApi = api.injectEndpoints({
     }),
 })
 
-export const { useLoginMutation, useLoginWithOtpMutation, useGetMeQuery, useLogoutMutation, useForgotPasswordMutation } = authApi
+export const {
+    useLoginMutation,
+    useLoginWithOtpMutation,
+    useVerify2FAMutation,
+    useGetMeQuery,
+    useLogoutMutation,
+    useForgotPasswordMutation
+} = authApi

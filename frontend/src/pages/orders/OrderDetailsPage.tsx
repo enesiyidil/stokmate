@@ -1,7 +1,7 @@
-import { ArrowLeft, Package, User, FileText, CheckCircle, XCircle, Clock, Upload, Download, Activity, Edit, Eye } from 'lucide-react'
+import { ArrowLeft, Package, User, FileText, CheckCircle, XCircle, Clock, Upload, Download, Activity, Edit, Eye, Pencil } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { useCancelOrderMutation, useUploadInvoiceMutation, useGetInvoiceUrlQuery, useGetOrderQuery, useUpdateSalesConsultantMutation, useApproveShipmentMutation, useListOrdersQuery } from '../../services/orderApi'
-import { useCreatePartialShipmentMutation, useListReadyShipmentsQuery } from '../../services/shipmentApi'
+import { useCancelOrderMutation, useUploadInvoiceMutation, useGetInvoiceUrlQuery, useGetOrderQuery, useUpdateSalesConsultantMutation, useApproveShipmentMutation, useUpdateBrandMutation } from '../../services/orderApi'
+import { useCreatePartialShipmentMutation } from '../../services/shipmentApi'
 import { useGetOrderActivitiesQuery } from '../../services/orderActivityApi'
 import { useListOrderReceiptsQuery } from '../../services/orderReceiptApi'
 import { formatDistanceToNow } from 'date-fns'
@@ -11,6 +11,8 @@ import { useEffect, useState, useMemo } from 'react'
 import { useAppSelector } from '../../hooks/useAuth'
 import { useGetSalesConsultantsQuery } from '../../services/userApi'
 import CustomerModal from '../../components/customers/CustomerModal'
+import BrandBadge from '../../components/common/BrandBadge'
+import { BRANDS } from '../../constants/brandConstants'
 
 export default function OrderDetailsPage() {
     const { id } = useParams<{ id: string }>()
@@ -23,17 +25,9 @@ export default function OrderDetailsPage() {
     const [uploadInvoice] = useUploadInvoiceMutation()
     const { data: invoiceData } = useGetInvoiceUrlQuery(id!, { skip: !order?.hasInvoice })
     const [updateSalesConsultant] = useUpdateSalesConsultantMutation()
+    const [updateBrand] = useUpdateBrandMutation()
     const { data: salesConsultants = [] } = useGetSalesConsultantsQuery()
     const [approveShipment, { isLoading: isApproving }] = useApproveShipmentMutation()
-
-    // Fetch active shipments for quantity validation
-    const { data: pendingOrders = [] } = useListOrdersQuery({ status: 'PENDING_SHIPMENT_APPROVAL' })
-    const { data: readyShipments = [] } = useListReadyShipmentsQuery()
-
-    // Filter shipments relevant to this order
-    const pendingShipments = useMemo(() => {
-        return Array.isArray(pendingOrders) ? pendingOrders.filter((o: any) => o.id === id || o.orderId === id) : []
-    }, [pendingOrders, id])
 
     const user = useAppSelector(state => state.auth.user)
 
@@ -48,12 +42,14 @@ export default function OrderDetailsPage() {
     const [createPartialShipment] = useCreatePartialShipmentMutation()
 
     const [showCustomerModal, setShowCustomerModal] = useState(false)
+    const [showBrandModal, setShowBrandModal] = useState(false)
+    const [selectedBrandForUpdate, setSelectedBrandForUpdate] = useState<string>('')
 
     // Check if user can ship products (for customer-specific orders)
     const canEdit = useMemo(() => {
         if (!order || !user) return false
         if (order.orderType !== 'CUSTOMER_SPECIFIC') return false
-        if (user.role === 'ADMIN' || user.role === 'MUDUR') return true
+        if (user.role === 'MUDUR') return true
         if (user.role === 'MAGAZA_CALISAN' && order.salesConsultant?.id === user.id) return true
         return false
     }, [order, user])
@@ -61,52 +57,23 @@ export default function OrderDetailsPage() {
     const shippableProducts = useMemo(() => {
         if (!order?.products) return []
 
-        // Calculate pending quantities from active shipments
-        const pendingInShipments: Record<string, number> = {}
-        const activeShipments = [...pendingShipments, ...readyShipments]
-
-        activeShipments.forEach((shipment: any) => {
-            // Check if shipment is active (not approved/completed - although ready/pending lists already imply this)
-            if (shipment.status !== 'APPROVED' && shipment.status !== 'COMPLETED') {
-                shipment.items?.forEach((item: any) => {
-                    if (item.orderProductId) {
-                        pendingInShipments[item.orderProductId] = (pendingInShipments[item.orderProductId] || 0) + item.shippedQuantity
-                    }
-                })
-            }
-        })
-
+        // Use backend-provided availableForShipmentQuantity
         return order.products.filter(p => {
-            if (!p.acceptedQuantity || p.acceptedQuantity <= 0) return false
-            const shipped = p.shippedQuantity || 0
-            const pending = pendingInShipments[p.id] || 0
-            // Available = Accepted - Shipped - PendingInShipments
-            return (p.acceptedQuantity - shipped - pending) > 0
+            const availableQty = p.availableForShipmentQuantity || 0
+            return availableQty > 0
         })
-    }, [order?.products, pendingShipments, readyShipments])
+    }, [order?.products])
 
-    // Calculate effective remaining for modal
+    // Calculate effective remaining for modal - use backend-provided value
     const getEffectiveRemaining = (product: any) => {
-        const accepted = product.acceptedQuantity || 0
-        const shipped = product.shippedQuantity || 0
-
-        // Calculate pending from active shipments
-        const activeShipments = [...pendingShipments, ...readyShipments]
-        let pending = 0
-        activeShipments.forEach((shipment: any) => {
-            shipment.items?.forEach((item: any) => {
-                if (item.orderProductId === product.id) {
-                    pending += item.shippedQuantity
-                }
-            })
-        })
-
-        return Math.max(0, accepted - shipped - pending)
+        // Backend already calculates availableForShipmentQuantity correctly
+        // taking into account shipped, pending shipment quantities
+        return product.availableForShipmentQuantity || 0
     }
 
     // Check if user is admin or manager
     const isAdminOrManager = useMemo(() => {
-        return user?.role === 'ADMIN' || user?.role === 'MUDUR'
+        return user?.role === 'MUDUR'
     }, [user])
 
     // Helper to get pending quantity
@@ -315,7 +282,22 @@ export default function OrderDetailsPage() {
             <div className="p-6 space-y-6">
                 {/* Order Info Card */}
                 <div className="backdrop-blur-xl bg-white border border-amber-200 rounded-2xl shadow-2xl p-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="flex items-start justify-between mb-4">
+                        <h3 className="text-lg font-semibold text-amber-900">Sipariş Bilgileri</h3>
+                        {isAdminOrManager && (
+                            <button
+                                onClick={() => {
+                                    setSelectedBrandForUpdate(order.products[0]?.brand || '')
+                                    setShowBrandModal(true)
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 text-amber-800 rounded-lg hover:bg-amber-200 transition-all text-xs font-medium"
+                            >
+                                <Pencil className="w-3.5 h-3.5" />
+                                Düzenle
+                            </button>
+                        )}
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                         <div>
                             <p className="text-xs text-amber-700 mb-1">Sözleşme No</p>
                             <p className="text-amber-900 font-medium">{order.prosapContractNo}</p>
@@ -335,6 +317,14 @@ export default function OrderDetailsPage() {
                                     order.orderType === 'CUSTOMER_SPECIFIC' ? '👤 Müşteriye Özel' :
                                         order.orderType === 'AFTER_SALES_SERVICE' ? '🔧 Satış Sonrası Hizmet' : order.orderType}
                             </p>
+                        </div>
+                        <div>
+                            <p className="text-xs text-amber-700 mb-1">Marka</p>
+                            {order.products && order.products.length > 0 && order.products[0].brand ? (
+                                <BrandBadge brand={order.products[0].brand} />
+                            ) : (
+                                <p className="text-amber-400">-</p>
+                            )}
                         </div>
                     </div>
 
@@ -490,29 +480,50 @@ export default function OrderDetailsPage() {
                             </div>
                             <div className="space-y-3">
                                 {order.products.map((product) => {
-                                    const pendingQty = getPendingQuantity(product.id)
+                                    const pendingReceiptQty = getPendingQuantity(product.id)
                                     const acceptedQty = product.acceptedQuantity || 0
                                     const totalQty = product.quantity
                                     const shippedQty = product.shippedQuantity || 0
+                                    const pendingShipQty = product.pendingShipmentQuantity || 0
+                                    const availableQty = product.availableForShipmentQuantity || 0
                                     const isCustomerSpecific = order.orderType === 'CUSTOMER_SPECIFIC'
 
                                     return (
                                         <div key={product.id} className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                                            <div className="grid grid-cols-3 gap-4 mb-3">
-                                                <div><p className="text-xs text-amber-700">Ürün Adı</p><p className="text-amber-900">{product.productName}</p></div>
-                                                <div><p className="text-xs text-amber-700">Toplam Miktar</p><p className="text-amber-900 font-medium">{totalQty}</p></div>
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
+                                                <div className="col-span-2 md:col-span-1">
+                                                    <p className="text-xs text-amber-700">Ürün Adı</p>
+                                                    <p className="text-amber-900 font-medium">{product.productName}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs text-amber-700">Sipariş</p>
+                                                    <p className="text-amber-900 font-medium">{totalQty}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs text-amber-700">Kabul</p>
+                                                    <p className="text-green-600 font-medium">{acceptedQty}</p>
+                                                </div>
                                                 <div>
                                                     <p className="text-xs text-amber-700">Durum</p>
-                                                    <div className="flex flex-col">
-                                                        <span className="text-green-400 font-medium">{acceptedQty} Kabul</span>
-                                                        {isCustomerSpecific && shippedQty > 0 && (
-                                                            <span className="text-blue-400 text-xs font-medium">
-                                                                {shippedQty} Sevk Edildi
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {shippedQty > 0 && (
+                                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                                                                ✓ {shippedQty} Sevk
                                                             </span>
                                                         )}
-                                                        {pendingQty > 0 && (
-                                                            <span className="text-yellow-400 text-xs font-medium animate-pulse">
-                                                                + {pendingQty} Bekleyen
+                                                        {pendingShipQty > 0 && (
+                                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800 animate-pulse">
+                                                                ⏳ {pendingShipQty} Onayda
+                                                            </span>
+                                                        )}
+                                                        {availableQty > 0 && isCustomerSpecific && (
+                                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                                                                📦 {availableQty} Hazır
+                                                            </span>
+                                                        )}
+                                                        {pendingReceiptQty > 0 && (
+                                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800">
+                                                                🔄 {pendingReceiptQty} Kabul Onayda
                                                             </span>
                                                         )}
                                                     </div>
@@ -525,13 +536,13 @@ export default function OrderDetailsPage() {
                                                     <span>Kabul İlerlemesi</span>
                                                     <div className="flex gap-2">
                                                         <span>{Math.round(((Number(acceptedQty)) / Number(totalQty)) * 100)}%</span>
-                                                        {pendingQty > 0 && <span className="text-yellow-400">({Math.round(((Number(acceptedQty) + pendingQty) / Number(totalQty)) * 100)}%)</span>}
+                                                        {pendingReceiptQty > 0 && <span className="text-yellow-400">({Math.round(((Number(acceptedQty) + pendingReceiptQty) / Number(totalQty)) * 100)}%)</span>}
                                                     </div>
                                                 </div>
-                                                <div className="w-full bg-white/10 rounded-full h-2 flex overflow-hidden">
-                                                    <div className="bg-gradient-to-r from-green-500 to-emerald-600 h-2 transition-all" style={{ width: `${Math.min(((Number(acceptedQty)) / Number(totalQty)) * 100, 100)}%` }} />
-                                                    {pendingQty > 0 && (
-                                                        <div className="bg-yellow-500/50 h-2 transition-all striped-bg" style={{ width: `${Math.min((pendingQty / Number(totalQty)) * 100, 100)}%` }} />
+                                                <div className="w-full bg-amber-200/50 rounded-full h-2 flex overflow-hidden border border-amber-300">
+                                                    <div className="bg-gradient-to-r from-green-500 to-emerald-600 h-full transition-all" style={{ width: `${Math.min(((Number(acceptedQty)) / Number(totalQty)) * 100, 100)}%` }} />
+                                                    {pendingReceiptQty > 0 && (
+                                                        <div className="bg-yellow-500/50 h-full transition-all striped-bg" style={{ width: `${Math.min((pendingReceiptQty / Number(totalQty)) * 100, 100)}%` }} />
                                                     )}
                                                 </div>
                                             </div>
@@ -544,8 +555,8 @@ export default function OrderDetailsPage() {
                                                             <span>Sevk İlerlemesi</span>
                                                             <span>{Math.round((shippedQty / acceptedQty) * 100)}%</span>
                                                         </div>
-                                                        <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
-                                                            <div className="bg-gradient-to-r from-blue-500 to-cyan-600 h-2 transition-all" style={{ width: `${Math.min((shippedQty / acceptedQty) * 100, 100)}%` }} />
+                                                        <div className="w-full bg-blue-200/50 rounded-full h-2 overflow-hidden border border-blue-300">
+                                                            <div className="bg-gradient-to-r from-blue-500 to-cyan-600 h-full transition-all" style={{ width: `${Math.min((shippedQty / acceptedQty) * 100, 100)}%` }} />
                                                         </div>
                                                     </div>
 
@@ -721,6 +732,58 @@ export default function OrderDetailsPage() {
                                 className="flex-1 px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-700 text-white rounded-lg hover:from-blue-700 hover:to-cyan-800 transition-all font-medium disabled:opacity-50 shadow-lg shadow-blue-500/30"
                             >
                                 {isCreatingShipment ? 'Gönderiliyor...' : 'Sevke Sun'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Brand Update Modal */}
+            {showBrandModal && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-white border border-amber-200 rounded-2xl shadow-2xl w-full max-w-md p-6">
+                        <h3 className="text-xl font-bold text-amber-900 mb-4">Marka Güncelle</h3>
+                        <select
+                            value={selectedBrandForUpdate}
+                            onChange={(e) => setSelectedBrandForUpdate(e.target.value)}
+                            className="w-full px-4 py-3 bg-white border border-amber-300 rounded-lg text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-500 mb-4"
+                        >
+                            <option value="">-- Marka Seçiniz --</option>
+                            {BRANDS.map(brand => (
+                                <option key={brand} value={brand}>
+                                    {brand}
+                                </option>
+                            ))}
+                        </select>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setShowBrandModal(false)}
+                                className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                            >
+                                İptal
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    if (!selectedBrandForUpdate) {
+                                        alert('Lütfen bir marka seçiniz')
+                                        return
+                                    }
+                                    try {
+                                        await updateBrand({
+                                            orderId: id!,
+                                            brand: selectedBrandForUpdate
+                                        }).unwrap()
+                                        setShowBrandModal(false)
+                                        alert('Marka başarıyla güncellendi')
+                                        refetch()
+                                    } catch (error) {
+                                        console.error('Failed to update brand:', error)
+                                        alert('Güncelleme başarısız oldu')
+                                    }
+                                }}
+                                className="flex-1 px-4 py-2 bg-gradient-to-r from-amber-600 to-orange-600 text-white rounded-lg hover:from-amber-700 hover:to-orange-700 transition-all font-medium"
+                            >
+                                Kaydet
                             </button>
                         </div>
                     </div>

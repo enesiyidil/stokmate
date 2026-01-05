@@ -27,9 +27,12 @@ export interface OrderProductResponse {
     acceptedQuantity?: number
     remainingQuantity?: number
     shippedQuantity?: number
+    pendingShipmentQuantity?: number
+    availableForShipmentQuantity?: number
     remainingShipQuantity?: number
     unitPrice?: number
     totalPrice?: number
+    brand?: string
     createdAt: string
     updatedAt: string
 }
@@ -105,6 +108,8 @@ export interface OrderResponse {
     deliveryNotes?: string
     deliveryLastUpdatedBy?: UserBasicResponse
     deliveryLastUpdatedAt?: string
+    // Brand info
+    brand?: string
 }
 
 export interface OrderProductExcelRow {
@@ -308,6 +313,16 @@ export const orderApi = api.injectEndpoints({
             invalidatesTags: ['Orders'],
         }),
 
+        // Update brand for all products in order
+        updateBrand: builder.mutation<OrderResponse, { orderId: string; brand: string }>({
+            query: ({ orderId, brand }) => ({
+                url: `/orders/${orderId}/brand`,
+                method: 'PATCH',
+                body: { brand },
+            }),
+            invalidatesTags: ['Orders'],
+        }),
+
         // Get order events
         getOrderEvents: builder.query<OrderEventResponse[], string>({
             query: (orderId) => `/orders/${orderId}/events`,
@@ -329,5 +344,6 @@ export const {
     useApproveShipmentMutation,
     useUpdatePartialDeliveryMutation,
     useUpdateSalesConsultantMutation,
+    useUpdateBrandMutation,
     useGetOrderEventsQuery,
 } = orderApi
