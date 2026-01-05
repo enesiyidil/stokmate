@@ -74,6 +74,9 @@ public class OrderProductExcelRow {
     @JsonProperty("paymentConditionDefinition")
     private String paymentConditionDefinition;
 
+    @JsonProperty("brand")
+    private String brand; // String because it comes from Excel
+
     @JsonProperty("quantity")
     private BigDecimal quantity;
 }

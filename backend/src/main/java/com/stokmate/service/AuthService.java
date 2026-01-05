@@ -8,6 +8,8 @@ import com.stokmate.dto.auth.RegisterRequest;
 import com.stokmate.dto.auth.OtpLoginRequest;
 import com.stokmate.dto.auth.PasswordUpdateRequest;
 import com.stokmate.dto.auth.ForgotPasswordRequest;
+import com.stokmate.dto.auth.TwoFactorVerifyRequest;
+import com.stokmate.dto.user.UserResponse;
 import com.stokmate.dto.user.UserResponse;
 import com.stokmate.exception.ApiException;
 import com.stokmate.exception.BadRequestException;
@@ -24,6 +26,7 @@ import org.springframework.stereotype.Service;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -34,6 +37,7 @@ public class AuthService {
     private final UserRepository userRepository;
     private final JwtTokenProvider jwtTokenProvider;
     private final NotificationService notificationService;
+    private final TwoFactorAuthService twoFactorAuthService;
 
     public AuthResponse login(AuthRequest request) {
         Authentication authentication = authenticationManager.authenticate(
@@ -44,6 +48,38 @@ public class AuthService {
                 && user.getTempCodeExpiresAt().isAfter(Instant.now())) {
             throw new BadRequestException("One-time code must be used to activate this account");
         }
+
+        // Check if 2FA is enabled for this user
+        if (user.isTotpEnabled()) {
+            // If secret is missing (legacy users), generate it
+            if (user.getTotpSecret() == null) {
+                String newSecret = twoFactorAuthService.generateSecret();
+                user.setTotpSecret(newSecret);
+                user.setTotpSetupCompleted(false);
+                userRepository.save(user);
+            }
+
+            UserResponse userResponse = UserResponse.builder()
+                    .id(user.getId())
+                    .email(user.getEmail())
+                    .firstName(user.getFirstName())
+                    .lastName(user.getLastName())
+                    .role(user.getRole())
+                    .active(user.isActive())
+                    .build();
+
+            // Check if user has completed 2FA setup (scanned QR code)
+            if (!user.isTotpSetupCompleted()) {
+                Map<String, String> qrData = twoFactorAuthService.generateQRCode(user);
+                return AuthResponse.requireSetup(
+                        userResponse,
+                        qrData.get("qrCodeImage"),
+                        qrData.get("secret"));
+            }
+
+            return AuthResponse.requireTwoFactor(userResponse);
+        }
+
         String token = jwtTokenProvider.generateToken(principal.getUser());
         UserResponse userResponse = UserResponse.builder()
                 .id(user.getId())
@@ -68,11 +104,19 @@ public class AuthService {
         User user = new User();
         user.setEmail(request.getEmail().toLowerCase());
         user.setPassword(passwordEncoder.encode(otp)); // placeholder password to satisfy UserDetails
-        user.setRole(request.getRole() == null ? Role.MAGAZA_CALISAN : request.getRole());
+        user.setRole(request.getRole() == null ? Role.STORE_EMPLOYEE : request.getRole());
         user.setActive(true);
         user.setTempCodeHash(passwordEncoder.encode(otp));
         user.setTempCodeExpiresAt(Instant.now().plus(15, ChronoUnit.MINUTES));
         user.setTempCodeUsed(false);
+
+        // Auto-enable 2FA for non-ADMIN users
+        if (user.getRole() != Role.ADMIN) {
+            String totpSecret = twoFactorAuthService.generateSecret();
+            user.setTotpSecret(totpSecret);
+            user.setTotpEnabled(true);
+        }
+
         userRepository.save(user);
 
         notificationService.sendOtpEmail(user.getEmail(), otp);
@@ -143,5 +187,64 @@ public class AuthService {
         SecureRandom random = new SecureRandom();
         int code = 100000 + random.nextInt(900000);
         return String.valueOf(code);
+    }
+
+    /**
+     * Verify 2FA code and complete login
+     */
+    public AuthResponse verify2FA(TwoFactorVerifyRequest request) {
+        User user = userRepository.findByEmailAndDeletedFalse(request.getEmail())
+                .orElseThrow(() -> new BadRequestException("User not found"));
+
+        int codeValue = Integer.parseInt(request.getCode());
+        boolean isValid = twoFactorAuthService.verifyCode(request.getEmail(), codeValue);
+        if (!isValid) {
+            throw new BadRequestException("Invalid verification code");
+        }
+
+        String token = jwtTokenProvider.generateToken(user);
+        UserResponse userResponse = UserResponse.builder()
+                .id(user.getId())
+                .email(user.getEmail())
+                .firstName(user.getFirstName())
+                .lastName(user.getLastName())
+                .role(user.getRole())
+                .active(user.isActive())
+                .build();
+        return new AuthResponse(token, userResponse);
+    }
+
+    public AuthResponse completeSetup(TwoFactorVerifyRequest request) {
+        User user = userRepository.findByEmailAndDeletedFalse(request.getEmail())
+                .orElseThrow(() -> new BadRequestException("User not found"));
+
+        if (!user.isTotpEnabled() || user.getTotpSecret() == null) {
+            throw new BadRequestException("2FA is not enabled for this user");
+        }
+
+        // Verify the code
+        int codeValue = Integer.parseInt(request.getCode());
+        boolean isValid = twoFactorAuthService.verifyCode(request.getEmail(), codeValue);
+
+        if (!isValid) {
+            throw new BadRequestException("Invalid 2FA code");
+        }
+
+        // Mark setup as completed
+        user.setTotpSetupCompleted(true);
+        userRepository.save(user);
+
+        // Generate token and return
+        String token = jwtTokenProvider.generateToken(user);
+        UserResponse userResponse = UserResponse.builder()
+                .id(user.getId())
+                .email(user.getEmail())
+                .firstName(user.getFirstName())
+                .lastName(user.getLastName())
+                .role(user.getRole())
+                .active(user.isActive())
+                .build();
+
+        return new AuthResponse(token, userResponse);
     }
 }

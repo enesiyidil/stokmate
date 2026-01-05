@@ -14,8 +14,8 @@ public class NotificationService {
 
     private final JavaMailSender mailSender;
 
-    @Value("${spring.mail.username}")
-    private String fromEmail;
+    // @Value("${spring.mail.username}")
+    private String fromEmail = "noreply@stokmate.com";
 
     public void sendOtpEmail(String email, String code) {
         try {

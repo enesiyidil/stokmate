@@ -19,7 +19,7 @@ public class ProductRequest {
     private String code;
 
     private String description;
-    private String brand;
+    private com.stokmate.domain.Brand brand;
 
     @NotNull
     private Boolean activeForSale;

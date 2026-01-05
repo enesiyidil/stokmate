@@ -70,6 +70,10 @@ public class ShipmentService {
         private final VehicleRepository vehicleRepository;
         private final StorageService storageService;
 
+        @org.springframework.context.annotation.Lazy
+        @org.springframework.beans.factory.annotation.Autowired
+        private OrderService orderService;
+
         @Transactional
         public ShipmentApprovalResponse requestShipmentApproval(ShipmentApprovalRequest request, UUID requesterId) {
                 Order order = orderRepository.findById(request.getOrderId())
@@ -424,7 +428,7 @@ public class ShipmentService {
         }
 
         /**
-         * Update shipment driver (ADMIN/MUDUR only)
+         * Update shipment driver (ADMIN/MANAGER only)
          */
         @Transactional
         public void updateShipmentDriver(UUID orderId, UpdateDriverRequest request) {
@@ -532,30 +536,27 @@ public class ShipmentService {
                 User finalizer = userRepository.findById(finalizerId)
                                 .orElseThrow(() -> new NotFoundException("User not found"));
 
-                // Check if all products in the order are fully shipped
                 Order order = shipment.getOrder();
-                boolean allProductsShipped = order.getProducts().stream()
-                                .allMatch(op -> {
-                                        BigDecimal shipped = op.getShippedQuantity() != null ? op.getShippedQuantity()
-                                                        : BigDecimal.ZERO;
-                                        BigDecimal accepted = op.getAcceptedQuantity() != null
-                                                        ? op.getAcceptedQuantity()
-                                                        : BigDecimal.ZERO;
-                                        return shipped.compareTo(accepted) >= 0;
-                                });
 
-                if (allProductsShipped) {
-                        order.setStatus(OrderStatus.DELIVERED);
-                } else {
-                        order.setStatus(OrderStatus.PARTIALLY_SHIPPED);
-                }
-                orderRepository.save(order);
+                // If order is linked to a sale, check if all products shipped for sale
+                // completion
+                if (shipment.getSale() != null) {
+                        boolean allProductsShipped = order.getProducts().stream()
+                                        .allMatch(op -> {
+                                                BigDecimal shipped = op.getShippedQuantity() != null
+                                                                ? op.getShippedQuantity()
+                                                                : BigDecimal.ZERO;
+                                                BigDecimal quantity = op.getQuantity() != null
+                                                                ? op.getQuantity()
+                                                                : BigDecimal.ZERO;
+                                                return shipped.compareTo(quantity) >= 0;
+                                        });
 
-                // If order is linked to a sale AND all products shipped, mark sale as completed
-                if (shipment.getSale() != null && allProductsShipped) {
-                        Sale sale = shipment.getSale();
-                        sale.setStatus(com.stokmate.domain.SaleStatus.TAMAMLANDI);
-                        saleRepository.save(sale);
+                        if (allProductsShipped) {
+                                Sale sale = shipment.getSale();
+                                sale.setStatus(com.stokmate.domain.SaleStatus.TAMAMLANDI);
+                                saleRepository.save(sale);
+                        }
                 }
 
                 // Set approver and approval date
@@ -563,6 +564,9 @@ public class ShipmentService {
                 shipment.setApprovalDate(LocalDateTime.now());
                 shipment.setStatus(ShipmentStatus.APPROVED);
                 shipmentRepository.save(shipment);
+
+                // Check and auto-complete order if all products shipped
+                orderService.checkAndCompleteOrder(order.getId());
 
                 // Log activity
                 String statusText = shipment.getDeliveryStatus() != null
@@ -578,6 +582,8 @@ public class ShipmentService {
 
         /**
          * Create a partial shipment for specific products (only accepted quantities)
+         * If there's already a pending shipment (PENDING_COMPLETION), add items to it
+         * Otherwise create a new shipment
          */
         @Transactional
         public void createPartialShipment(PartialShipmentRequest request, UUID userId) {
@@ -588,17 +594,22 @@ public class ShipmentService {
                         throw new BadRequestException("Partial shipment is only allowed for customer-specific orders");
                 }
 
-                // Validation: Only accepted quantities can be shipped
-                List<Shipment> activeShipments = shipmentRepository.findByOrder(order).stream()
-                                .filter(s -> s.getStatus() != ShipmentStatus.APPROVED
-                                                && s.getStatus() != ShipmentStatus.COMPLETED)
+                // Find pending shipments (not yet completed or approved)
+                List<Shipment> pendingShipments = shipmentRepository.findByOrder(order).stream()
+                                .filter(s -> s.getStatus() == ShipmentStatus.PENDING_COMPLETION)
                                 .collect(Collectors.toList());
 
+                // Get all active shipments (including COMPLETED waiting for approval)
+                List<Shipment> activeShipments = shipmentRepository.findByOrder(order).stream()
+                                .filter(s -> s.getStatus() != ShipmentStatus.APPROVED)
+                                .collect(Collectors.toList());
+
+                // Validation: Only accepted quantities can be shipped
                 for (ProductShipmentRequest psr : request.getProductShipments()) {
                         OrderProduct op = orderProductRepository.findById(psr.getOrderProductId())
                                         .orElseThrow(() -> new NotFoundException("Order product not found"));
 
-                        // Calculate quantity already in pending shipments
+                        // Calculate quantity already in pending/active shipments
                         BigDecimal pendingInShipments = activeShipments.stream()
                                         .flatMap(s -> s.getItems().stream())
                                         .filter(item -> item.getOrderProduct().getId().equals(op.getId()))
@@ -608,7 +619,9 @@ public class ShipmentService {
                         BigDecimal shipped = op.getShippedQuantity() != null ? op.getShippedQuantity()
                                         : BigDecimal.ZERO;
                         BigDecimal totalUsed = shipped.add(pendingInShipments);
-                        BigDecimal available = op.getAcceptedQuantity().subtract(totalUsed);
+                        BigDecimal accepted = op.getAcceptedQuantity() != null ? op.getAcceptedQuantity()
+                                        : BigDecimal.ZERO;
+                        BigDecimal available = accepted.subtract(totalUsed);
 
                         if (psr.getQuantityToShip().compareTo(available) > 0) {
                                 throw new BadRequestException(
@@ -618,34 +631,76 @@ public class ShipmentService {
                         }
                 }
 
-                // Create shipment
-                Shipment shipment = new Shipment();
-                shipment.setOrder(order);
-                shipment.setStatus(ShipmentStatus.PENDING_COMPLETION);
-                shipment.setDeliveryNotes(request.getNotes());
-                shipment.setDeliveryNotes(request.getNotes());
-                // plannedShipmentDate should be set during planning phase, not creation
+                // Find unplanned pending shipments (PENDING_COMPLETION without
+                // plannedShipmentDate)
+                // Planned shipments should not be modified - create new shipment instead
+                Shipment unplannedPendingShipment = pendingShipments.stream()
+                                .filter(s -> s.getPlannedShipmentDate() == null)
+                                .findFirst()
+                                .orElse(null);
 
+                // Use existing unplanned pending shipment or create new one
+                Shipment shipment;
+                boolean isNewShipment;
+
+                if (unplannedPendingShipment != null) {
+                        // Add to existing unplanned pending shipment
+                        shipment = unplannedPendingShipment;
+                        isNewShipment = false;
+                        log.info("Adding items to existing unplanned pending shipment {}", shipment.getId());
+                } else {
+                        // Create new shipment (either no pending or all pending are already planned)
+                        shipment = new Shipment();
+                        shipment.setOrder(order);
+                        shipment.setStatus(ShipmentStatus.PENDING_COMPLETION);
+                        isNewShipment = true;
+                        log.info("Creating new shipment for order {}", order.getOrderNo());
+                }
+
+                // Update notes if provided
+                if (request.getNotes() != null && !request.getNotes().isEmpty()) {
+                        String existingNotes = shipment.getDeliveryNotes();
+                        if (existingNotes != null && !existingNotes.isEmpty()) {
+                                shipment.setDeliveryNotes(existingNotes + "\n" + request.getNotes());
+                        } else {
+                                shipment.setDeliveryNotes(request.getNotes());
+                        }
+                }
+
+                // Add items to shipment
                 for (ProductShipmentRequest psr : request.getProductShipments()) {
                         OrderProduct op = orderProductRepository.findById(psr.getOrderProductId()).orElseThrow();
 
-                        ShipmentItem item = new ShipmentItem();
-                        item.setShipment(shipment);
-                        item.setOrderProduct(op);
-                        item.setShippedQuantity(psr.getQuantityToShip().intValue());
-                        shipment.getItems().add(item);
+                        // Check if this product already exists in the shipment
+                        ShipmentItem existingItem = shipment.getItems().stream()
+                                        .filter(item -> item.getOrderProduct().getId().equals(op.getId()))
+                                        .findFirst()
+                                        .orElse(null);
 
-                        // OrderProduct shippedQuantity is updated only upon shipment
-                        // completion/approval
-                        // We do NOT update it here to avoid double counting during validation
+                        if (existingItem != null) {
+                                // Update existing item quantity
+                                existingItem.setShippedQuantity(
+                                                existingItem.getShippedQuantity() + psr.getQuantityToShip().intValue());
+                                log.info("Updated shipment item for {} - new qty: {}",
+                                                op.getProductName(), existingItem.getShippedQuantity());
+                        } else {
+                                // Create new item
+                                ShipmentItem item = new ShipmentItem();
+                                item.setShipment(shipment);
+                                item.setOrderProduct(op);
+                                item.setShippedQuantity(psr.getQuantityToShip().intValue());
+                                shipment.getItems().add(item);
+                                log.info("Added new shipment item for {} - qty: {}",
+                                                op.getProductName(), psr.getQuantityToShip());
+                        }
                 }
 
-                // Request shipment approval
+                // Update order status
                 order.setStatus(OrderStatus.PENDING_SHIPMENT_APPROVAL);
                 shipmentRepository.save(shipment);
                 orderRepository.save(order);
 
-                // Log shipment creation activity
+                // Log activity
                 String productsInfo = request.getProductShipments().stream()
                                 .map(psr -> {
                                         OrderProduct op = orderProductRepository.findById(psr.getOrderProductId())
@@ -659,8 +714,11 @@ public class ShipmentService {
                                 .reduce((a, b) -> a + ", " + b)
                                 .orElse("ürünler");
 
-                orderActivityService.logActivity(order, ActivityType.SHIPMENT_CREATED,
-                                "Kısmi sevk talebi oluşturuldu: " + productsInfo);
+                String activityMessage = isNewShipment
+                                ? "Sevk talebi oluşturuldu: " + productsInfo
+                                : "Mevcut sevk talebine eklendi: " + productsInfo;
+
+                orderActivityService.logActivity(order, ActivityType.SHIPMENT_CREATED, activityMessage);
         }
 
         /**

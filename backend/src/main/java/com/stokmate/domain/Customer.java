@@ -7,6 +7,8 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+
+import java.time.Instant;
 import java.util.UUID;
 import lombok.Getter;
 import lombok.Setter;
@@ -34,6 +36,12 @@ public class Customer extends AuditableEntity {
     private String district;
     private String neighborhood;
     private String fullAddress;
+
+    // Soft delete fields added as per instruction
+    @Column(nullable = false)
+    private boolean deleted = false;
+
+    private Instant deletionDate;
 
     @Column(name = "is_deleted", nullable = false)
     private Boolean isDeleted = false;

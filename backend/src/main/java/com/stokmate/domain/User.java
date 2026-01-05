@@ -51,6 +51,15 @@ public class User extends AuditableEntity {
     @Column(nullable = false, columnDefinition = "boolean default false")
     private boolean tempCodeUsed = false;
 
+    // Two-Factor Authentication fields
+    private String totpSecret; // TOTP secret for Google Authenticator
+
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean totpEnabled = false; // Whether 2FA is enabled for this user
+
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean totpSetupCompleted = false; // Whether user has completed QR code setup
+
     // Soft delete fields
     @Column(unique = true)
     private String deletedAlias;

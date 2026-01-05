@@ -23,7 +23,7 @@ public class ProductAcceptanceController {
     private final ProductAcceptanceService productAcceptanceService;
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'DEPO_SORUMLU', 'DEPO_CALISAN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'MUDUR', 'OPERATIONS_MANAGER')")
     public ResponseEntity<ProductAcceptanceResponse> acceptProduct(
             @Valid @ModelAttribute ProductAcceptanceRequest request,
             @RequestParam(value = "images") MultipartFile[] images,
@@ -36,7 +36,7 @@ public class ProductAcceptanceController {
     }
 
     @GetMapping("/pending")
-    @PreAuthorize("hasAnyRole('ADMIN', 'DEPO_SORUMLU', 'DEPO_CALISAN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'MUDUR', 'OPERATIONS_MANAGER')")
     public ResponseEntity<List<PendingProductResponse>> getPendingProducts() {
         return ResponseEntity.ok(productAcceptanceService.getPendingProducts());
     }

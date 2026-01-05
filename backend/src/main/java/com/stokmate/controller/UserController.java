@@ -35,29 +35,27 @@ public class UserController {
 
     private final UserService userService;
 
-    @PreAuthorize("hasAnyRole('ADMIN','MUDUR','DEPO_SORUMLU','DEPO_CALISAN','MAGAZA_SORUMLU','MAGAZA_CALISAN')")
+    // Profile endpoints - all authenticated users
     @GetMapping("/me")
     public UserProfileResponse me(@AuthenticationPrincipal UserPrincipal principal) {
         return userService.getProfile(principal.getUser());
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN','MUDUR','DEPO_SORUMLU','DEPO_CALISAN','MAGAZA_SORUMLU','MAGAZA_CALISAN')")
     @PutMapping("/me")
     public UserProfileResponse updateMe(@AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody UserProfileUpdateRequest request) {
         return userService.updateProfile(principal.getUser(), request);
     }
 
-    // Admin user management endpoints
-
+    // Admin user management endpoints - MANAGER and ADMIN only
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'MUDUR')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ResponseEntity<List<UserResponse>> getAllUsers() {
         return ResponseEntity.ok(userService.getAllUsers());
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ResponseEntity<UserResponse> createUser(@Valid @RequestBody CreateUserRequest request) {
         UserResponse user = userService.createUser(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(user);
@@ -71,8 +69,9 @@ public class UserController {
         return ResponseEntity.ok(updated);
     }
 
+    // Delete: MANAGER and ADMIN only (DIRECTOR cannot delete users)
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ResponseEntity<Void> deleteUser(@PathVariable UUID id) {
         userService.deleteUser(id);
         return ResponseEntity.noContent().build();
@@ -81,7 +80,7 @@ public class UserController {
     // New user management endpoints
 
     @PutMapping("/{id}/role")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MUDUR')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ResponseEntity<UserResponse> updateUserRole(
             @PathVariable("id") UUID id,
             @Valid @RequestBody com.stokmate.dto.user.UpdateUserRoleRequest request) {
@@ -90,7 +89,7 @@ public class UserController {
     }
 
     @PutMapping("/{id}/toggle-active")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MUDUR')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ResponseEntity<UserResponse> toggleUserActive(
             @PathVariable("id") UUID id,
             @Valid @RequestBody com.stokmate.dto.user.ToggleUserActiveRequest request) {
@@ -99,7 +98,7 @@ public class UserController {
     }
 
     @DeleteMapping("/{id}/soft")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MUDUR')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ResponseEntity<Void> softDeleteUser(
             @PathVariable("id") UUID id,
             @Valid @RequestBody com.stokmate.dto.user.DeleteUserWithAliasRequest request) {
@@ -108,7 +107,7 @@ public class UserController {
     }
 
     @GetMapping("/sales-consultants")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MUDUR', 'MAGAZA_SORUMLU', 'MAGAZA_CALISAN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE')")
     public ResponseEntity<List<com.stokmate.dto.user.SalesConsultantResponse>> getSalesConsultants(
             @RequestParam(name = "location", required = false) String location,
             @RequestParam(name = "department", required = false) String department,

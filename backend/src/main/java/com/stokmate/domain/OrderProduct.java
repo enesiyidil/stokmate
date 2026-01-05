@@ -3,6 +3,8 @@ package com.stokmate.domain;
 import com.stokmate.domain.base.AuditableEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.EnumType;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -100,6 +102,9 @@ public class OrderProduct extends AuditableEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "order_id", nullable = false)
     private Order order;
+
+    @Enumerated(EnumType.STRING)
+    private Brand brand;
 
     /**
      * Calculate remaining quantity to be accepted

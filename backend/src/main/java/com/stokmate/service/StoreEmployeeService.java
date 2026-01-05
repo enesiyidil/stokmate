@@ -40,9 +40,9 @@ public class StoreEmployeeService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("User not found"));
 
-        // Validate user role (only MAGAZA_SORUMLU and MAGAZA_CALISAN can be assigned)
-        if (!user.getRole().name().equals("MAGAZA_SORUMLU") &&
-                !user.getRole().name().equals("MAGAZA_CALISAN")) {
+        // Validate user role (only STORE_MANAGER and STORE_EMPLOYEE can be assigned)
+        if (!user.getRole().name().equals("STORE_MANAGER") &&
+                !user.getRole().name().equals("STORE_EMPLOYEE")) {
             throw new BadRequestException("Only store employees can be assigned to stores");
         }
 

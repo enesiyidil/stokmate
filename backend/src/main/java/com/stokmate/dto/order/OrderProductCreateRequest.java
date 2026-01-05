@@ -78,6 +78,9 @@ public class OrderProductCreateRequest {
     @JsonProperty("paymentConditionDefinition")
     private String paymentConditionDefinition;
 
+    @JsonProperty("brand")
+    private com.stokmate.domain.Brand brand;
+
     @NotNull(message = "Quantity is required")
     @DecimalMin(value = "0.01", message = "Quantity must be greater than 0")
     @JsonProperty("quantity")
