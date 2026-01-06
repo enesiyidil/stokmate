@@ -1,11 +1,17 @@
 FROM maven:3.9.9-eclipse-temurin-17 AS build
 WORKDIR /app
 
+# Copy settings.xml if you have custom mirrors (optional)
 COPY pom.xml .
-RUN mvn -q -DskipTests dependency:go-offline
+
+# Download dependencies with retry (Maven Central sometimes returns 403)
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn -B -ntp -DskipTests dependency:resolve dependency:resolve-plugins || \
+    (sleep 5 && mvn -B -ntp -DskipTests dependency:resolve dependency:resolve-plugins)
 
 COPY src ./src
-RUN mvn -q -DskipTests package
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn -B -ntp -DskipTests package
 
 # Boot jar'ı seçmek için: plain varsa ele
 RUN ls -lah target && \
