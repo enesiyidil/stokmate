@@ -14,11 +14,12 @@ interface EditUserRoleModalProps {
 
 const ROLES = [
     { value: 'ADMIN', label: 'Admin' },
-    { value: 'MUDUR', label: 'Müdür' },
-    { value: 'DEPO_SORUMLU', label: 'Depo Sorumlusu' },
-    { value: 'DEPO_CALISAN', label: 'Depo Çalışanı' },
-    { value: 'MAGAZA_SORUMLU', label: 'Mağaza Sorumlusu' },
-    { value: 'MAGAZA_CALISAN', label: 'Mağaza Çalışanı' },
+    { value: 'MANAGER', label: 'Craft' },
+    { value: 'DIRECTOR', label: 'Direktör' },
+    { value: 'STORE_MANAGER', label: 'Mağaza Sorumlusu' },
+    { value: 'STORE_EMPLOYEE', label: 'Mağaza Çalışanı' },
+    { value: 'OPERATIONS_MANAGER', label: 'Operasyon Sorumlusu' },
+    { value: 'LOGISTICS_MANAGER', label: 'Lojistik Sorumlusu' },
 ]
 
 export default function EditUserRoleModal({ onClose, user }: EditUserRoleModalProps) {

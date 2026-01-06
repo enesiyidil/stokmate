@@ -77,7 +77,7 @@ export const orderReceiptApi = api.injectEndpoints({
                     body: formData,
                 }
             },
-            invalidatesTags: ['OrderReceipts', 'Orders', 'Products'], // Also invalidate products to update stock
+            invalidatesTags: ['OrderReceipts', 'Orders', 'Product'], // Also invalidate products to update stock
         }),
 
         // List all receipts with optional filters
@@ -105,7 +105,7 @@ export const orderReceiptApi = api.injectEndpoints({
                 method: 'POST',
                 body: request || {},
             }),
-            invalidatesTags: ['OrderReceipts', 'Orders'],
+            invalidatesTags: ['OrderReceipts', 'Orders', 'Product'],
         }),
 
         // Reject receipt

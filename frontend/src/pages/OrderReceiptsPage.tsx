@@ -15,7 +15,7 @@ export default function OrderReceiptsPage() {
     const { data: productToEnrich } = useGetProductQuery(enrichProductId!, { skip: !enrichProductId })
 
     const currentUser = useAppSelector((state) => state.auth.user)
-    const canApprove = currentUser?.role === 'ADMIN' || currentUser?.role === 'MUDUR' || currentUser?.role === 'DEPO_SORUMLU'
+    const canApprove = currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER' || currentUser?.role === 'OPERATIONS_MANAGER'
     const { setTopbarContent } = useTopbar()
 
     const { data: receipts = [], isLoading, refetch } = useListOrderReceiptsQuery({

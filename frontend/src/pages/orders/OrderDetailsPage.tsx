@@ -1,4 +1,4 @@
-import { ArrowLeft, Package, User, FileText, CheckCircle, XCircle, Clock, Upload, Download, Activity, Edit, Eye, Pencil } from 'lucide-react'
+import { ArrowLeft, Package, User, FileText, CheckCircle, XCircle, Clock, Upload, Download, Activity, Edit, Eye, Pencil, Truck } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useCancelOrderMutation, useUploadInvoiceMutation, useGetInvoiceUrlQuery, useGetOrderQuery, useUpdateSalesConsultantMutation, useApproveShipmentMutation, useUpdateBrandMutation } from '../../services/orderApi'
 import { useCreatePartialShipmentMutation } from '../../services/shipmentApi'
@@ -49,8 +49,12 @@ export default function OrderDetailsPage() {
     const canEdit = useMemo(() => {
         if (!order || !user) return false
         if (order.orderType !== 'CUSTOMER_SPECIFIC') return false
-        if (user.role === 'MUDUR') return true
-        if (user.role === 'MAGAZA_CALISAN' && order.salesConsultant?.id === user.id) return true
+        // Admin, Manager can always edit
+        if (user.role === 'ADMIN' || user.role === 'MANAGER') return true
+        // Store manager can edit
+        if (user.role === 'STORE_MANAGER') return true
+        // Store employee (satış danışmanı) can edit only their own orders
+        if (user.role === 'STORE_EMPLOYEE' && order.salesConsultant?.id === user.id) return true
         return false
     }, [order, user])
 
@@ -73,7 +77,7 @@ export default function OrderDetailsPage() {
 
     // Check if user is admin or manager
     const isAdminOrManager = useMemo(() => {
-        return user?.role === 'MUDUR'
+        return user?.role === 'ADMIN' || user?.role === 'MANAGER'
     }, [user])
 
     // Helper to get pending quantity
@@ -214,25 +218,7 @@ export default function OrderDetailsPage() {
                                 <span className="hidden lg:inline">Ürünleri Kabul Et</span>
                             </button>
                         )}
-                        {order.status === 'PENDING_SHIPMENT_APPROVAL' && isAdminOrManager && (
-                            <button
-                                onClick={async () => {
-                                    if (!confirm('Bu sevkiyatı onaylamak istediğinize emin misiniz?')) return
-                                    try {
-                                        await approveShipment(order.id).unwrap()
-                                        alert('Sevkiyat onaylandı!')
-                                        refetch()
-                                    } catch (error: any) {
-                                        alert('Hata: ' + (error?.data?.message || 'Bir hata oluştu'))
-                                    }
-                                }}
-                                disabled={isApproving}
-                                className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:from-green-600 hover:to-emerald-700 transition-all disabled:opacity-50"
-                            >
-                                <CheckCircle className="w-4 h-4" />
-                                <span className="hidden lg:inline">{isApproving ? 'Onaylanıyor...' : 'Sevkiyatı Onayla'}</span>
-                            </button>
-                        )}
+
                     </div>
                 ),
                 filters: (
@@ -245,7 +231,7 @@ export default function OrderDetailsPage() {
         }
 
         return () => setTopbarContent(null)
-    }, [order, setTopbarContent, navigate, isCanceling])
+    }, [order, setTopbarContent, navigate, isCanceling, canEdit, shippableProducts, isAdminOrManager])
 
     if (isLoading || !order) {
         return <div className="flex items-center justify-center min-h-screen"><p className="text-white text-xl">Yükleniyor...</p></div>
@@ -553,10 +539,16 @@ export default function OrderDetailsPage() {
                                                     <div className="mt-3">
                                                         <div className="flex items-center justify-between text-xs text-blue-700 mb-1">
                                                             <span>Sevk İlerlemesi</span>
-                                                            <span>{Math.round((shippedQty / acceptedQty) * 100)}%</span>
+                                                            <div className="flex gap-2">
+                                                                <span>{Math.round((shippedQty / acceptedQty) * 100)}%</span>
+                                                                {pendingShipQty > 0 && <span className="text-cyan-500">({Math.round(((shippedQty + pendingShipQty) / acceptedQty) * 100)}%)</span>}
+                                                            </div>
                                                         </div>
-                                                        <div className="w-full bg-blue-200/50 rounded-full h-2 overflow-hidden border border-blue-300">
+                                                        <div className="w-full bg-blue-200/50 rounded-full h-2 flex overflow-hidden border border-blue-300">
                                                             <div className="bg-gradient-to-r from-blue-500 to-cyan-600 h-full transition-all" style={{ width: `${Math.min((shippedQty / acceptedQty) * 100, 100)}%` }} />
+                                                            {pendingShipQty > 0 && (
+                                                                <div className="bg-cyan-400/50 h-full transition-all striped-bg" style={{ width: `${Math.min((pendingShipQty / acceptedQty) * 100, 100)}%` }} />
+                                                            )}
                                                         </div>
                                                     </div>
 

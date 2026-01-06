@@ -32,7 +32,7 @@ export interface ShipmentResponse {
     deliveryNotes?: string
     signedDocumentUrl?: string
     deliveryPhotoUrls?: string[]
-    status: 'PENDING_COMPLETION' | 'COMPLETED' | 'APPROVED'
+    status: 'PENDING' | 'APPROVED' | 'PLANNED' | 'COMPLETED' | 'FINALIZED'
     approvedById?: string
     approvedByName?: string
     approvalDate?: string
@@ -107,8 +107,20 @@ export const shipmentApi = api.injectEndpoints({
             }),
             invalidatesTags: ['Orders']
         }),
-        listPendingShipments: builder.query<ShipmentApprovalResponse[], void>({
+        // First approval: PENDING -> APPROVED
+        approveInitialShipment: builder.mutation<ShipmentResponse, string>({
+            query: (shipmentId) => ({
+                url: `/shipment/${shipmentId}/approve-initial`,
+                method: 'POST'
+            }),
+            invalidatesTags: ['Orders']
+        }),
+        listPendingShipments: builder.query<ShipmentResponse[], void>({
             query: () => '/shipment/pending-approval',
+            providesTags: ['Orders']
+        }),
+        listAwaitingPlanningShipments: builder.query<ShipmentResponse[], void>({
+            query: () => '/shipment/awaiting-planning',
             providesTags: ['Orders']
         }),
         listReadyShipments: builder.query<ShipmentResponse[], void>({
@@ -231,7 +243,9 @@ export const shipmentApi = api.injectEndpoints({
 
 export const {
     useApproveShipmentMutation,
+    useApproveInitialShipmentMutation,
     useListPendingShipmentsQuery,
+    useListAwaitingPlanningShipmentsQuery,
     useListReadyShipmentsQuery,
     useCreatePartialShipmentMutation,
     useCompleteShipmentMutation,

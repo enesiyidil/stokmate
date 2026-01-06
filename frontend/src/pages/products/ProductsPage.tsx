@@ -3,9 +3,11 @@ import { Package, Plus, Search, Edit2, Trash2, AlertCircle, X, Eye } from 'lucid
 import { useNavigate } from 'react-router-dom'
 import { useGetProductsQuery, useDeleteProductMutation, useUploadProductImageMutation } from '../../services/productApi'
 import type { ProductResponse } from '../../services/productApi'
+import type { Brand } from '../../constants/brandConstants'
 import AddProductModal from '../../components/products/AddProductModal'
 import ImageCropperModal from '../../components/products/ImageCropperModal'
 import { useTopbar } from '../../context/TopbarContext'
+import BrandBadge from '../../components/common/BrandBadge'
 
 export default function ProductsPage() {
     const navigate = useNavigate()
@@ -191,7 +193,7 @@ export default function ProductsPage() {
                                             </div>
                                         </td>
                                         <td className="p-4">
-                                            <span className="text-amber-700">{product.brand || '-'}</span>
+                                            <BrandBadge brand={product.brand as Brand} />
                                         </td>
                                         <td className="p-4">
                                             <span className={`font-medium ${product.stockQuantity > 0 ? 'text-green-300' : 'text-red-300'}`}>
@@ -201,11 +203,11 @@ export default function ProductsPage() {
 
                                         <td className="p-4">
                                             {product.activeForSale ? (
-                                                <span className="px-3 py-1 bg-green-500/20 text-green-300 rounded-full text-sm border border-green-400/30">
+                                                <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm border border-green-200 font-medium">
                                                     Aktif
                                                 </span>
                                             ) : (
-                                                <span className="px-3 py-1 bg-red-500/20 text-red-300 rounded-full text-sm border border-red-400/30">
+                                                <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm border border-red-200 font-medium">
                                                     Pasif
                                                 </span>
                                             )}

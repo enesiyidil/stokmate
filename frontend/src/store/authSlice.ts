@@ -1,6 +1,7 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
 
-type UserRole = 'ADMIN' | 'MUDUR' | 'DEPO_SORUMLU' | 'DEPO_CALISAN' | 'MAGAZA_SORUMLU' | 'MAGAZA_CALISAN'
+// Role values must match backend Role.java enum exactly
+type UserRole = 'ADMIN' | 'MANAGER' | 'DIRECTOR' | 'STORE_MANAGER' | 'STORE_EMPLOYEE' | 'OPERATIONS_MANAGER' | 'LOGISTICS_MANAGER'
 
 interface User {
     id: string

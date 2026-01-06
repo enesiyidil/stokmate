@@ -23,10 +23,10 @@ export default function AddEmployeeModal({ storeId, onClose, onSuccess }: AddEmp
     // Get IDs of users already assigned to this store
     const assignedUserIds = new Set(currentEmployees.map(emp => emp.user.id))
 
-    // Filter users to only show MAGAZA_SORUMLU and MAGAZA_CALISAN who are NOT already assigned
+    // Filter users to only show STORE_MANAGER and STORE_EMPLOYEE who are NOT already assigned
     const availableEmployees = users.filter(
         (u: UserResponse) =>
-            (u.role === 'MAGAZA_SORUMLU' || u.role === 'MAGAZA_CALISAN') &&
+            (u.role === 'STORE_MANAGER' || u.role === 'STORE_EMPLOYEE') &&
             !assignedUserIds.has(u.id)
     )
 

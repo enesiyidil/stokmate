@@ -22,9 +22,9 @@ export default function OrdersPage() {
     const { data: allOrders = [], isLoading } = useListOrdersQuery({})
     const { data: users = [] } = useGetAllUsersQuery()
 
-    // Get sales consultants (users with role MAGAZA_CALISAN - store employees)
+    // Get sales consultants (users with role STORE_EMPLOYEE)
     const salesConsultants = useMemo(() => {
-        const consultants = users.filter((user: any) => user.role === 'MAGAZA_CALISAN')
+        const consultants = users.filter((user: any) => user.role === 'STORE_EMPLOYEE')
         console.log('Users:', users)
         console.log('Sales Consultants:', consultants)
         return consultants

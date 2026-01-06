@@ -28,7 +28,7 @@ const SalesPage: React.FC = () => {
 
     // Memoized values
     const consultants = useMemo(() => users?.filter(u =>
-        ['SATIS_DANISMANI', 'MAGAZA_CALISAN', 'MAGAZA_SORUMLU', 'MUDUR', 'ADMIN'].includes(u.role)
+        ['STORE_EMPLOYEE', 'STORE_MANAGER', 'MANAGER', 'ADMIN'].includes(u.role)
     ) || [], [users]);
 
     const filteredSales = useMemo(() => {

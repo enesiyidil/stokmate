@@ -354,7 +354,7 @@ export default function AddOrderReceiptModal({ isOpen, onClose, onSuccess }: Add
                                 <div className="text-sm">
                                     <p className="font-medium text-blue-800">Bilgilendirme</p>
                                     <p className="text-blue-700 mt-1">
-                                        {currentUser?.role === 'ADMIN' || currentUser?.role === 'MUDUR' || currentUser?.role === 'DEPO_SORUMLU'
+                                        {currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER' || currentUser?.role === 'OPERATIONS_MANAGER'
                                             ? 'Yetkiniz dahilinde bu işlem otomatik olarak ONAYLANACAKTIR.'
                                             : 'Bu işlem yönetici ONAYINA gönderilecektir.'}
                                     </p>

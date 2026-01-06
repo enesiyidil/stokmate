@@ -31,11 +31,12 @@ export default function ProfilePage() {
                         </h2>
                         <p className="text-amber-700 font-medium">
                             {user?.role === 'ADMIN' ? 'Admin' :
-                                user?.role === 'MUDUR' ? 'Müdür' :
-                                    user?.role === 'DEPO_SORUMLU' ? 'Depo Sorumlu' :
-                                        user?.role === 'DEPO_CALISAN' ? 'Depo Çalışan' :
-                                            user?.role === 'MAGAZA_SORUMLU' ? 'Mağaza Sorumlu' :
-                                                user?.role === 'MAGAZA_CALISAN' ? 'Mağaza Çalışan' : user?.role}
+                                user?.role === 'MANAGER' ? 'Craft' :
+                                    user?.role === 'DIRECTOR' ? 'Direktör' :
+                                        user?.role === 'STORE_MANAGER' ? 'Mağaza Sorumlusu' :
+                                            user?.role === 'STORE_EMPLOYEE' ? 'Mağaza Çalışanı' :
+                                                user?.role === 'OPERATIONS_MANAGER' ? 'Operasyon Sorumlusu' :
+                                                    user?.role === 'LOGISTICS_MANAGER' ? 'Lojistik Sorumlusu' : user?.role}
                         </p>
                     </div>
                 </div>
@@ -61,11 +62,12 @@ export default function ProfilePage() {
                             <p className="text-sm text-amber-600 font-medium">Rol</p>
                             <p className="text-amber-900 font-semibold">
                                 {user?.role === 'ADMIN' ? 'Admin' :
-                                    user?.role === 'MUDUR' ? 'Müdür' :
-                                        user?.role === 'DEPO_SORUMLU' ? 'Depo Sorumlu' :
-                                            user?.role === 'DEPO_CALISAN' ? 'Depo Çalışan' :
-                                                user?.role === 'MAGAZA_SORUMLU' ? 'Mağaza Sorumlu' :
-                                                    user?.role === 'MAGAZA_CALISAN' ? 'Mağaza Çalışan' : user?.role}
+                                    user?.role === 'MANAGER' ? 'Craft' :
+                                        user?.role === 'DIRECTOR' ? 'Direktör' :
+                                            user?.role === 'STORE_MANAGER' ? 'Mağaza Sorumlusu' :
+                                                user?.role === 'STORE_EMPLOYEE' ? 'Mağaza Çalışanı' :
+                                                    user?.role === 'OPERATIONS_MANAGER' ? 'Operasyon Sorumlusu' :
+                                                        user?.role === 'LOGISTICS_MANAGER' ? 'Lojistik Sorumlusu' : user?.role}
                             </p>
                         </div>
                     </div>

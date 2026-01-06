@@ -26,7 +26,18 @@ export default function ShipmentDetailsPage() {
 
     // Correctly determine orderId for activities fetching
     const realOrderId = isShipmentId ? shipmentDetails?.orderId : orderId
-    const { data: activities = [] } = useGetOrderActivitiesQuery(realOrderId!, { skip: !realOrderId })
+    const { data: allActivities = [] } = useGetOrderActivitiesQuery(realOrderId!, { skip: !realOrderId })
+
+    // Filter activities by shipment ID if viewing a specific shipment
+    const activities = useMemo(() => {
+        if (!isShipmentId || !orderId) return allActivities
+        const shortId = orderId.substring(0, 8)
+        // Show activities that either contain this shipment's ID or are general order activities (no shipment prefix)
+        return allActivities.filter(a =>
+            a.description?.includes(`[Sevk #${shortId}]`) ||
+            (!a.description?.includes('[Sevk #') && a.activityType.includes('SHIPMENT'))
+        )
+    }, [allActivities, isShipmentId, orderId])
 
     const { data: vehicles = [] } = useListVehiclesQuery()
     const { data: users = [] } = useGetAllUsersQuery()
@@ -61,7 +72,7 @@ export default function ShipmentDetailsPage() {
             const StatusIcon = statusBadge.icon
 
             setTopbarContent({
-                title: shipmentDetails.orderNo,
+                title: shipmentDetails.orderNo || shipmentDetails.saleNo || 'Detay',
                 description: 'Sevk Detayı',
                 icon: <Truck className="w-8 h-8" />,
                 showFiltersInTopbar: true,
@@ -71,16 +82,16 @@ export default function ShipmentDetailsPage() {
                             <StatusIcon className="w-4 h-4" />
                             {statusBadge.label}
                         </span>
-                        {shipmentDetails.plannedShipmentDate && shipmentDetails.shipmentStatus !== 'COMPLETED' && shipmentDetails.shipmentStatus !== 'APPROVED' && (
+                        {shipmentDetails.shipmentStatus === 'PLANNED' && (
                             <button
                                 onClick={() => setShowCompleteModal(true)}
-                                className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:from-green-600 hover:to-emerald-700 transition-all"
+                                className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:from-green-600 hover:to-emerald-700 transition-all text-xs font-medium"
                             >
                                 <CheckCircle className="w-4 h-4" />
                                 <span className="hidden lg:inline">Sevk Tamamla</span>
                             </button>
                         )}
-                        {!shipmentDetails.plannedShipmentDate && (
+                        {shipmentDetails.shipmentStatus === 'APPROVED' && (
                             <button
                                 onClick={() => setShowPlanningModal(true)}
                                 className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-lg hover:from-orange-600 hover:to-amber-700 transition-all"
@@ -112,17 +123,20 @@ export default function ShipmentDetailsPage() {
 
     const getStatusBadge = () => {
         const status = shipmentDetails?.shipmentStatus || ''
-        if (status === 'SHIPMENT_APPROVED' || status === 'APPROVED') {
-            return { label: 'Sevke Hazır (Onaylandı)', icon: CheckCircle, className: 'bg-green-500/30 text-white border-green-400/30' }
+        if (status === 'FINALIZED') {
+            return { label: 'Tamamlandı (Onaylandı)', icon: CheckCircle, className: 'bg-green-500/30 text-white border-green-400/30' }
         }
         if (status === 'COMPLETED') {
-            return { label: 'Tamamlandı (Onay Bekliyor)', icon: CheckCircle, className: 'bg-blue-500/30 text-white border-blue-400/30' }
+            return { label: 'Teslimat Yapıldı (Onay Bekliyor)', icon: CheckCircle, className: 'bg-blue-500/30 text-white border-blue-400/30' }
         }
-        if (status === 'PENDING_SHIPMENT_APPROVAL') {
+        if (status === 'PLANNED') {
+            return { label: 'Sevke Hazır', icon: Truck, className: 'bg-indigo-500/30 text-white border-indigo-400/30' }
+        }
+        if (status === 'APPROVED') {
+            return { label: 'Planlama Bekliyor', icon: Clock, className: 'bg-orange-500/30 text-white border-orange-400/30' }
+        }
+        if (status === 'PENDING') {
             return { label: 'Onay Bekliyor', icon: Clock, className: 'bg-yellow-500/30 text-white border-yellow-400/30' }
-        }
-        if (status === 'PENDING_COMPLETION' || (status === 'PENDING' && shipmentDetails?.plannedShipmentDate)) {
-            return { label: 'Yola Çıktı / Planlandı', icon: Truck, className: 'bg-indigo-500/30 text-white border-indigo-400/30' }
         }
         return { label: 'Beklemede', icon: Clock, className: 'bg-gray-500/30 text-white border-gray-400/30' }
     }
@@ -275,7 +289,7 @@ export default function ShipmentDetailsPage() {
                 <div className="backdrop-blur-xl bg-white border border-amber-200 rounded-2xl shadow-2xl p-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                         <div><p className="text-xs text-amber-700 mb-1">Sözleşme No</p><p className="text-amber-900 font-medium">{shipmentDetails.contractNo || '-'}</p></div>
-                        <div><p className="text-xs text-amber-700 mb-1">Sipariş Tarihi</p><p className="text-amber-900 font-medium">{formatDate(shipmentDetails.orderDate)}</p></div>
+                        <div><p className="text-xs text-amber-700 mb-1">Sipariş/Satış Tarihi</p><p className="text-amber-900 font-medium">{formatDate(shipmentDetails.orderDate)}</p></div>
                         <div><p className="text-xs text-amber-700 mb-1">Planlanan Sevk</p><p className="text-amber-900 font-medium">{shipmentDetails.plannedShipmentDate ? formatDate(shipmentDetails.plannedShipmentDate) : 'Henüz Planlanmadı'}</p></div>
                         <div><p className="text-xs text-amber-700 mb-1">Şoför</p><p className="text-amber-900 font-medium">{shipmentDetails.driver?.name || 'Atanmamış'}</p></div>
                         <div><p className="text-xs text-amber-700 mb-1">Araç</p><p className="text-amber-900 font-medium">{shipmentDetails.vehicle ? `${shipmentDetails.vehicle.licensePlate} (${shipmentDetails.vehicle.vehicleType})` : 'Atanmamış'}</p></div></div>
@@ -312,8 +326,8 @@ export default function ShipmentDetailsPage() {
                         )}
 
 
-                        {/* Completion Info - Show when COMPLETED or APPROVED */}
-                        {(shipmentDetails.shipmentStatus === 'COMPLETED' || shipmentDetails.shipmentStatus === 'APPROVED') && (
+                        {/* Completion Info - Show when COMPLETED, APPROVED, or FINALIZED */}
+                        {(shipmentDetails.shipmentStatus === 'COMPLETED' || shipmentDetails.shipmentStatus === 'APPROVED' || shipmentDetails.shipmentStatus === 'FINALIZED') && (
                             <div className="backdrop-blur-xl bg-white border border-amber-200 rounded-2xl shadow-2xl p-6 space-y-4">
                                 <div className="flex items-center justify-between">
                                     <h3 className="text-lg font-semibold text-amber-900 flex items-center gap-2">

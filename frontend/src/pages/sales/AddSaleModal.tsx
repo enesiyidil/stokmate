@@ -38,9 +38,9 @@ const AddSaleModal: React.FC<AddSaleModalProps> = ({ isOpen, onClose }) => {
         const newProduct: UIProductRequest = {
             productId: product.id,
             quantity: 1,
-            unitPriceExcludingVat: product.unitPrice || 0,
-            vatRate: 0.20,
-            internetSalesPrice: product.internetSalesPrice || 0,
+            unitPriceExcludingVat: 0, // Manual entry required
+            vatRate: 0,
+            internetSalesPrice: 0, // Manual entry required
             _displayName: product.name + ' (' + product.code + ')'
         };
 
