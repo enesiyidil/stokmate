@@ -69,6 +69,8 @@ public class ShipmentService {
         private final UserRepository userRepository;
         private final VehicleRepository vehicleRepository;
         private final StorageService storageService;
+        private final com.stokmate.repository.SaleProductAllocationRepository saleProductAllocationRepository;
+        private final com.stokmate.repository.ProductEventRepository productEventRepository;
 
         @org.springframework.context.annotation.Lazy
         @org.springframework.beans.factory.annotation.Autowired
@@ -115,10 +117,34 @@ public class ShipmentService {
                 Shipment shipment = new Shipment();
                 shipment.setOrder(order);
                 // plannedShipmentDate should be set during planning phase
-                shipment.setStatus(ShipmentStatus.PENDING_COMPLETION);
+                shipment.setStatus(ShipmentStatus.PENDING);
                 shipment.setApprovedBy(approver);
                 shipment.setApprovalDate(LocalDateTime.now());
+
+                // Create ShipmentItems for all accepted products in the order
+                for (OrderProduct orderProduct : order.getProducts()) {
+                        BigDecimal acceptedQty = orderProduct.getAcceptedQuantity() != null
+                                        ? orderProduct.getAcceptedQuantity()
+                                        : BigDecimal.ZERO;
+                        BigDecimal alreadyShipped = orderProduct.getShippedQuantity() != null
+                                        ? orderProduct.getShippedQuantity()
+                                        : BigDecimal.ZERO;
+                        BigDecimal toShip = acceptedQty.subtract(alreadyShipped);
+
+                        if (toShip.compareTo(BigDecimal.ZERO) > 0) {
+                                ShipmentItem item = new ShipmentItem();
+                                item.setShipment(shipment);
+                                item.setOrderProduct(orderProduct);
+                                item.setShippedQuantity(toShip.intValue());
+                                shipment.addItem(item);
+                        }
+                }
+
                 shipmentRepository.save(shipment);
+
+                // Log activity
+                orderActivityService.logActivity(order, ActivityType.SHIPMENT_APPROVED,
+                                "Sevk onayı verildi - Sevkiyat oluşturuldu");
 
                 return ShipmentApprovalResponse.builder()
                                 .orderId(order.getId())
@@ -282,33 +308,61 @@ public class ShipmentService {
         public ShipmentDetailsResponse getShipmentDetailsByShipmentId(UUID shipmentId) {
                 Shipment shipment = shipmentRepository.findById(shipmentId)
                                 .orElseThrow(() -> new NotFoundException("Shipment not found"));
+
                 Order order = shipment.getOrder();
+                Sale sale = shipment.getSale();
 
-                // Build customer info
                 ShipmentDetailsResponse.CustomerInfo customerInfo = null;
-                if (order.getCustomer() != null) {
-                        Customer c = order.getCustomer();
-                        customerInfo = ShipmentDetailsResponse.CustomerInfo.builder()
-                                        .name(c.getFirstName() + " " + c.getLastName())
-                                        .phone(c.getPhone())
-                                        .address(c.getFullAddress())
-                                        .build();
-                } else if (order.getProsapContractNameSurname() != null) {
-                        customerInfo = ShipmentDetailsResponse.CustomerInfo.builder()
-                                        .name(order.getProsapContractNameSurname())
-                                        .phone("")
-                                        .address("")
-                                        .build();
-                }
-
-                // Build sales consultant info
                 ShipmentDetailsResponse.UserInfo consultantInfo = null;
-                if (order.getSalesConsultant() != null) {
-                        consultantInfo = ShipmentDetailsResponse.UserInfo.builder()
-                                        .id(order.getSalesConsultant().getId().toString())
-                                        .name(order.getSalesConsultant().getFirstName() + " "
-                                                        + order.getSalesConsultant().getLastName())
-                                        .build();
+                String orderNoVal = null;
+                String saleNoVal = null;
+                String shipmentTypeVal = "UNKNOWN";
+                java.time.LocalDateTime dateVal = null;
+                String contractNoVal = null;
+
+                if (order != null) {
+                        orderNoVal = order.getOrderNo();
+                        shipmentTypeVal = "ORDER";
+                        dateVal = java.time.LocalDateTime.ofInstant(order.getCreatedAt(),
+                                        java.time.ZoneId.systemDefault());
+                        contractNoVal = order.getProsapContractNo();
+
+                        if (order.getCustomer() != null) {
+                                Customer c = order.getCustomer();
+                                customerInfo = ShipmentDetailsResponse.CustomerInfo.builder()
+                                                .name(c.getFirstName() + " " + c.getLastName())
+                                                .phone(c.getPhone())
+                                                .address(c.getFullAddress())
+                                                .build();
+                        } else if (order.getProsapContractNameSurname() != null) {
+                                customerInfo = ShipmentDetailsResponse.CustomerInfo.builder()
+                                                .name(order.getProsapContractNameSurname())
+                                                .phone("")
+                                                .address("")
+                                                .build();
+                        }
+
+                        if (order.getSalesConsultant() != null) {
+                                consultantInfo = ShipmentDetailsResponse.UserInfo.builder()
+                                                .id(order.getSalesConsultant().getId().toString())
+                                                .name(order.getSalesConsultant().getFirstName() + " "
+                                                                + order.getSalesConsultant().getLastName())
+                                                .build();
+                        }
+                } else if (sale != null) {
+                        saleNoVal = sale.getSaleNo();
+                        shipmentTypeVal = "SALE";
+                        dateVal = sale.getSaleDate().atStartOfDay();
+                        contractNoVal = sale.getContractNo();
+
+                        if (sale.getCustomer() != null) {
+                                Customer c = sale.getCustomer();
+                                customerInfo = ShipmentDetailsResponse.CustomerInfo.builder()
+                                                .name(c.getFirstName() + " " + c.getLastName())
+                                                .phone(c.getPhone())
+                                                .address(c.getFullAddress())
+                                                .build();
+                        }
                 }
 
                 // Build driver info
@@ -334,39 +388,57 @@ public class ShipmentService {
                 // Build product details
                 List<ShipmentDetailsResponse.ProductShipmentDetail> productDetails = shipment.getItems().stream()
                                 .map(si -> {
-                                        OrderProduct op = si.getOrderProduct();
-                                        int totalQty = op.getQuantity().intValue();
-                                        int shippedQty = op.getShippedQuantity() != null
-                                                        ? op.getShippedQuantity().intValue()
-                                                        : 0;
-                                        int pendingQty = si.getShippedQuantity(); // Quantity in this shipment
-                                        // remaining is total - shipped (since shipped includes this shipment's qty if
-                                        // finalized, or we adjust logic)
-                                        // If status is COMPLETED, shippedQty includes this.
-                                        // If status is PENDING, shippedQty might NOT include this depending on logic.
-                                        // But our finalizeShipment updates shippedQty.
+                                        if (si.getOrderProduct() != null) {
+                                                OrderProduct op = si.getOrderProduct();
+                                                int totalQty = op.getQuantity().intValue();
+                                                int shippedQty = op.getShippedQuantity() != null
+                                                                ? op.getShippedQuantity().intValue()
+                                                                : 0;
+                                                int pendingQty = si.getShippedQuantity();
+                                                int remainingQty = Math.max(0, totalQty - shippedQty);
 
-                                        int remainingQty = Math.max(0, totalQty - shippedQty);
+                                                return ShipmentDetailsResponse.ProductShipmentDetail.builder()
+                                                                .productCode(op.getProductCode())
+                                                                .productName(op.getProductName())
+                                                                .totalQuantity(totalQty)
+                                                                .shippedQuantity(shippedQty)
+                                                                .pendingQuantity(pendingQty)
+                                                                .remainingQuantity(remainingQty)
+                                                                .build();
+                                        } else if (si.getSaleProduct() != null) {
+                                                SaleProduct sp = si.getSaleProduct();
+                                                int totalQty = sp.getQuantity().intValue();
+                                                int shippedQty = sp.getShippedQuantity() != null
+                                                                ? sp.getShippedQuantity().intValue()
+                                                                : 0;
+                                                int pendingQty = si.getShippedQuantity();
+                                                int remainingQty = Math.max(0, totalQty - shippedQty);
 
-                                        return ShipmentDetailsResponse.ProductShipmentDetail.builder()
-                                                        .productCode(op.getProductCode())
-                                                        .productName(op.getProductName())
-                                                        .totalQuantity(totalQty)
-                                                        .shippedQuantity(shippedQty)
-                                                        .pendingQuantity(pendingQty)
-                                                        .remainingQuantity(remainingQty)
-                                                        .build();
+                                                return ShipmentDetailsResponse.ProductShipmentDetail.builder()
+                                                                .productCode(sp.getProduct().getCode())
+                                                                .productName(sp.getProduct().getName())
+                                                                .totalQuantity(totalQty)
+                                                                .shippedQuantity(shippedQty)
+                                                                .pendingQuantity(pendingQty)
+                                                                .remainingQuantity(remainingQty)
+                                                                .build();
+                                        }
+                                        return null;
                                 })
+                                .filter(java.util.Objects::nonNull)
                                 .collect(Collectors.toList());
 
                 return ShipmentDetailsResponse.builder()
-                                .orderId(order.getId().toString())
+                                .orderId(order != null ? order.getId().toString()
+                                                : (sale != null ? sale.getId().toString() : null))
+                                .saleId(sale != null ? sale.getId().toString() : null)
                                 .shipmentId(shipment.getId().toString())
-                                .orderNo(order.getOrderNo())
-                                .orderType("ORDER")
-                                .orderDate(java.time.LocalDateTime.ofInstant(order.getCreatedAt(),
-                                                java.time.ZoneId.systemDefault()))
-                                .contractNo(order.getProsapContractNo())
+                                .orderNo(orderNoVal)
+                                .saleNo(saleNoVal)
+                                .orderType(shipmentTypeVal) // Use shipmentType logic
+                                .shipmentType(shipmentTypeVal)
+                                .orderDate(dateVal)
+                                .contractNo(contractNoVal)
                                 .customer(customerInfo)
                                 .salesConsultant(consultantInfo)
                                 .driver(driverInfo)
@@ -395,36 +467,42 @@ public class ShipmentService {
          * Plan shipment with driver and vehicle (driver is current user by default)
          */
         @Transactional
-        public void planShipment(UUID orderId, PlannedShipmentRequest request, UUID currentUserId) {
-                Order order = orderRepository.findById(orderId)
-                                .orElseThrow(() -> new NotFoundException("Order not found"));
+        public void planShipment(UUID shipmentId, PlannedShipmentRequest request, UUID currentUserId) {
+                Shipment shipment = shipmentRepository.findById(shipmentId)
+                                .orElseThrow(() -> new NotFoundException("Shipment not found"));
+
+                // Validate Status
+                if (shipment.getStatus() == ShipmentStatus.PENDING) {
+                        throw new BadRequestException("Shipment must be approved before planning");
+                }
+
+                if (shipment.getStatus() == ShipmentStatus.COMPLETED
+                                || shipment.getStatus() == ShipmentStatus.FINALIZED) {
+                        throw new BadRequestException("Cannot plan a completed or finalized shipment");
+                }
 
                 Vehicle vehicle = vehicleRepository.findById(request.getVehicleId())
                                 .orElseThrow(() -> new NotFoundException("Vehicle not found"));
 
-                // Use provided driverId if available, otherwise default to current user
                 UUID driverIdToUse = request.getDriverId() != null ? request.getDriverId() : currentUserId;
                 User driver = userRepository.findById(driverIdToUse)
                                 .orElseThrow(() -> new NotFoundException("Driver not found"));
 
-                // Get or create shipment
-                List<Shipment> shipments = shipmentRepository.findByOrderId(orderId);
-                Shipment shipment = shipments.isEmpty() ? new Shipment() : shipments.get(0);
-
-                if (shipment.getId() == null) {
-                        shipment.setOrder(order);
-                        shipment.setStatus(ShipmentStatus.PENDING_COMPLETION);
-                }
-
+                // Set status to PLANNED when planning
+                shipment.setStatus(ShipmentStatus.PLANNED);
                 shipment.setPlannedShipmentDate(request.getPlannedDate());
                 shipment.setVehicle(vehicle);
                 shipment.setShippedBy(driver);
                 shipmentRepository.save(shipment);
 
                 // Log activity
-                orderActivityService.logActivity(order, ActivityType.SHIPMENT_CREATED,
-                                "Sevk planlandı - Tarih: " + request.getPlannedDate() + ", Plaka: "
-                                                + vehicle.getLicensePlate());
+                if (shipment.getOrder() != null) {
+                        orderActivityService.logActivity(shipment.getOrder(), ActivityType.SHIPMENT_CREATED,
+                                        "[Sevk #" + shipment.getId().toString().substring(0, 8)
+                                                        + "] Sevk planlandı - Tarih: "
+                                                        + request.getPlannedDate() + ", Plaka: "
+                                                        + vehicle.getLicensePlate());
+                }
         }
 
         /**
@@ -454,25 +532,68 @@ public class ShipmentService {
                                 : "Atanmamış";
                 String newDriverName = newDriver.getFirstName() + " " + newDriver.getLastName();
                 orderActivityService.logActivity(order, ActivityType.SHIPMENT_CREATED,
-                                "Şoför değiştirildi: " + oldDriverName + " -> " + newDriverName);
+                                "[Sevk #" + shipment.getId().toString().substring(0, 8) + "] Şoför değiştirildi: "
+                                                + oldDriverName + " -> " + newDriverName);
         }
 
+        /**
+         * Get shipments ready for shipment (PLANNED status)
+         */
+        @Transactional
         public List<ShipmentResponse> getReadyForShipment() {
-                return shipmentRepository.findByStatus(ShipmentStatus.PENDING_COMPLETION).stream()
+                return shipmentRepository.findByStatus(ShipmentStatus.PLANNED).stream()
                                 .map(this::toShipmentResponse)
                                 .collect(Collectors.toList());
         }
 
-        public List<ShipmentApprovalResponse> getPendingApprovals() {
-                return orderRepository.findByStatus(OrderStatus.PENDING_SHIPMENT_APPROVAL).stream()
-                                .map(order -> ShipmentApprovalResponse.builder()
-                                                .orderId(order.getId())
-                                                .orderNo(order.getOrderNo())
-                                                .status(ApprovalStatus.PENDING)
-                                                .requestDate(java.time.LocalDateTime.ofInstant(order.getUpdatedAt(),
-                                                                java.time.ZoneId.systemDefault()))
-                                                .build())
+        /**
+         * Get shipments awaiting initial approval (PENDING status)
+         */
+        @Transactional
+        public List<ShipmentResponse> getPendingApprovals() {
+                return shipmentRepository.findByStatus(ShipmentStatus.PENDING).stream()
+                                .map(this::toShipmentResponse)
                                 .collect(Collectors.toList());
+        }
+
+        /**
+         * Get shipments approved and awaiting planning (APPROVED status)
+         */
+        @Transactional
+        public List<ShipmentResponse> getAwaitingPlanningShipments() {
+                return shipmentRepository.findByStatus(ShipmentStatus.APPROVED).stream()
+                                .map(this::toShipmentResponse)
+                                .collect(Collectors.toList());
+        }
+
+        /**
+         * Approve a PENDING shipment (first approval step)
+         * Changes status from PENDING to APPROVED
+         */
+        @Transactional
+        public ShipmentResponse approveInitialShipment(UUID shipmentId, UUID approverId) {
+                Shipment shipment = shipmentRepository.findById(shipmentId)
+                                .orElseThrow(() -> new NotFoundException("Shipment not found"));
+
+                if (shipment.getStatus() != ShipmentStatus.PENDING) {
+                        throw new BadRequestException("Shipment is not pending approval");
+                }
+
+                User approver = userRepository.findById(approverId)
+                                .orElseThrow(() -> new NotFoundException("User not found"));
+
+                shipment.setStatus(ShipmentStatus.APPROVED);
+                shipmentRepository.save(shipment);
+
+                // Log activity
+                if (shipment.getOrder() != null) {
+                        orderActivityService.logActivity(shipment.getOrder(), ActivityType.SHIPMENT_APPROVED,
+                                        "[Sevk #" + shipment.getId().toString().substring(0, 8)
+                                                        + "] Sevk onaylandı - Onaylayan: "
+                                                        + approver.getFirstName() + " " + approver.getLastName());
+                }
+
+                return toShipmentResponse(shipment);
         }
 
         @Transactional
@@ -533,49 +654,93 @@ public class ShipmentService {
                         }
                 }
 
+                // Flush to ensure all shippedQuantity updates are persisted before checking
+                // order completion
+                orderProductRepository.flush();
+
                 User finalizer = userRepository.findById(finalizerId)
                                 .orElseThrow(() -> new NotFoundException("User not found"));
 
                 Order order = shipment.getOrder();
 
-                // If order is linked to a sale, check if all products shipped for sale
-                // completion
+                // Handle Sale-based shipments
                 if (shipment.getSale() != null) {
-                        boolean allProductsShipped = order.getProducts().stream()
-                                        .allMatch(op -> {
-                                                BigDecimal shipped = op.getShippedQuantity() != null
-                                                                ? op.getShippedQuantity()
+                        Sale sale = shipment.getSale();
+
+                        // Update shipped quantities for sale products and create FIFO ProductEvents
+                        for (ShipmentItem item : shipment.getItems()) {
+                                if (item.getSaleProduct() != null) {
+                                        SaleProduct sp = item.getSaleProduct();
+                                        BigDecimal currentShipped = sp.getShippedQuantity() != null
+                                                        ? sp.getShippedQuantity()
+                                                        : BigDecimal.ZERO;
+                                        sp.setShippedQuantity(
+                                                        currentShipped.add(
+                                                                        BigDecimal.valueOf(item.getShippedQuantity())));
+                                        saleProductRepository.save(sp);
+
+                                        // Create ProductEvents using FIFO allocation records
+                                        List<com.stokmate.domain.SaleProductAllocation> allocations = saleProductAllocationRepository
+                                                        .findBySaleProductId(sp.getId());
+                                        for (com.stokmate.domain.SaleProductAllocation alloc : allocations) {
+                                                com.stokmate.domain.ProductPriceHistory history = alloc
+                                                                .getProductPriceHistory();
+                                                com.stokmate.domain.Product product = history.getProduct();
+
+                                                com.stokmate.domain.ProductEvent event = new com.stokmate.domain.ProductEvent();
+                                                event.setProduct(product);
+                                                event.setEventType("STOCK_OUT");
+                                                event.setQuantityChange(alloc.getQuantity().negate());
+                                                event.setPriceAtEvent(history.getNetPrice());
+                                                event.setDescription("Satış için stok çıkışı - " + product.getName() +
+                                                                " x " + alloc.getQuantity() + " adet @ "
+                                                                + history.getNetPrice() +
+                                                                " TL - Satış No: " + sale.getSaleNo());
+                                                event.setCreatedBy(finalizer);
+                                                productEventRepository.save(event);
+                                        }
+                                }
+                        }
+                        saleProductRepository.flush();
+
+                        // Check if all sale products are shipped
+                        boolean allProductsShipped = sale.getProducts().stream()
+                                        .allMatch(sp -> {
+                                                BigDecimal shipped = sp.getShippedQuantity() != null
+                                                                ? sp.getShippedQuantity()
                                                                 : BigDecimal.ZERO;
-                                                BigDecimal quantity = op.getQuantity() != null
-                                                                ? op.getQuantity()
-                                                                : BigDecimal.ZERO;
+                                                BigDecimal quantity = BigDecimal.valueOf(sp.getQuantity());
                                                 return shipped.compareTo(quantity) >= 0;
                                         });
 
                         if (allProductsShipped) {
-                                Sale sale = shipment.getSale();
                                 sale.setStatus(com.stokmate.domain.SaleStatus.TAMAMLANDI);
-                                saleRepository.save(sale);
                         }
+                        saleRepository.save(sale);
                 }
 
                 // Set approver and approval date
                 shipment.setApprovedBy(finalizer);
                 shipment.setApprovalDate(LocalDateTime.now());
-                shipment.setStatus(ShipmentStatus.APPROVED);
+                shipment.setStatus(ShipmentStatus.FINALIZED);
                 shipmentRepository.save(shipment);
 
-                // Check and auto-complete order if all products shipped
-                orderService.checkAndCompleteOrder(order.getId());
+                // Check and auto-complete order if all products shipped (only for Order-based
+                // shipments)
+                if (order != null) {
+                        orderService.checkAndCompleteOrder(order.getId());
 
-                // Log activity
-                String statusText = shipment.getDeliveryStatus() != null
-                                ? (shipment.getDeliveryStatus().toString().equals("PROBLEM_FREE") ? "Sorunsuz"
-                                                : "Sorunlu")
-                                : "Bilinmeyen";
-                orderActivityService.logActivity(order, ActivityType.SHIPMENT_APPROVED,
-                                "Sevk onaylandı ve tamamlandı (" + statusText + " teslimat) - Onaylayan: "
-                                                + finalizer.getFirstName() + " " + finalizer.getLastName());
+                        // Log activity for Order
+                        String statusText = shipment.getDeliveryStatus() != null
+                                        ? (shipment.getDeliveryStatus().toString().equals("PROBLEM_FREE") ? "Sorunsuz"
+                                                        : "Sorunlu")
+                                        : "Bilinmeyen";
+                        orderActivityService.logActivity(order, ActivityType.SHIPMENT_APPROVED,
+                                        "[Sevk #" + shipment.getId().toString().substring(0, 8)
+                                                        + "] Sevk onaylandı ve tamamlandı (" + statusText
+                                                        + " teslimat) - Onaylayan: "
+                                                        + finalizer.getFirstName() + " " + finalizer.getLastName());
+                }
 
                 return toShipmentResponse(shipment);
         }
@@ -594,14 +759,29 @@ public class ShipmentService {
                         throw new BadRequestException("Partial shipment is only allowed for customer-specific orders");
                 }
 
-                // Find pending shipments (not yet completed or approved)
-                List<Shipment> pendingShipments = shipmentRepository.findByOrder(order).stream()
-                                .filter(s -> s.getStatus() == ShipmentStatus.PENDING_COMPLETION)
+                // Find active shipments that candidates for merging (PENDING or APPROVED)
+                // PLANNED, COMPLETED, FINALIZED are not mergeable
+                List<Shipment> mergeableShipments = shipmentRepository.findByOrder(order).stream()
+                                .filter(s -> s.getStatus() == ShipmentStatus.PENDING
+                                                || s.getStatus() == ShipmentStatus.APPROVED)
                                 .collect(Collectors.toList());
 
-                // Get all active shipments (including COMPLETED waiting for approval)
+                // Get all active shipments for calculation (non-finalized + finalized)
+                // Actually to calculate 'pendingInShipments', we should look at all shipments
+                // that haven't been cancelled (if cancellation exists)
+                // Here we look at everything except FINALIZED? No, we need everything to
+                // subtract from accepted.
+                // But generally FINALIZED/COMPLETED items are 'shipped'.
+                // The logic below (lines 689-693) sums up quantities in 'activeShipments'.
+                // If a shipment is FINALIZED, its quantity is already moved to
+                // orderProduct.shippedQuantity?
+                // Let's check finalizeShipment (lines 599-600). Yes, shippedQuantity is updated
+                // there.
+                // So FINALIZED shipments should NOT be included in pending calculation.
+                // But COMPLETED, PLANNED, APPROVED, PENDING should be included.
+
                 List<Shipment> activeShipments = shipmentRepository.findByOrder(order).stream()
-                                .filter(s -> s.getStatus() != ShipmentStatus.APPROVED)
+                                .filter(s -> s.getStatus() != ShipmentStatus.FINALIZED)
                                 .collect(Collectors.toList());
 
                 // Validation: Only accepted quantities can be shipped
@@ -631,28 +811,26 @@ public class ShipmentService {
                         }
                 }
 
-                // Find unplanned pending shipments (PENDING_COMPLETION without
-                // plannedShipmentDate)
-                // Planned shipments should not be modified - create new shipment instead
-                Shipment unplannedPendingShipment = pendingShipments.stream()
-                                .filter(s -> s.getPlannedShipmentDate() == null)
+                // Find mergeable shipment (PENDING or APPROVED)
+                Shipment mergeableShipment = mergeableShipments.stream()
                                 .findFirst()
                                 .orElse(null);
 
-                // Use existing unplanned pending shipment or create new one
+                // Use existing mergeable shipment or create new one
                 Shipment shipment;
                 boolean isNewShipment;
 
-                if (unplannedPendingShipment != null) {
-                        // Add to existing unplanned pending shipment
-                        shipment = unplannedPendingShipment;
+                if (mergeableShipment != null) {
+                        // Add to existing shipment
+                        shipment = mergeableShipment;
                         isNewShipment = false;
-                        log.info("Adding items to existing unplanned pending shipment {}", shipment.getId());
+                        log.info("Adding items to existing shipment {} with status {}", shipment.getId(),
+                                        shipment.getStatus());
                 } else {
                         // Create new shipment (either no pending or all pending are already planned)
                         shipment = new Shipment();
                         shipment.setOrder(order);
-                        shipment.setStatus(ShipmentStatus.PENDING_COMPLETION);
+                        shipment.setStatus(ShipmentStatus.PENDING);
                         isNewShipment = true;
                         log.info("Creating new shipment for order {}", order.getOrderNo());
                 }
@@ -715,8 +893,10 @@ public class ShipmentService {
                                 .orElse("ürünler");
 
                 String activityMessage = isNewShipment
-                                ? "Sevk talebi oluşturuldu: " + productsInfo
-                                : "Mevcut sevk talebine eklendi: " + productsInfo;
+                                ? "[Sevk #" + shipment.getId().toString().substring(0, 8)
+                                                + "] Sevk talebi oluşturuldu: " + productsInfo
+                                : "[Sevk #" + shipment.getId().toString().substring(0, 8)
+                                                + "] Mevcut sevk talebine eklendi: " + productsInfo;
 
                 orderActivityService.logActivity(order, ActivityType.SHIPMENT_CREATED, activityMessage);
         }
@@ -746,7 +926,7 @@ public class ShipmentService {
                 // Create shipment
                 Shipment shipment = new Shipment();
                 shipment.setSale(sale);
-                shipment.setStatus(ShipmentStatus.PENDING_COMPLETION);
+                shipment.setStatus(ShipmentStatus.PLANNED);
                 shipment.setDeliveryNotes(request.getNotes());
                 shipment.setPlannedShipmentDate(LocalDateTime.now());
 
@@ -805,7 +985,7 @@ public class ShipmentService {
         @Transactional
         public List<ShipmentResponse> getApprovedShipments() {
                 log.info("Fetching approved shipments...");
-                List<Shipment> shipments = shipmentRepository.findByStatus(ShipmentStatus.APPROVED);
+                List<Shipment> shipments = shipmentRepository.findByStatus(ShipmentStatus.FINALIZED);
                 log.info("Found {} approved shipments", shipments.size());
 
                 List<ShipmentResponse> responses = new ArrayList<>();
@@ -843,7 +1023,7 @@ public class ShipmentService {
 
                 List<Shipment> shipments = shipmentRepository.findByOrderId(orderId);
                 long pendingShipments = shipments.stream()
-                                .filter(s -> s.getStatus() != ShipmentStatus.APPROVED)
+                                .filter(s -> s.getStatus() != ShipmentStatus.FINALIZED)
                                 .count();
 
                 double percentComplete = totalProducts > 0
@@ -877,7 +1057,7 @@ public class ShipmentService {
 
                 List<Shipment> shipments = shipmentRepository.findBySaleId(saleId);
                 long pendingShipments = shipments.stream()
-                                .filter(s -> s.getStatus() != ShipmentStatus.APPROVED)
+                                .filter(s -> s.getStatus() != ShipmentStatus.FINALIZED)
                                 .count();
 
                 double percentComplete = totalProducts > 0
@@ -971,7 +1151,7 @@ public class ShipmentService {
                 LocalDate orderDate = null;
 
                 try {
-                        log.debug("toShipmentResponse: Accessing order for shipment {}", shipment.getId());
+                        log.debug("toShipmentResponse: Accessing order/sale for shipment {}", shipment.getId());
                         if (shipment.getOrder() != null) {
                                 orderId = shipment.getOrder().getId();
                                 orderNo = shipment.getOrder().getOrderNo();
@@ -981,9 +1161,20 @@ public class ShipmentService {
                                 }
                                 orderDate = shipment.getOrder().getOrderDate();
                                 log.debug("toShipmentResponse: Order loaded - ID: {}, No: {}", orderId, orderNo);
+                        } else if (shipment.getSale() != null) {
+                                // Map Sale details
+                                orderId = shipment.getSale().getId(); // Reuse orderId field for compatibility or use
+                                                                      // saleId
+                                // ideally we populate saleId but let's populate generic fields too if needed
+                                orderNo = shipment.getSale().getSaleNo(); // Reuse orderNo for display
+                                if (shipment.getSale().getCustomer() != null) {
+                                        customerName = shipment.getSale().getCustomer().getFirstName() + " " +
+                                                        shipment.getSale().getCustomer().getLastName();
+                                }
+                                orderDate = shipment.getSale().getSaleDate();
                         }
                 } catch (Exception e) {
-                        log.warn("Could not load order for shipment {}: {}", shipment.getId(), e.getMessage());
+                        log.warn("Could not load order/sale for shipment {}: {}", shipment.getId(), e.getMessage());
                 }
 
                 UUID shippedById = null;
@@ -1048,6 +1239,10 @@ public class ShipmentService {
                                 .approvedById(approvedById)
                                 .approvedByName(approvedByName)
                                 .approvalDate(shipment.getApprovalDate())
+                                .saleId(shipment.getSale() != null ? shipment.getSale().getId() : null)
+                                .saleNo(shipment.getSale() != null ? shipment.getSale().getSaleNo() : null)
+                                .shipmentType(shipment.getOrder() != null ? "ORDER"
+                                                : (shipment.getSale() != null ? "SALE" : "UNKNOWN"))
                                 .build();
         }
 }

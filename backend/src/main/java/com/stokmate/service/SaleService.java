@@ -33,9 +33,12 @@ public class SaleService {
     private final ProductRepository productRepository;
     private final CustomerRepository customerRepository;
     private final UserRepository userRepository;
+    private final com.stokmate.repository.ShipmentRepository shipmentRepository; // Direct repo access to avoid circular
+                                                                                 // dependency
     private final SaleMapper saleMapper;
     private final SaleEventMapper saleEventMapper;
     private final StorageService storageService;
+    private final ProductAllocationService productAllocationService;
 
     @Transactional
     public SaleResponse create(SaleRequest request, User user) {
@@ -86,8 +89,40 @@ public class SaleService {
 
         Sale savedSale = saleRepository.save(sale);
 
+        // Allocate stock for each product (FIFO)
+        if (savedSale.getProducts() != null) {
+            for (SaleProduct sp : savedSale.getProducts()) {
+                try {
+                    productAllocationService.allocateStock(sp, user);
+                } catch (Exception e) {
+                    log.error("Failed to allocate stock for sale product " + sp.getId(), e);
+                    // Depending on requirements, we might want to fail the whole transaction
+                    // throw new RuntimeException("Stock allocation failed", e);
+                }
+            }
+        }
+
+        // Create automatic shipment request (PENDING)
+        com.stokmate.domain.Shipment shipment = new com.stokmate.domain.Shipment();
+        shipment.setSale(savedSale);
+        shipment.setStatus(com.stokmate.domain.ShipmentStatus.PENDING); // Awaiting approval
+        shipment.setPlannedShipmentDate(savedSale.getSaleDate().atStartOfDay());
+
+        // Add items to shipment
+        if (savedSale.getProducts() != null) {
+            for (SaleProduct sp : savedSale.getProducts()) {
+                com.stokmate.domain.ShipmentItem item = new com.stokmate.domain.ShipmentItem();
+                item.setShipment(shipment);
+                item.setSaleProduct(sp);
+                item.setShippedQuantity(sp.getQuantity()); // Initially shipping all
+                item.setItemType(com.stokmate.domain.ShipmentItemType.SALE_PRODUCT);
+                shipment.addItem(item);
+            }
+        }
+        shipmentRepository.save(shipment);
+
         // Log event
-        logEvent(savedSale, "CREATED", "Satış oluşturuldu", user);
+        logEvent(savedSale, "CREATED", "Satış oluşturuldu ve sevk talebi açıldı", user);
 
         return saleMapper.toResponse(savedSale);
     }

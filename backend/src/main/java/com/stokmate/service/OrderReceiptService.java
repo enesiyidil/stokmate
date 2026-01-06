@@ -302,15 +302,8 @@ public class OrderReceiptService {
                                 .map(photo -> {
                                         OrderReceiptPhotoResponse photoResponse = orderReceiptPhotoMapper
                                                         .toResponse(photo);
-                                        try {
-                                                photoResponse.setDownloadUrl(
-                                                                storageService.getPresignedUrl(photo.getFileKey()));
-                                        } catch (Exception e) {
-                                                // If MinIO access fails, just set null URL
-                                                log.warn("Failed to generate presigned URL for photo {}: {}",
-                                                                photo.getFileKey(), e.getMessage());
-                                                photoResponse.setDownloadUrl(null);
-                                        }
+                                        // Return raw path for backend proxy (frontend uses /api/files/view)
+                                        photoResponse.setDownloadUrl(photo.getFileKey());
                                         return photoResponse;
                                 })
                                 .collect(Collectors.toList());
@@ -360,6 +353,12 @@ public class OrderReceiptService {
                         product.setArrivalPrice(arrival.getArrivalPrice());
                         product.setVatRate(arrival.getVatRate());
                         product.setStockQuantity(product.getStockQuantity().add(receipt.getReceivedQuantity()));
+
+                        // Update brand if missing
+                        if (product.getBrand() == null && orderProduct.getBrand() != null) {
+                                product.setBrand(orderProduct.getBrand());
+                        }
+
                         productRepository.save(product);
 
                         log.info("Updated existing product {} stock by {} via receipt. New stock: {}",
@@ -416,7 +415,8 @@ public class OrderReceiptService {
                                 priceHistory.setPaymentCondition(orderProduct.getPaymentCondition());
                                 priceHistory.setPaymentConditionDefinition(
                                                 orderProduct.getPaymentConditionDefinition());
-                                priceHistory.setQuantity(receipt.getReceivedQuantity().intValue());
+                                priceHistory.setQuantity(receipt.getReceivedQuantity());
+                                priceHistory.setRemainingQuantity(receipt.getReceivedQuantity());
                                 priceHistory.setRelatedOrder(order);
                                 priceHistory.setCreatedBy(receipt.getReceivedBy());
                                 priceHistory.setCreatedAt(java.time.LocalDateTime.now());
@@ -428,6 +428,7 @@ public class OrderReceiptService {
                         Product newProduct = new Product();
                         newProduct.setCode(orderProduct.getProductCode());
                         newProduct.setName(orderProduct.getProductName());
+                        newProduct.setBrand(orderProduct.getBrand());
                         newProduct.setStockQuantity(receipt.getReceivedQuantity());
 
                         // Fix null arrival price issue

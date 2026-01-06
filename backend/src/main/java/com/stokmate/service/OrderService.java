@@ -65,6 +65,8 @@ public class OrderService {
     private final com.stokmate.repository.OrderEventRepository orderEventRepository;
     private final com.stokmate.mapper.OrderEventMapper orderEventMapper;
     private final com.stokmate.repository.UserRepository userRepository;
+    private final com.stokmate.repository.OrderProductRepository orderProductRepository;
+    private final ProductAllocationService productAllocationService;
 
     private static final DateTimeFormatter EXCEL_DATE_FORMATTER = DateTimeFormatter.ofPattern("d.M.yyyy",
             Locale.forLanguageTag("tr"));
@@ -285,6 +287,22 @@ public class OrderService {
         savedOrder.getProducts().forEach(
                 p -> log.info("Saved OrderProduct brand: {} for product: {}", p.getBrand(), p.getProductName()));
 
+        // Allocate stock for sales orders (FIFO logic)
+        if (savedOrder.getOrderType() != com.stokmate.domain.OrderType.STOCK) {
+            for (OrderProduct op : savedOrder.getProducts()) {
+                try {
+                    productAllocationService.allocateStock(op,
+                            order.getCreatedBy() != null ? userRepository.findByEmail(order.getCreatedBy()).orElse(null)
+                                    : null);
+                } catch (Exception e) {
+                    log.error("Stock allocation failed for product {}", op.getProductCode(), e);
+                    // Decide if we should rollback transaction or just log.
+                    // For strict inventory, we should probably throw exception to rollback order.
+                    throw new BadRequestException("Stok tahsisi başarısız: " + e.getMessage());
+                }
+            }
+        }
+
         // Log activity
         orderActivityService.logActivity(savedOrder, ActivityType.CREATED,
                 savedOrder.getProducts().size() + " ürün ile sipariş oluşturuldu");
@@ -331,6 +349,18 @@ public class OrderService {
 
         // Log activity
         orderActivityService.logActivity(saved, ActivityType.COMPLETED, "Sipariş tamamlandı olarak işaretlendi");
+
+        // Deallocate stock if it was a sales order
+        if (saved.getOrderType() != com.stokmate.domain.OrderType.STOCK) {
+            for (OrderProduct op : saved.getProducts()) {
+                try {
+                    productAllocationService.deallocateStock(op);
+                } catch (Exception e) {
+                    log.error("Stock deallocation failed for product {}", op.getProductCode(), e);
+                    // Non-blocking error for cancellation, but logged
+                }
+            }
+        }
 
         return orderMapper.toResponse(saved);
     }
@@ -743,7 +773,8 @@ public class OrderService {
             throw new NotFoundException("Order has no invoice");
         }
 
-        String url = storageService.getPresignedUrl(order.getInvoiceFileKey());
+        // Return raw path for backend proxy (frontend uses /api/files/view)
+        String url = order.getInvoiceFileKey();
 
         // Extract filename from key
         String fileName = order.getInvoiceFileKey().substring(order.getInvoiceFileKey().lastIndexOf("/") + 1);
@@ -968,14 +999,20 @@ public class OrderService {
             return;
         }
 
+        // Fetch products fresh from repository to bypass Hibernate cache
+        List<OrderProduct> products = orderProductRepository.findByOrderId(orderId);
+
         // Check if all products are fully shipped
-        boolean allShipped = order.getProducts().stream()
+        boolean allShipped = products.stream()
                 .allMatch(product -> {
                     BigDecimal quantity = product.getQuantity() != null ? product.getQuantity() : BigDecimal.ZERO;
                     BigDecimal shipped = product.getShippedQuantity() != null ? product.getShippedQuantity()
                             : BigDecimal.ZERO;
+                    log.debug("Product {} - quantity: {}, shipped: {}", product.getProductName(), quantity, shipped);
                     return shipped.compareTo(quantity) >= 0;
                 });
+
+        log.info("Order {} allShipped check: {}", orderId, allShipped);
 
         if (allShipped) {
             order.setStatus(OrderStatus.COMPLETED);
@@ -987,7 +1024,9 @@ public class OrderService {
             log.info("Order {} marked as COMPLETED - all products shipped", orderId);
         } else {
             // Ensure order is IN_PROGRESS if not completed
-            if (order.getStatus().getSimplifiedStatus() != OrderStatus.IN_PROGRESS) {
+            if (order.getStatus() != OrderStatus.IN_PROGRESS &&
+                    order.getStatus() != OrderStatus.PENDING_SHIPMENT_APPROVAL &&
+                    order.getStatus() != OrderStatus.SHIPMENT_APPROVED) {
                 order.setStatus(OrderStatus.IN_PROGRESS);
                 orderRepository.save(order);
             }

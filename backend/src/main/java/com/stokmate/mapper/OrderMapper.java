@@ -72,7 +72,8 @@ public abstract class OrderMapper {
             // Get shipments that are pending completion (not yet approved)
             List<Shipment> pendingShipments = shipmentRepository.findByOrderIdAndStatusIn(
                     orderId,
-                    Arrays.asList(ShipmentStatus.PENDING_COMPLETION, ShipmentStatus.COMPLETED));
+                    Arrays.asList(ShipmentStatus.PENDING, ShipmentStatus.APPROVED, ShipmentStatus.PLANNED,
+                            ShipmentStatus.COMPLETED));
 
             for (Shipment shipment : pendingShipments) {
                 if (shipment.getItems() != null) {

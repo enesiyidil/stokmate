@@ -31,4 +31,9 @@ public class ShipmentResponse {
     private UUID approvedById;
     private String approvedByName;
     private LocalDateTime approvalDate;
+
+    // Sale related fields
+    private UUID saleId;
+    private String saleNo;
+    private String shipmentType; // ORDER or SALE
 }

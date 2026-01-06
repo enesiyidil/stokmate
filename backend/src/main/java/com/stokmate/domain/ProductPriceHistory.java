@@ -67,8 +67,12 @@ public class ProductPriceHistory {
     @Column(length = 500)
     private String paymentConditionDefinition;
 
-    @Column(nullable = false)
-    private Integer quantity; // Quantity associated with this price entry
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal quantity; // Quantity associated with this price entry
+
+    @Column(nullable = false, precision = 19, scale = 2)
+    @Builder.Default
+    private BigDecimal remainingQuantity = BigDecimal.ZERO;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "order_id")

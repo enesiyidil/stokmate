@@ -147,7 +147,8 @@ public class ProductAcceptanceService {
                     priceHistory.setVat(orderProduct.getVat() != null ? orderProduct.getVat() : BigDecimal.ZERO);
                     priceHistory.setPaymentCondition(orderProduct.getPaymentCondition());
                     priceHistory.setPaymentConditionDefinition(orderProduct.getPaymentConditionDefinition());
-                    priceHistory.setQuantity(request.getAcceptedQuantity().intValue());
+                    priceHistory.setQuantity(request.getAcceptedQuantity());
+                    priceHistory.setRemainingQuantity(request.getAcceptedQuantity());
                     priceHistory.setRelatedOrder(order);
                     priceHistory.setCreatedBy(user);
                     priceHistory.setCreatedAt(LocalDateTime.now());

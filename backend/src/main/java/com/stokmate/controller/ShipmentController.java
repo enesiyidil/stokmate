@@ -39,27 +39,32 @@ public class ShipmentController {
     }
 
     @GetMapping("/pending-approval")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
-    public ResponseEntity<List<ShipmentApprovalResponse>> getPendingApprovals() {
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE', 'OPERATIONS_MANAGER', 'LOGISTICS_MANAGER')")
+    public ResponseEntity<List<ShipmentResponse>> getPendingApprovals() {
         return ResponseEntity.ok(shipmentService.getPendingApprovals());
     }
 
-    // Approve: DIRECTOR, MANAGER, ADMIN
-    @PostMapping("/{id}/approve")
+    @GetMapping("/awaiting-planning")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE', 'OPERATIONS_MANAGER', 'LOGISTICS_MANAGER')")
+    public ResponseEntity<List<ShipmentResponse>> getAwaitingPlanningShipments() {
+        return ResponseEntity.ok(shipmentService.getAwaitingPlanningShipments());
+    }
+
+    // First Approval: DIRECTOR, MANAGER, ADMIN - changes PENDING to APPROVED
+    @PostMapping("/{id}/approve-initial")
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR')")
-    public ResponseEntity<ShipmentApprovalResponse> approveShipment(
+    public ResponseEntity<ShipmentResponse> approveInitialShipment(
             @PathVariable UUID id,
             @AuthenticationPrincipal UserPrincipal userPrincipal) {
-        ShipmentApprovalResponse response = shipmentService.approveShipment(id, userPrincipal.getUser().getId());
+        ShipmentResponse response = shipmentService.approveInitialShipment(id, userPrincipal.getUser().getId());
         return ResponseEntity.ok(response);
     }
 
     @GetMapping("/ready")
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE', 'OPERATIONS_MANAGER', 'LOGISTICS_MANAGER')")
-    public ResponseEntity<List<OrderResponse>> getReadyForShipment() {
-        // Get orders with SHIPMENT_APPROVED status
-        List<OrderResponse> orders = orderService.listOrdersByStatus(OrderStatus.SHIPMENT_APPROVED);
-        return ResponseEntity.ok(orders);
+    public ResponseEntity<List<ShipmentResponse>> getReadyForShipment() {
+        // Get shipments with PLANNED status
+        return ResponseEntity.ok(shipmentService.getReadyForShipment());
     }
 
     @PostMapping("/complete")
@@ -103,13 +108,13 @@ public class ShipmentController {
         return ResponseEntity.ok(shipmentService.getShipmentDetailsByShipmentId(shipmentId));
     }
 
-    @PostMapping("/{orderId}/plan")
+    @PostMapping("/{shipmentId}/plan")
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'LOGISTICS_MANAGER')")
     public ResponseEntity<Void> planShipment(
-            @PathVariable("orderId") UUID orderId,
+            @PathVariable("shipmentId") UUID shipmentId,
             @RequestBody PlannedShipmentRequest request,
             @AuthenticationPrincipal UserPrincipal userPrincipal) {
-        shipmentService.planShipment(orderId, request, userPrincipal.getUser().getId());
+        shipmentService.planShipment(shipmentId, request, userPrincipal.getUser().getId());
         return ResponseEntity.ok().build();
     }
 
@@ -149,7 +154,7 @@ public class ShipmentController {
      * Get list of completed shipments awaiting final approval
      */
     @GetMapping("/completed-awaiting")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE', 'OPERATIONS_MANAGER', 'LOGISTICS_MANAGER')")
     public ResponseEntity<List<ShipmentResponse>> getCompletedAwaitingApproval() {
         return ResponseEntity.ok(shipmentService.getCompletedAwaitingApproval());
     }
@@ -158,7 +163,7 @@ public class ShipmentController {
      * Get list of approved/finalized shipments
      */
     @GetMapping("/approved")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE', 'OPERATIONS_MANAGER', 'LOGISTICS_MANAGER')")
     public ResponseEntity<?> getApprovedShipments() {
         try {
             System.out.println("Controller: request received for approved shipments");
