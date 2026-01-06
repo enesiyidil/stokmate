@@ -1,16 +1,16 @@
 FROM maven:3.9.9-eclipse-temurin-17 AS build
 WORKDIR /app
 
-# Copy settings.xml if you have custom mirrors (optional)
+# Copy custom settings with alternative mirror
+COPY settings.xml /root/.m2/settings.xml
 COPY pom.xml .
 
-# Download dependencies with retry (Maven Central sometimes returns 403)
-RUN --mount=type=cache,target=/root/.m2 \
-    mvn -B -ntp -DskipTests dependency:resolve dependency:resolve-plugins || \
-    (sleep 5 && mvn -B -ntp -DskipTests dependency:resolve dependency:resolve-plugins)
+# Download dependencies
+RUN --mount=type=cache,target=/root/.m2/repository \
+    mvn -B -ntp -DskipTests dependency:resolve dependency:resolve-plugins
 
 COPY src ./src
-RUN --mount=type=cache,target=/root/.m2 \
+RUN --mount=type=cache,target=/root/.m2/repository \
     mvn -B -ntp -DskipTests package
 
 # Boot jar'ı seçmek için: plain varsa ele
