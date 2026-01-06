@@ -30,6 +30,11 @@ public class ShipmentDetailsResponse {
     private String shipmentStatus;
     private LocalDateTime plannedShipmentDate;
     private String approvedBy;
+
+    // Sale related
+    private String saleId;
+    private String saleNo;
+    private String shipmentType; // ORDER or SALE
     private String deliveryStatus;
     private String problemType;
     private String deliveryNotes;

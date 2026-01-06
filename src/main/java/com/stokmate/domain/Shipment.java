@@ -63,11 +63,19 @@ public class Shipment extends AuditableEntity {
     // Final approval
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private ShipmentStatus status = ShipmentStatus.PENDING_COMPLETION;
+    private ShipmentStatus status = ShipmentStatus.PENDING;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "approved_by_id")
     private User approvedBy;
 
     private LocalDateTime approvalDate;
+
+    /**
+     * Helper method to add ShipmentItem with proper bidirectional relationship
+     */
+    public void addItem(ShipmentItem item) {
+        items.add(item);
+        item.setShipment(this);
+    }
 }

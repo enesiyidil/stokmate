@@ -194,29 +194,25 @@ public class ProductService {
 
     private ProductResponse toResponseWithPresignedUrl(Product product) {
         ProductResponse response = productMapper.toResponse(product);
+        // Return raw path for backend proxy (frontend uses /api/files/view)
         if (StringUtils.hasText(product.getImageUrl())) {
-            try {
-                String presignedUrl = storageService.getPresignedUrl(product.getImageUrl());
-                response = ProductResponse.builder()
-                        .id(response.getId())
-                        .name(response.getName())
-                        .code(response.getCode())
-                        .description(response.getDescription())
-                        .brand(response.getBrand())
-                        .imageUrl(presignedUrl)
-                        .activeForSale(response.isActiveForSale())
-                        .stockQuantity(response.getStockQuantity())
-                        .vatRate(response.getVatRate())
-                        .unitPrice(response.getUnitPrice())
-                        .minStockLevel(response.getMinStockLevel())
-                        .keywords(response.getKeywords())
-                        .createdAt(response.getCreatedAt())
-                        .updatedAt(response.getUpdatedAt())
-                        .createdBy(response.getCreatedBy())
-                        .build();
-            } catch (Exception e) {
-                log.warn("Failed to generate presigned URL for image: {}", product.getImageUrl(), e);
-            }
+            response = ProductResponse.builder()
+                    .id(response.getId())
+                    .name(response.getName())
+                    .code(response.getCode())
+                    .description(response.getDescription())
+                    .brand(response.getBrand())
+                    .imageUrl(product.getImageUrl()) // Raw path, not presigned URL
+                    .activeForSale(response.isActiveForSale())
+                    .stockQuantity(response.getStockQuantity())
+                    .vatRate(response.getVatRate())
+                    .unitPrice(response.getUnitPrice())
+                    .minStockLevel(response.getMinStockLevel())
+                    .keywords(response.getKeywords())
+                    .createdAt(response.getCreatedAt())
+                    .updatedAt(response.getUpdatedAt())
+                    .createdBy(response.getCreatedBy())
+                    .build();
         }
         return response;
     }
@@ -245,15 +241,8 @@ public class ProductService {
                 .map(productPriceHistoryMapper::toResponse)
                 .toList();
 
-        // Get presigned URL for image if exists
+        // Return raw path for backend proxy (frontend uses /api/files/view)
         String imageUrl = product.getImageUrl();
-        if (StringUtils.hasText(imageUrl)) {
-            try {
-                imageUrl = storageService.getPresignedUrl(imageUrl);
-            } catch (Exception e) {
-                log.warn("Failed to generate presigned URL for image: {}", imageUrl, e);
-            }
-        }
 
         return com.stokmate.dto.product.ProductDetailsResponse.builder()
                 .id(product.getId())

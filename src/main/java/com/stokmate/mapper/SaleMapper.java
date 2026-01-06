@@ -33,14 +33,8 @@ public class SaleMapper {
                 .map(SaleProduct::getTotalPrice)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        String contractUrl = null;
-        if (sale.getContractFileKey() != null) {
-            try {
-                contractUrl = storageService.getPresignedUrl(sale.getContractFileKey());
-            } catch (Exception e) {
-                contractUrl = null;
-            }
-        }
+        // Return raw path for backend proxy (frontend uses /api/files/view)
+        String contractUrl = sale.getContractFileKey();
 
         return SaleResponse.builder()
                 .id(sale.getId())
