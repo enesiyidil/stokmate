@@ -375,8 +375,8 @@ export default function ShipmentDetailsPage() {
                                             <p className="text-xs text-amber-700 mb-2">Teslimat Fotoğrafları ({shipmentDetails.deliveryPhotoUrls.length})</p>
                                             <div className="grid grid-cols-3 gap-2">
                                                 {shipmentDetails.deliveryPhotoUrls.map((url, idx) => (
-                                                    <a key={idx} href={`http://localhost:9000/invoices/${url}`} target="_blank" rel="noreferrer" className="aspect-square rounded-lg overflow-hidden border-2 border-amber-300 hover:border-amber-500 transition-colors">
-                                                        <img src={`http://localhost:9000/invoices/${url}`} alt={`Teslimat ${idx + 1}`} className="w-full h-full object-cover" />
+                                                    <a key={idx} href={`/api/files/view?path=${encodeURIComponent(url)}`} target="_blank" rel="noreferrer" className="aspect-square rounded-lg overflow-hidden border-2 border-amber-300 hover:border-amber-500 transition-colors">
+                                                        <img src={`/api/files/view?path=${encodeURIComponent(url)}`} alt={`Teslimat ${idx + 1}`} className="w-full h-full object-cover" />
                                                     </a>
                                                 ))}
                                             </div>

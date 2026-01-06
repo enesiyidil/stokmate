@@ -164,11 +164,11 @@ export default function ProductsPage() {
                                             <div className="w-16 h-16 rounded-lg overflow-hidden bg-amber-50 border border-amber-200 flex items-center justify-center">
                                                 {product.imageUrl ? (
                                                     <button
-                                                        onClick={() => setPreviewImage(product.imageUrl!)}
+                                                        onClick={() => setPreviewImage(`/api/files/view?path=${encodeURIComponent(product.imageUrl!)}`)}
                                                         className="w-full h-full cursor-pointer hover:opacity-80 transition-opacity"
                                                         title="Resmi Görüntüle"
                                                     >
-                                                        <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+                                                        <img src={`/api/files/view?path=${encodeURIComponent(product.imageUrl)}`} alt={product.name} className="w-full h-full object-cover" />
                                                     </button>
                                                 ) : (
                                                     <button

@@ -198,11 +198,11 @@ const SaleDetailsPage: React.FC = () => {
                                 <div className="space-y-3">
                                     <div className="flex items-center gap-2 text-green-400"><CheckCircle className="w-5 h-5" /><span>Sözleşme mevcut</span></div>
                                     <div className="flex gap-2">
-                                        <a href={sale.contractDownloadUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 bg-purple-100 text-purple-900 rounded-lg hover:bg-purple-200 transition-colors border border-purple-400">
+                                        <a href={`/api/files/view?path=${encodeURIComponent(sale.contractDownloadUrl)}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 bg-purple-100 text-purple-900 rounded-lg hover:bg-purple-200 transition-colors border border-purple-400">
                                             <Eye className="w-4 h-4" />
                                             Görüntüle
                                         </a>
-                                        <a href={sale.contractDownloadUrl} download className="flex items-center gap-2 px-4 py-2 bg-blue-100 text-blue-900 rounded-lg hover:bg-blue-200 transition-colors border border-blue-400">
+                                        <a href={`/api/files/download?path=${encodeURIComponent(sale.contractDownloadUrl)}`} download className="flex items-center gap-2 px-4 py-2 bg-blue-100 text-blue-900 rounded-lg hover:bg-blue-200 transition-colors border border-blue-400">
                                             <Download className="w-4 h-4" />
                                             İndir
                                         </a>
