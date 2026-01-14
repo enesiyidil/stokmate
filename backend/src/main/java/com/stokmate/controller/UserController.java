@@ -97,6 +97,15 @@ public class UserController {
         return ResponseEntity.ok(updated);
     }
 
+    @PutMapping("/{id}/toggle-2fa")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    public ResponseEntity<UserResponse> toggle2FA(
+            @PathVariable("id") UUID id,
+            @Valid @RequestBody com.stokmate.dto.user.Toggle2FARequest request) {
+        UserResponse updated = userService.toggle2FA(id, request.getEnabled());
+        return ResponseEntity.ok(updated);
+    }
+
     @DeleteMapping("/{id}/soft")
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ResponseEntity<Void> softDeleteUser(
@@ -107,7 +116,7 @@ public class UserController {
     }
 
     @GetMapping("/sales-consultants")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE', 'OPERATIONS_MANAGER')")
     public ResponseEntity<List<com.stokmate.dto.user.SalesConsultantResponse>> getSalesConsultants(
             @RequestParam(name = "location", required = false) String location,
             @RequestParam(name = "department", required = false) String department,

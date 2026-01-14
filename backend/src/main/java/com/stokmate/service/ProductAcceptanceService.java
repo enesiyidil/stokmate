@@ -182,11 +182,23 @@ public class ProductAcceptanceService {
                             .totalQuantity(op.getQuantity())
                             .acceptedQuantity(op.getAcceptedQuantity())
                             .remainingQuantity(op.getRemainingQuantity())
+                            .orderDate(order.getOrderDate())
                             .build();
                     pendingProducts.add(response);
                 }
             }
         }
+
+        // Sort by orderDate ascending (oldest first)
+        pendingProducts.sort((a, b) -> {
+            if (a.getOrderDate() == null && b.getOrderDate() == null)
+                return 0;
+            if (a.getOrderDate() == null)
+                return 1;
+            if (b.getOrderDate() == null)
+                return -1;
+            return a.getOrderDate().compareTo(b.getOrderDate());
+        });
 
         return pendingProducts;
     }
