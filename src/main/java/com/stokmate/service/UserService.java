@@ -167,6 +167,22 @@ public class UserService {
         userRepository.save(user);
     }
 
+    @Transactional
+    public UserResponse toggle2FA(UUID userId, boolean enabled) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BadRequestException("User not found"));
+
+        user.setTotpEnabled(enabled);
+        // If disabling 2FA, also reset the setup flags
+        if (!enabled) {
+            user.setTotpSecret(null);
+            user.setTotpSetupCompleted(false);
+        }
+        userRepository.save(user);
+
+        return toUserResponse(user);
+    }
+
     public String getUserDisplayName(User user) {
         if (user.isDeleted() && user.getDeletedAlias() != null) {
             return user.getDeletedAlias();
@@ -193,6 +209,7 @@ public class UserService {
                 .deleted(user.isDeleted())
                 .deletedAlias(user.getDeletedAlias())
                 .displayName(getUserDisplayName(user))
+                .totpEnabled(user.isTotpEnabled())
                 .build();
     }
 

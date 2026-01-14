@@ -33,4 +33,7 @@ public class UserResponse {
     private boolean deleted;
     private String deletedAlias;
     private String displayName; // firstName + lastName or deletedAlias
+
+    // 2FA fields
+    private boolean totpEnabled;
 }

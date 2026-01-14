@@ -48,6 +48,48 @@ public class OrderActivityService {
     }
 
     /**
+     * Log a note added activity
+     */
+    @Transactional
+    public void logNoteAdded(Order order, User user, String noteContent) {
+        String truncatedContent = noteContent.length() > 30
+                ? noteContent.substring(0, 30) + "..."
+                : noteContent;
+        String description = String.format("Not oluşturdu: \"%s\"", truncatedContent);
+
+        OrderActivity activity = OrderActivity.builder()
+                .order(order)
+                .user(user)
+                .activityType(ActivityType.NOTE_ADDED)
+                .description(description)
+                .build();
+
+        orderActivityRepository.save(activity);
+        log.info("Logged note added for order {} by user {}", order.getOrderNo(), user.getEmail());
+    }
+
+    /**
+     * Log a note strikethrough activity
+     */
+    @Transactional
+    public void logNoteStrikethrough(Order order, User user, String noteContent) {
+        String truncatedContent = noteContent.length() > 50
+                ? noteContent.substring(0, 50) + "..."
+                : noteContent;
+        String description = String.format("Not üstü çizildi: \"%s\"", truncatedContent);
+
+        OrderActivity activity = OrderActivity.builder()
+                .order(order)
+                .user(user)
+                .activityType(ActivityType.NOTE_STRIKETHROUGH)
+                .description(description)
+                .build();
+
+        orderActivityRepository.save(activity);
+        log.info("Logged note strikethrough for order {} by user {}", order.getOrderNo(), user.getEmail());
+    }
+
+    /**
      * Get all activities for an order
      */
     public List<OrderActivityResponse> getOrderActivities(UUID orderId) {
