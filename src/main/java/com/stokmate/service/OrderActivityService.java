@@ -48,10 +48,114 @@ public class OrderActivityService {
     }
 
     /**
+     * Log a note added activity
+     */
+    @Transactional
+    public void logNoteAdded(Order order, User user, String noteContent) {
+        String truncatedContent = noteContent.length() > 30
+                ? noteContent.substring(0, 30) + "..."
+                : noteContent;
+        String description = String.format("Not oluşturdu: \"%s\"", truncatedContent);
+
+        OrderActivity activity = OrderActivity.builder()
+                .order(order)
+                .user(user)
+                .activityType(ActivityType.NOTE_ADDED)
+                .description(description)
+                .build();
+
+        orderActivityRepository.save(activity);
+        log.info("Logged note added for order {} by user {}", order.getOrderNo(), user.getEmail());
+    }
+
+    /**
+     * Log a note strikethrough activity
+     */
+    @Transactional
+    public void logNoteStrikethrough(Order order, User user, String noteContent) {
+        String truncatedContent = noteContent.length() > 50
+                ? noteContent.substring(0, 50) + "..."
+                : noteContent;
+        String description = String.format("Not üstü çizildi: \"%s\"", truncatedContent);
+
+        OrderActivity activity = OrderActivity.builder()
+                .order(order)
+                .user(user)
+                .activityType(ActivityType.NOTE_STRIKETHROUGH)
+                .description(description)
+                .build();
+
+        orderActivityRepository.save(activity);
+        log.info("Logged note strikethrough for order {} by user {}", order.getOrderNo(), user.getEmail());
+    }
+
+    /**
      * Get all activities for an order
      */
     public List<OrderActivityResponse> getOrderActivities(UUID orderId) {
         List<OrderActivity> activities = orderActivityRepository.findByOrderIdOrderByCreatedAtDesc(orderId);
+
+        List<OrderActivityResponse> responses = new ArrayList<>();
+        for (OrderActivity activity : activities) {
+            responses.add(orderActivityMapper.toResponse(activity));
+        }
+        return responses;
+    }
+
+    /**
+     * Get all activities with pagination and filters
+     */
+    public org.springframework.data.domain.Page<OrderActivityResponse> getAllActivities(
+            org.springframework.data.domain.Pageable pageable,
+            String category,
+            String search) {
+
+        List<ActivityType> types = getActivityTypesByCategory(category);
+
+        String searchPattern = null;
+        if (search != null && !search.trim().isEmpty()) {
+            searchPattern = "%" + search.trim().toLowerCase() + "%";
+        }
+
+        org.springframework.data.domain.Page<OrderActivity> page = orderActivityRepository.findAllWithFilters(
+                types,
+                searchPattern,
+                pageable);
+
+        return page.map(orderActivityMapper::toResponse);
+    }
+
+    private List<ActivityType> getActivityTypesByCategory(String category) {
+        if (category == null || category.isEmpty())
+            return null;
+
+        List<ActivityType> types = new ArrayList<>();
+        if ("ORDER".equalsIgnoreCase(category)) {
+            types.add(ActivityType.CREATED);
+            types.add(ActivityType.COMPLETED);
+            types.add(ActivityType.CANCELLED);
+            types.add(ActivityType.ORDER_UPDATED);
+            types.add(ActivityType.PRODUCTS_ACCEPTED);
+            types.add(ActivityType.PRODUCT_ACCEPTED);
+        } else if ("SHIPMENT".equalsIgnoreCase(category)) {
+            types.add(ActivityType.SHIPMENT_CREATED);
+            types.add(ActivityType.SHIPMENT_UPDATED);
+            types.add(ActivityType.SHIPMENT_APPROVED);
+        } else if ("NOTE".equalsIgnoreCase(category)) {
+            types.add(ActivityType.NOTE_ADDED);
+            types.add(ActivityType.NOTE_STRIKETHROUGH);
+        } else if ("INVOICE".equalsIgnoreCase(category)) {
+            types.add(ActivityType.INVOICE_UPLOADED);
+            types.add(ActivityType.INVOICE_DELETED);
+        }
+        return types;
+    }
+
+    /**
+     * Get recent system-wide activities (for admin dashboard)
+     */
+    public List<OrderActivityResponse> getRecentSystemActivities() {
+        List<OrderActivity> activities = orderActivityRepository.findTop5ByOrderByCreatedAtDesc();
 
         List<OrderActivityResponse> responses = new ArrayList<>();
         for (OrderActivity activity : activities) {

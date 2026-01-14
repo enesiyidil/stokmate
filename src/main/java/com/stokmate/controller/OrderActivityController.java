@@ -23,7 +23,7 @@ public class OrderActivityController {
 
     private final OrderActivityService orderActivityService;
 
-    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','DIRECTOR','STORE_MANAGER','STORE_EMPLOYEE','OPERATIONS_MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','DIRECTOR','STORE_MANAGER','STORE_EMPLOYEE','OPERATIONS_MANAGER','LOGISTICS_MANAGER')")
     @GetMapping("/order/{orderId}")
     @Operation(summary = "Get activities for an order", description = "Retrieves all activities (create, complete, cancel, accept products) for a specific order")
     public List<OrderActivityResponse> getOrderActivities(
@@ -39,10 +39,27 @@ public class OrderActivityController {
         return orderActivityService.getUserActivities(userId);
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','DIRECTOR','STORE_MANAGER','STORE_EMPLOYEE','OPERATIONS_MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','DIRECTOR','STORE_MANAGER','STORE_EMPLOYEE','OPERATIONS_MANAGER','LOGISTICS_MANAGER')")
     @GetMapping("/me")
     @Operation(summary = "Get current user's activities", description = "Retrieves all order activities performed by the currently authenticated user")
     public List<OrderActivityResponse> getMyActivities() {
         return orderActivityService.getCurrentUserActivities();
+    }
+
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','DIRECTOR','OPERATIONS_MANAGER')")
+    @GetMapping
+    @Operation(summary = "Get all activities", description = "Retrieves all activities with pagination and filtering options (Admin/Manager only)")
+    public org.springframework.data.domain.Page<OrderActivityResponse> getActivities(
+            @org.springframework.data.web.PageableDefault(sort = "createdAt", direction = org.springframework.data.domain.Sort.Direction.DESC) org.springframework.data.domain.Pageable pageable,
+            @org.springframework.web.bind.annotation.RequestParam(required = false) String category,
+            @org.springframework.web.bind.annotation.RequestParam(required = false) String search) {
+        return orderActivityService.getAllActivities(pageable, category, search);
+    }
+
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','DIRECTOR','OPERATIONS_MANAGER')")
+    @GetMapping("/recent")
+    @Operation(summary = "Get recent system activities", description = "Retrieves the 5 most recent activities system-wide (Admin/Manager only)")
+    public List<OrderActivityResponse> getRecentSystemActivities() {
+        return orderActivityService.getRecentSystemActivities();
     }
 }

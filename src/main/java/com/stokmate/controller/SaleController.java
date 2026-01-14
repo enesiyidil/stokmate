@@ -28,14 +28,14 @@ public class SaleController {
 
   // Create/View/Update: STORE_MANAGER, STORE_EMPLOYEE, DIRECTOR, MANAGER, ADMIN
   @PostMapping
-  @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE')")
+  @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE', 'OPERATIONS_MANAGER')")
   @Operation(summary = "Create new sale")
   public SaleResponse create(@RequestBody SaleRequest request, @AuthenticationPrincipal UserPrincipal principal) {
     return saleService.create(request, principal.getUser());
   }
 
   @GetMapping
-  @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE')")
+  @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE', 'OPERATIONS_MANAGER')")
   @Operation(summary = "List sales with filters")
   public List<SaleResponse> list(
       @RequestParam(name = "status", required = false) SaleStatus status,
@@ -44,14 +44,14 @@ public class SaleController {
   }
 
   @GetMapping("/{id}")
-  @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE')")
+  @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE', 'OPERATIONS_MANAGER')")
   @Operation(summary = "Get sale details")
   public SaleResponse getById(@PathVariable("id") UUID id) {
     return saleService.getById(id);
   }
 
   @PutMapping("/{id}/status")
-  @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE')")
+  @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE', 'OPERATIONS_MANAGER')")
   @Operation(summary = "Update sale status")
   public SaleResponse updateStatus(
       @PathVariable("id") UUID id,
@@ -61,7 +61,7 @@ public class SaleController {
   }
 
   @PostMapping(value = "/{id}/contract", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-  @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE')")
+  @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE', 'OPERATIONS_MANAGER')")
   @Operation(summary = "Upload contract file")
   public SaleResponse uploadContract(
       @PathVariable("id") UUID id,
@@ -79,7 +79,7 @@ public class SaleController {
   }
 
   @GetMapping("/{id}/events")
-  @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE')")
+  @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE', 'OPERATIONS_MANAGER')")
   @Operation(summary = "Get sale event history")
   public List<SaleEventResponse> getEvents(@PathVariable("id") UUID id) {
     return saleService.getEvents(id);

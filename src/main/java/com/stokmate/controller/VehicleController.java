@@ -29,8 +29,9 @@ public class VehicleController {
     private final VehicleService vehicleService;
     private final PendingActionService pendingActionService;
 
-    // Access: OPERATIONS_MANAGER, LOGISTICS_MANAGER, DIRECTOR, MANAGER, ADMIN
-    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','DIRECTOR','OPERATIONS_MANAGER','LOGISTICS_MANAGER')")
+    // Access: OPERATIONS_MANAGER, LOGISTICS_MANAGER, DIRECTOR, MANAGER, ADMIN,
+    // STORE_EMPLOYEE, STORE_MANAGER
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','DIRECTOR','OPERATIONS_MANAGER','LOGISTICS_MANAGER','STORE_MANAGER','STORE_EMPLOYEE')")
     @GetMapping
     public List<VehicleResponse> getAll() {
         return vehicleService.getAll();

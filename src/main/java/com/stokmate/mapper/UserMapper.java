@@ -14,4 +14,7 @@ public interface UserMapper {
     UserResponse toResponse(User user);
 
     com.stokmate.dto.user.UserBasicResponse toBasicResponse(User user);
+
+    @Mapping(target = "displayName", expression = "java(user.getFirstName() + \" \" + user.getLastName())")
+    com.stokmate.dto.user.UserSummaryResponse toSummaryResponse(User user);
 }

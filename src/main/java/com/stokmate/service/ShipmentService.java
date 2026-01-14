@@ -605,11 +605,13 @@ public class ShipmentService {
                                 .orElseThrow(() -> new NotFoundException("User not found"));
 
                 // Update shipment details
-                shipment.setActualShipmentDate(LocalDateTime.now());
+                shipment.setActualShipmentDate(request.getActualShipmentDate() != null ? request.getActualShipmentDate()
+                                : LocalDateTime.now());
                 shipment.setShippedBy(shippedBy);
                 shipment.setDeliveryStatus(request.getDeliveryStatus());
                 shipment.setProblemType(request.getProblemType());
                 shipment.setDeliveryNotes(request.getDeliveryNotes());
+                shipment.setReceiverName(request.getReceiverName());
                 shipment.setStatus(ShipmentStatus.COMPLETED);
 
                 // Upload files
@@ -1244,5 +1246,75 @@ public class ShipmentService {
                                 .shipmentType(shipment.getOrder() != null ? "ORDER"
                                                 : (shipment.getSale() != null ? "SALE" : "UNKNOWN"))
                                 .build();
+        }
+
+        /**
+         * Get calendar events (shipments) for a user based on their role
+         */
+        @Transactional
+        public List<com.stokmate.dto.event.UserEventResponse> getCalendarEvents(User user, LocalDateTime start,
+                        LocalDateTime end) {
+                List<Shipment> shipments;
+
+                if (user.getRole() == com.stokmate.domain.Role.STORE_MANAGER) {
+                        String location = user.getLocation() != null ? user.getLocation() : "";
+                        shipments = shipmentRepository.findStoreShipments(location, start, end);
+                } else if (user.getRole() == com.stokmate.domain.Role.STORE_EMPLOYEE) {
+                        shipments = shipmentRepository.findMyShipments(user.getId(), start, end);
+                } else {
+                        // Admin, Director, Manager, Logistics Manager, Operations Manager
+                        shipments = shipmentRepository.findAllByPlannedShipmentDateBetween(start, end);
+                }
+
+                return shipments.stream()
+                                .map(this::toUserEventResponse)
+                                .collect(Collectors.toList());
+        }
+
+        private com.stokmate.dto.event.UserEventResponse toUserEventResponse(Shipment shipment) {
+                com.stokmate.dto.event.UserEventResponse response = new com.stokmate.dto.event.UserEventResponse();
+                response.setId(shipment.getId());
+
+                String title = "Sevk: ";
+                if (shipment.getOrder() != null) {
+                        title += shipment.getOrder().getOrderNo();
+                        if (shipment.getOrder().getCustomer() != null) {
+                                title += " - " + shipment.getOrder().getCustomer().getFirstName() + " "
+                                                + shipment.getOrder().getCustomer().getLastName();
+                        } else if (shipment.getOrder().getProsapContractNameSurname() != null) {
+                                title += " - " + shipment.getOrder().getProsapContractNameSurname();
+                        }
+                } else if (shipment.getSale() != null) {
+                        title += shipment.getSale().getSaleNo();
+                        if (shipment.getSale().getCustomer() != null) {
+                                title += " - " + shipment.getSale().getCustomer().getFirstName() + " "
+                                                + shipment.getSale().getCustomer().getLastName();
+                        }
+                }
+
+                response.setTitle(title);
+
+                StringBuilder desc = new StringBuilder();
+                if (shipment.getVehicle() != null) {
+                        desc.append("Araç: ").append(shipment.getVehicle().getLicensePlate()).append(" ");
+                }
+                if (shipment.getShippedBy() != null) {
+                        desc.append("Şoför: ").append(shipment.getShippedBy().getFirstName()).append(" ")
+                                        .append(shipment.getShippedBy().getLastName()).append(" ");
+                }
+                if (shipment.getDeliveryNotes() != null) {
+                        desc.append("\nNot: ").append(shipment.getDeliveryNotes());
+                }
+
+                response.setDescription(desc.toString());
+                response.setStartDateTime(shipment.getPlannedShipmentDate());
+                if (shipment.getPlannedShipmentDate() != null) {
+                        response.setEndDateTime(shipment.getPlannedShipmentDate().plusHours(1)); // Duration 1h default
+                }
+                response.setReminderType(com.stokmate.domain.ReminderType.HOUR_1_BEFORE); // Default reminder
+                response.setNotified(false);
+                response.setType("SHIPMENT");
+
+                return response;
         }
 }

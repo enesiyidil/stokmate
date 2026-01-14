@@ -83,9 +83,10 @@ public class OrderController {
 
         @PreAuthorize("hasAnyRole('ADMIN','MANAGER','DIRECTOR','STORE_MANAGER','STORE_EMPLOYEE','OPERATIONS_MANAGER')")
         @GetMapping
-        @Operation(summary = "List orders (optionally filter by status)", description = "Returns list of orders; optional query param `status` filters by order status")
+        @Operation(summary = "List orders (optionally filter by status)", description = "Returns list of orders; optional query param `status` filters by order status. `includeHidden` includes SSH orders.")
         public java.util.List<OrderResponse> listOrders(
-                        @org.springframework.web.bind.annotation.RequestParam(value = "status", required = false) String status) {
+                        @org.springframework.web.bind.annotation.RequestParam(value = "status", required = false) String status,
+                        @org.springframework.web.bind.annotation.RequestParam(value = "includeHidden", defaultValue = "false") boolean includeHidden) {
                 OrderStatus s = null;
                 if (status != null && !status.isBlank()) {
                         try {
@@ -94,7 +95,7 @@ public class OrderController {
                                 throw new IllegalArgumentException("Invalid status: " + status);
                         }
                 }
-                return orderService.listOrdersByStatus(s);
+                return orderService.listOrdersByStatus(s, includeHidden);
         }
 
         @PreAuthorize("hasAnyRole('ADMIN','MANAGER','DIRECTOR','OPERATIONS_MANAGER')")

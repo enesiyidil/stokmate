@@ -32,7 +32,7 @@ public class OrderReceiptController {
 
     private final OrderReceiptService orderReceiptService;
 
-    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','MUDUR','DIRECTOR','OPERATIONS_MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','MUDUR','DIRECTOR','OPERATIONS_MANAGER','STORE_MANAGER')")
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Create order receipt (accept products)", description = "Accept products for an order. DEPO_CALISAN creates pending receipts, others auto-approve.")
     public OrderReceiptResponse createReceipt(
@@ -57,7 +57,7 @@ public class OrderReceiptController {
         return orderReceiptService.createReceipt(request, photos, principal.getUser());
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','MUDUR','DIRECTOR','OPERATIONS_MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','MUDUR','DIRECTOR','OPERATIONS_MANAGER','STORE_MANAGER')")
     @GetMapping
     @Operation(summary = "List all receipts", description = "List receipts with optional filters")
     public List<OrderReceiptResponse> listReceipts(
@@ -66,14 +66,14 @@ public class OrderReceiptController {
         return orderReceiptService.listReceipts(orderId, status);
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','MUDUR','DIRECTOR','OPERATIONS_MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','MUDUR','DIRECTOR','OPERATIONS_MANAGER','STORE_MANAGER')")
     @GetMapping("/{id}")
     @Operation(summary = "Get receipt by ID", description = "Retrieve single receipt with photos")
     public OrderReceiptResponse getReceipt(@PathVariable UUID id) {
         return orderReceiptService.getReceiptById(id);
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','MUDUR','DIRECTOR','OPERATIONS_MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','MUDUR','DIRECTOR')")
     @PostMapping("/{id}/approve")
     @Operation(summary = "Approve receipt", description = "Approve a pending receipt")
     public OrderReceiptResponse approveReceipt(
@@ -86,7 +86,7 @@ public class OrderReceiptController {
         return orderReceiptService.approveReceipt(id, request, principal.getUser());
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','MUDUR','DIRECTOR','OPERATIONS_MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','MUDUR','DIRECTOR')")
     @PostMapping("/{id}/reject")
     @Operation(summary = "Reject receipt", description = "Reject a pending receipt")
     public OrderReceiptResponse rejectReceipt(
@@ -99,7 +99,7 @@ public class OrderReceiptController {
         return orderReceiptService.rejectReceipt(id, request, principal.getUser());
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','MUDUR','DIRECTOR','OPERATIONS_MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','MUDUR','DIRECTOR','OPERATIONS_MANAGER','STORE_MANAGER')")
     @GetMapping("/order/{orderId}")
     @Operation(summary = "Get receipts for order", description = "Retrieve all receipts for a specific order")
     public List<OrderReceiptResponse> getReceiptsForOrder(@PathVariable UUID orderId) {

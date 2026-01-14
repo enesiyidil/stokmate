@@ -25,6 +25,8 @@ public class SaleProductResponse {
 
     private String productImageUrl;
 
+    private String brand;
+
     private Integer quantity;
 
     private BigDecimal unitPriceExcludingVat;
@@ -34,4 +36,9 @@ public class SaleProductResponse {
     private BigDecimal internetSalesPrice;
 
     private BigDecimal totalPrice; // Calculated: quantity × unitPrice × (1 + vatRate)
+
+    // Shipment Tracking
+    private Integer pendingShipmentQuantity;
+    private Integer shippedQuantity;
+    private Integer deliveredQuantity;
 }

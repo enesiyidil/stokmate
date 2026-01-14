@@ -9,6 +9,7 @@ import com.stokmate.dto.auth.OtpLoginRequest;
 import com.stokmate.dto.auth.PasswordUpdateRequest;
 import com.stokmate.dto.auth.ForgotPasswordRequest;
 import com.stokmate.dto.auth.TwoFactorVerifyRequest;
+import com.stokmate.dto.auth.ReauthRequest;
 import com.stokmate.dto.user.UserResponse;
 import com.stokmate.dto.user.UserResponse;
 import com.stokmate.exception.ApiException;
@@ -235,6 +236,61 @@ public class AuthService {
         userRepository.save(user);
 
         // Generate token and return
+        String token = jwtTokenProvider.generateToken(user);
+        UserResponse userResponse = UserResponse.builder()
+                .id(user.getId())
+                .email(user.getEmail())
+                .firstName(user.getFirstName())
+                .lastName(user.getLastName())
+                .role(user.getRole())
+                .active(user.isActive())
+                .build();
+
+        return new AuthResponse(token, userResponse);
+    }
+
+    /**
+     * Re-authenticate a user when their session token has expired.
+     * This allows continuing work without full logout/login cycle.
+     */
+    public AuthResponse reauthenticate(ReauthRequest request) {
+        User user = userRepository.findByEmailAndDeletedFalse(request.getEmail())
+                .orElseThrow(() -> new BadRequestException("Kullanıcı bulunamadı"));
+
+        // Verify password
+        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            throw new BadRequestException("Şifre hatalı");
+        }
+
+        // Check if user is still active
+        if (!user.isActive()) {
+            throw new BadRequestException("Hesabınız devre dışı bırakılmış");
+        }
+
+        // Check 2FA if enabled
+        if (user.isTotpEnabled() && user.isTotpSetupCompleted()) {
+            if (request.getTwoFactorCode() == null || request.getTwoFactorCode().isEmpty()) {
+                // Return response indicating 2FA is required
+                UserResponse userResponse = UserResponse.builder()
+                        .id(user.getId())
+                        .email(user.getEmail())
+                        .firstName(user.getFirstName())
+                        .lastName(user.getLastName())
+                        .role(user.getRole())
+                        .active(user.isActive())
+                        .build();
+                return AuthResponse.requireTwoFactor(userResponse);
+            }
+
+            // Verify 2FA code
+            int codeValue = Integer.parseInt(request.getTwoFactorCode());
+            boolean isValid = twoFactorAuthService.verifyCode(user.getEmail(), codeValue);
+            if (!isValid) {
+                throw new BadRequestException("2FA kodu hatalı");
+            }
+        }
+
+        // Generate new token
         String token = jwtTokenProvider.generateToken(user);
         UserResponse userResponse = UserResponse.builder()
                 .id(user.getId())

@@ -7,6 +7,7 @@ import com.stokmate.dto.auth.OtpLoginRequest;
 import com.stokmate.dto.auth.PasswordUpdateRequest;
 import com.stokmate.dto.auth.ForgotPasswordRequest;
 import com.stokmate.dto.auth.TwoFactorVerifyRequest;
+import com.stokmate.dto.auth.ReauthRequest;
 import com.stokmate.dto.user.UserResponse;
 import com.stokmate.security.UserPrincipal;
 import com.stokmate.service.AuthService;
@@ -69,5 +70,14 @@ public class AuthController {
     @PostMapping("/complete-setup")
     public AuthResponse completeSetup(@Valid @RequestBody TwoFactorVerifyRequest request) {
         return authService.completeSetup(request);
+    }
+
+    /**
+     * Re-authenticate a user when their session token has expired.
+     * This endpoint does not require authentication (since token is expired).
+     */
+    @PostMapping("/reauth")
+    public AuthResponse reauthenticate(@Valid @RequestBody ReauthRequest request) {
+        return authService.reauthenticate(request);
     }
 }

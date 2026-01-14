@@ -26,6 +26,8 @@ public class SaleProductMapper {
                 .productCode(saleProduct.getProduct().getCode())
                 .productName(saleProduct.getProduct().getName())
                 .productImageUrl(imageUrl)
+                .brand(saleProduct.getProduct().getBrand() != null ? saleProduct.getProduct().getBrand().toString()
+                        : null)
                 .quantity(saleProduct.getQuantity())
                 .unitPriceExcludingVat(saleProduct.getUnitPriceExcludingVat())
                 .vatRate(saleProduct.getVatRate())

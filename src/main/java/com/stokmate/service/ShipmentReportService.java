@@ -22,6 +22,10 @@ import java.util.UUID;
 public class ShipmentReportService {
 
         private final ShipmentService shipmentService;
+        private final DeliverySessionService deliverySessionService;
+
+        @org.springframework.beans.factory.annotation.Value("${app.frontend.url:http://localhost:5173}")
+        private String frontendUrl;
 
         private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("dd.MM.yyyy");
 
@@ -93,7 +97,7 @@ public class ShipmentReportService {
                                 currentY = drawSignature(cs, x, currentY, contentW, details);
                                 currentY -= 10;
 
-                                drawFooter(cs, x, currentY, contentW, details);
+                                drawFooter(cs, x, currentY, contentW, details, document);
                         }
 
                         ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -370,7 +374,7 @@ public class ShipmentReportService {
         // 5) FOOTER
         // =========================
         private void drawFooter(PDPageContentStream cs, float x, float yTop, float width,
-                        ShipmentDetailsResponse details) throws IOException {
+                        ShipmentDetailsResponse details, PDDocument document) throws IOException {
 
                 float h = 52f;
 
@@ -399,12 +403,47 @@ public class ShipmentReportService {
                         drawText(cs, phoneFit, x + navyLabelW + 10, y - 18, PDType1Font.HELVETICA_BOLD, 8);
                 }
 
+                // Add address below phone if available
+                if (details.getCustomer() != null && details.getCustomer().getAddress() != null
+                                && !details.getCustomer().getAddress().isBlank()) {
+                        String address = normalizeText(details.getCustomer().getAddress());
+                        String addressFit = fitTextToWidth(address, PDType1Font.HELVETICA, 7, grayW - 16);
+                        drawText(cs, addressFit, x + navyLabelW + 10, y - 32, PDType1Font.HELVETICA, 7);
+                }
+
                 // QR
                 float qrX = x + leftW;
                 fillRect(cs, qrX, y - h, qrW, h, 1f, 1f, 1f);
                 drawRect(cs, qrX, y - h, qrW, h, 0.9f);
-                drawCenteredText(cs, normalizeText("KARE KOD"),
-                                qrX, y - (h / 2) + 3, qrW, PDType1Font.HELVETICA_BOLD, 7);
+
+                // Generate and draw QR
+                if (details.getShipmentId() != null) {
+                        try {
+                                com.stokmate.domain.DeliverySession session = deliverySessionService
+                                                .getOrCreateSession(UUID.fromString(details.getShipmentId()));
+                                String qrUrl = frontendUrl + "/delivery-confirm/" + session.getToken();
+                                byte[] qrBytes = generateQrCodeImage(qrUrl, 200, 200);
+
+                                org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject pdImage = org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject
+                                                .createFromByteArray(document, qrBytes, "qr");
+
+                                // Center image in box
+                                float boxRatio = qrW / h;
+                                float imgDim = Math.min(qrW, h) - 4; // padding 2
+                                float imgX = qrX + (qrW - imgDim) / 2;
+                                float imgY = (y - h) + (h - imgDim) / 2;
+
+                                cs.drawImage(pdImage, imgX, imgY, imgDim, imgDim);
+
+                        } catch (Exception e) {
+                                log.error("Failed to generate QR code", e);
+                                drawCenteredText(cs, normalizeText("QR ERROR"),
+                                                qrX, y - (h / 2) + 3, qrW, PDType1Font.HELVETICA_BOLD, 7);
+                        }
+                } else {
+                        drawCenteredText(cs, normalizeText("KARE KOD"),
+                                        qrX, y - (h / 2) + 3, qrW, PDType1Font.HELVETICA_BOLD, 7);
+                }
 
                 // RIGHT approval
                 float rx = qrX + qrW;
@@ -425,8 +464,9 @@ public class ShipmentReportService {
                 float innerBoxY = (y - h) + 6f;
                 drawRect(cs, innerBoxX, innerBoxY, innerBoxW, innerBoxH, 0.8f);
 
-                String approver = (details.getDriver() != null && details.getDriver().getName() != null)
-                                ? normalizeText(details.getDriver().getName())
+                // Use approvedBy instead of driver for approval section
+                String approver = (details.getApprovedBy() != null && !details.getApprovedBy().isBlank())
+                                ? normalizeText(details.getApprovedBy())
                                 : "";
 
                 if (!approver.isBlank()) {
@@ -546,5 +586,15 @@ public class ShipmentReportService {
                 float tw = font.getStringWidth(text) / 1000f * size;
                 float x = rightX - tw;
                 drawText(cs, text, x, y, font, size);
+        }
+
+        private byte[] generateQrCodeImage(String text, int width, int height) throws Exception {
+                com.google.zxing.qrcode.QRCodeWriter barcodeWriter = new com.google.zxing.qrcode.QRCodeWriter();
+                com.google.zxing.common.BitMatrix bitMatrix = barcodeWriter.encode(text,
+                                com.google.zxing.BarcodeFormat.QR_CODE, width, height);
+
+                java.io.ByteArrayOutputStream pngOutputStream = new java.io.ByteArrayOutputStream();
+                com.google.zxing.client.j2se.MatrixToImageWriter.writeToStream(bitMatrix, "PNG", pngOutputStream);
+                return pngOutputStream.toByteArray();
         }
 }

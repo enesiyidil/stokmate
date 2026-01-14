@@ -28,6 +28,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final NotificationService notificationService;
+    private final com.stokmate.mapper.UserMapper userMapper;
 
     public UserProfileResponse getProfile(User user) {
         return toResponse(user);
@@ -167,6 +168,22 @@ public class UserService {
         userRepository.save(user);
     }
 
+    @Transactional
+    public UserResponse toggle2FA(UUID userId, boolean enabled) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BadRequestException("User not found"));
+
+        user.setTotpEnabled(enabled);
+        // If disabling 2FA, also reset the setup flags
+        if (!enabled) {
+            user.setTotpSecret(null);
+            user.setTotpSetupCompleted(false);
+        }
+        userRepository.save(user);
+
+        return toUserResponse(user);
+    }
+
     public String getUserDisplayName(User user) {
         if (user.isDeleted() && user.getDeletedAlias() != null) {
             return user.getDeletedAlias();
@@ -193,6 +210,7 @@ public class UserService {
                 .deleted(user.isDeleted())
                 .deletedAlias(user.getDeletedAlias())
                 .displayName(getUserDisplayName(user))
+                .totpEnabled(user.isTotpEnabled())
                 .build();
     }
 
@@ -200,6 +218,13 @@ public class UserService {
         SecureRandom random = new SecureRandom();
         int code = 100000 + random.nextInt(900000);
         return String.valueOf(code);
+    }
+
+    // User Summary for optimized filtering
+    public List<com.stokmate.dto.user.UserSummaryResponse> getUserSummaries() {
+        return userRepository.findAll().stream()
+                .map(userMapper::toSummaryResponse)
+                .collect(Collectors.toList());
     }
 
     // Sales consultant filtering
