@@ -1,6 +1,5 @@
 package com.stokmate.controller;
 
-import com.stokmate.domain.User;
 import com.stokmate.dto.event.UserEventRequest;
 import com.stokmate.dto.event.UserEventResponse;
 import com.stokmate.service.UserEventService;
