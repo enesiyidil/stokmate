@@ -1,0 +1,9 @@
+package com.stokmate.domain;
+
+public enum NotificationType {
+    SHIPMENT_APPROVAL_PENDING,
+    PRODUCT_ACCEPTANCE_PENDING,
+    SUPPORT_REQUEST_CREATED,
+    SUPPORT_REQUEST_RESOLVED,
+    ORDER_STATUS_CHANGED
+}
