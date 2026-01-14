@@ -1,10 +1,7 @@
 package com.stokmate.controller;
 
-import com.stokmate.domain.OrderStatus;
-import com.stokmate.dto.order.OrderResponse;
 import com.stokmate.dto.shipment.*;
 import com.stokmate.security.UserPrincipal;
-import com.stokmate.service.OrderService;
 import com.stokmate.service.ShipmentReportService;
 import com.stokmate.service.ShipmentService;
 import lombok.RequiredArgsConstructor;
@@ -13,7 +10,6 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -23,7 +19,6 @@ import java.util.UUID;
 public class ShipmentController {
 
     private final ShipmentService shipmentService;
-    private final OrderService orderService;
     private final ShipmentReportService shipmentReportService;
 
     // View/Plan/Complete: LOGISTICS_MANAGER, DIRECTOR, MANAGER, ADMIN,
