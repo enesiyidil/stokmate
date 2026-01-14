@@ -46,6 +46,7 @@ import com.stokmate.domain.ProductArrival;
 import com.stokmate.repository.CustomerRepository;
 import com.stokmate.repository.ProductRepository;
 import com.stokmate.repository.ProductArrivalRepository;
+import com.stokmate.repository.ShipmentRepository;
 import com.stokmate.mapper.CustomerMapper;
 
 @Service
@@ -67,6 +68,7 @@ public class OrderService {
     private final com.stokmate.repository.UserRepository userRepository;
     private final com.stokmate.repository.OrderProductRepository orderProductRepository;
     private final ProductAllocationService productAllocationService;
+    private final ShipmentRepository shipmentRepository;
 
     private static final DateTimeFormatter EXCEL_DATE_FORMATTER = DateTimeFormatter.ofPattern("d.M.yyyy",
             Locale.forLanguageTag("tr"));
@@ -283,25 +285,37 @@ public class OrderService {
 
         Order savedOrder = orderRepository.save(order);
 
+        // Handle SSH order linkage to parent order and shipment
+        if (request.getParentOrderId() != null) {
+            Order parentOrder = orderRepository.findById(request.getParentOrderId())
+                    .orElseThrow(() -> new NotFoundException("Parent order not found"));
+            savedOrder.setParentOrder(parentOrder);
+
+            // If linked to a shipment, set the shipment link
+            if (request.getLinkedShipmentId() != null) {
+                savedOrder.setLinkedShipmentId(request.getLinkedShipmentId());
+                savedOrder.setHidden(true); // Hide SSH orders from main list
+                savedOrder.setStatus(OrderStatus.PENDING_ACCEPTANCE); // SSH orders need product acceptance
+
+                // Link the shipment to this SSH order
+                final Order finalSavedOrder = savedOrder;
+                shipmentRepository.findById(request.getLinkedShipmentId()).ifPresent(shipment -> {
+                    shipment.setLinkedSshOrder(finalSavedOrder);
+                    shipmentRepository.save(shipment);
+                });
+            }
+
+            // Set hidden if explicitly requested
+            if (request.getHidden() != null && request.getHidden()) {
+                savedOrder.setHidden(true);
+            }
+
+            savedOrder = orderRepository.save(savedOrder);
+        }
+
         // DEBUG: Log brands after saving
         savedOrder.getProducts().forEach(
                 p -> log.info("Saved OrderProduct brand: {} for product: {}", p.getBrand(), p.getProductName()));
-
-        // Allocate stock for sales orders (FIFO logic)
-        if (savedOrder.getOrderType() != com.stokmate.domain.OrderType.STOCK) {
-            for (OrderProduct op : savedOrder.getProducts()) {
-                try {
-                    productAllocationService.allocateStock(op,
-                            order.getCreatedBy() != null ? userRepository.findByEmail(order.getCreatedBy()).orElse(null)
-                                    : null);
-                } catch (Exception e) {
-                    log.error("Stock allocation failed for product {}", op.getProductCode(), e);
-                    // Decide if we should rollback transaction or just log.
-                    // For strict inventory, we should probably throw exception to rollback order.
-                    throw new BadRequestException("Stok tahsisi başarısız: " + e.getMessage());
-                }
-            }
-        }
 
         // Log activity
         orderActivityService.logActivity(savedOrder, ActivityType.CREATED,
@@ -320,14 +334,27 @@ public class OrderService {
     }
 
     /**
-     * List orders, optionally filtered by status
+     * List orders, optionally filtered by status.
+     * If includeHidden is true, returns all orders (including SSH/hidden).
+     * If includeHidden is false, returns only non-hidden orders.
      */
-    public List<OrderResponse> listOrdersByStatus(OrderStatus status) {
+    public List<OrderResponse> listOrdersByStatus(OrderStatus status, boolean includeHidden) {
         List<Order> orders;
-        if (status == null) {
-            orders = orderRepository.findAll();
+
+        if (includeHidden) {
+            // Fetch all orders regardless of hidden status
+            if (status == null) {
+                orders = orderRepository.findAll();
+            } else {
+                orders = orderRepository.findByStatus(status);
+            }
         } else {
-            orders = orderRepository.findByStatus(status);
+            // Default behavior: Fetch only visible orders
+            if (status == null) {
+                orders = orderRepository.findByHiddenFalse();
+            } else {
+                orders = orderRepository.findByStatusAndHiddenFalse(status);
+            }
         }
 
         List<OrderResponse> responses = new ArrayList<>();

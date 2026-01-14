@@ -165,11 +165,36 @@ public class ProductAcceptanceService {
 
     @Transactional(readOnly = true)
     public List<PendingProductResponse> getPendingProducts() {
-        // Get all IN_PROGRESS orders
-        List<Order> inProgressOrders = orderRepository.findByStatus(OrderStatus.PENDING_ACCEPTANCE);
+        // Get orders that need product acceptance
+        // PENDING_ACCEPTANCE: Standard orders waiting for acceptance
+        // Also include IN_PROGRESS orders that may have remaining products (includes
+        // SSH orders)
+        List<Order> pendingAcceptanceOrders = orderRepository.findByStatus(OrderStatus.PENDING_ACCEPTANCE);
+        List<Order> inProgressOrders = orderRepository.findByStatus(OrderStatus.IN_PROGRESS);
 
         List<PendingProductResponse> pendingProducts = new ArrayList<>();
 
+        // Process PENDING_ACCEPTANCE orders
+        for (Order order : pendingAcceptanceOrders) {
+            for (OrderProduct op : order.getProducts()) {
+                if (op.getRemainingQuantity().compareTo(BigDecimal.ZERO) > 0) {
+                    PendingProductResponse response = PendingProductResponse.builder()
+                            .orderProductId(op.getId().toString())
+                            .orderId(order.getId().toString())
+                            .orderNumber(order.getOrderNo())
+                            .productName(op.getProductName())
+                            .productCode(op.getProductCode())
+                            .totalQuantity(op.getQuantity())
+                            .acceptedQuantity(op.getAcceptedQuantity())
+                            .remainingQuantity(op.getRemainingQuantity())
+                            .orderDate(order.getOrderDate())
+                            .build();
+                    pendingProducts.add(response);
+                }
+            }
+        }
+
+        // Process IN_PROGRESS orders (includes SSH orders)
         for (Order order : inProgressOrders) {
             for (OrderProduct op : order.getProducts()) {
                 if (op.getRemainingQuantity().compareTo(BigDecimal.ZERO) > 0) {
@@ -182,11 +207,23 @@ public class ProductAcceptanceService {
                             .totalQuantity(op.getQuantity())
                             .acceptedQuantity(op.getAcceptedQuantity())
                             .remainingQuantity(op.getRemainingQuantity())
+                            .orderDate(order.getOrderDate())
                             .build();
                     pendingProducts.add(response);
                 }
             }
         }
+
+        // Sort by orderDate ascending (oldest first)
+        pendingProducts.sort((a, b) -> {
+            if (a.getOrderDate() == null && b.getOrderDate() == null)
+                return 0;
+            if (a.getOrderDate() == null)
+                return 1;
+            if (b.getOrderDate() == null)
+                return -1;
+            return a.getOrderDate().compareTo(b.getOrderDate());
+        });
 
         return pendingProducts;
     }

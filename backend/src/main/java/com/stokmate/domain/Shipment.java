@@ -71,6 +71,20 @@ public class Shipment extends AuditableEntity {
 
     private LocalDateTime approvalDate;
 
+    // Notification flags
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean notified1Day = false;
+
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean notified1Hour = false;
+
+    // Link to SSH order created for this problematic shipment
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "linked_ssh_order_id")
+    private Order linkedSshOrder;
+
+    private String receiverName;
+
     /**
      * Helper method to add ShipmentItem with proper bidirectional relationship
      */

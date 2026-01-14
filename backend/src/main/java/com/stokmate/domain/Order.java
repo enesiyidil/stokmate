@@ -113,6 +113,15 @@ public class Order extends AuditableEntity {
     @JoinColumn(name = "parent_order_id")
     private Order parentOrder; // For SSH sub-orders
 
+    // Hide SSH orders created from problematic shipments from main orders list
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    @Builder.Default
+    private boolean hidden = false;
+
+    // Track which shipment triggered this SSH order (for problematic delivery SSH)
+    @Column(name = "linked_shipment_id")
+    private UUID linkedShipmentId;
+
     @Lob
     @Column(columnDefinition = "TEXT")
     private String orderNotes;

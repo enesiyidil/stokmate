@@ -17,4 +17,6 @@ public class ShipmentCompletionRequest {
     private String deliveryNotes;
     private MultipartFile signedDocument;
     private List<MultipartFile> deliveryPhotos;
+    private String receiverName;
+    private java.time.LocalDateTime actualShipmentDate;
 }

@@ -16,6 +16,11 @@ public interface SaleRepository extends JpaRepository<Sale, UUID> {
 
         Optional<Sale> findBySaleNo(String saleNo);
 
+        long countByCreatedAtBetween(java.time.Instant start, java.time.Instant end);
+
+        long countByCreatedAtBetweenAndStatusIn(java.time.Instant start, java.time.Instant end,
+                        java.util.Collection<SaleStatus> statuses);
+
         @Query("SELECT s FROM Sale s WHERE " +
                         "(:status is null OR s.status = :status) AND " +
                         "(:consultantId is null OR s.salesConsultant.id = :consultantId) " +
