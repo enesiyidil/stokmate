@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Truck, Plus, Edit, Trash2, Search, AlertCircle } from 'lucide-react'
 import { useTopbar } from '../context/TopbarContext'
+import { useAppSelector } from '../hooks/useAuth'
 import {
     useListVehiclesQuery,
     useCreateVehicleMutation,
@@ -11,6 +12,7 @@ import type { VehicleResponse, VehicleRequest } from '../services/vehicleApi'
 
 export default function VehiclesPage() {
     const { setTopbarContent } = useTopbar()
+    const { user } = useAppSelector(state => state.auth)
     const { data: vehicles = [], isLoading } = useListVehiclesQuery()
     const [createVehicle] = useCreateVehicleMutation()
     const [updateVehicle] = useUpdateVehicleMutation()
@@ -26,7 +28,7 @@ export default function VehiclesPage() {
             title: 'Araçlar',
             description: 'Şirket araçlarını görüntüleyin ve yönetin',
             icon: <Truck className="w-8 h-8" />,
-            actions: (
+            actions: !['LOGISTICS_MANAGER'].includes(user?.role || '') ? (
                 <button
                     onClick={() => {
                         setEditingVehicle(null)
@@ -38,7 +40,7 @@ export default function VehiclesPage() {
                     <Plus className="w-5 h-5" />
                     Yeni Araç
                 </button>
-            ),
+            ) : undefined,
         })
 
         return () => setTopbarContent(null)
@@ -115,7 +117,7 @@ export default function VehiclesPage() {
                         <p className="text-amber-700 mb-6">
                             {searchQuery ? 'Arama sonucu bulunamadı' : 'Hemen bir araç ekleyin!'}
                         </p>
-                        {!searchQuery && (
+                        {!searchQuery && !['LOGISTICS_MANAGER'].includes(user?.role || '') && (
                             <button
                                 onClick={() => {
                                     setEditingVehicle(null)
@@ -153,22 +155,25 @@ export default function VehiclesPage() {
                                             <span className="text-amber-700">{new Date(vehicle.createdAt).toLocaleDateString('tr-TR')}</span>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <div className="flex items-center justify-end gap-2">
-                                                <button
-                                                    onClick={() => handleEdit(vehicle)}
-                                                    className="p-2 hover:bg-amber-100 rounded-lg transition-colors group"
-                                                    title="Düzenle"
-                                                >
-                                                    <Edit className="w-4 h-4 text-blue-600 group-hover:text-blue-700" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(vehicle.id, vehicle.licensePlate)}
-                                                    className="p-2 hover:bg-red-50 rounded-lg transition-colors group"
-                                                    title="Sil"
-                                                >
-                                                    <Trash2 className="w-4 h-4 text-red-600 group-hover:text-red-700" />
-                                                </button>
-                                            </div>
+                                            {/* Hide actions for LOGISTICS_MANAGER */}
+                                            {!['LOGISTICS_MANAGER'].includes(user?.role || '') && (
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <button
+                                                        onClick={() => handleEdit(vehicle)}
+                                                        className="p-2 hover:bg-amber-100 rounded-lg transition-colors group"
+                                                        title="Düzenle"
+                                                    >
+                                                        <Edit className="w-4 h-4 text-blue-600 group-hover:text-blue-700" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDelete(vehicle.id, vehicle.licensePlate)}
+                                                        className="p-2 hover:bg-red-50 rounded-lg transition-colors group"
+                                                        title="Sil"
+                                                    >
+                                                        <Trash2 className="w-4 h-4 text-red-600 group-hover:text-red-700" />
+                                                    </button>
+                                                </div>
+                                            )}
                                         </td>
                                     </tr>
                                 ))}

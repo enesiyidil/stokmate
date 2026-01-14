@@ -3,14 +3,20 @@ import { useNavigate } from 'react-router-dom'
 import { useLoginMutation, useLoginWithOtpMutation, useForgotPasswordMutation, useVerify2FAMutation } from '../../api/auth.api'
 import { useAppDispatch } from '../../hooks/useAuth'
 import { setCredentials } from '../../store/authSlice'
-import { Lock, Mail, ArrowRight, Sparkles, Key, CheckCircle, Shield } from 'lucide-react'
+import { Lock, Mail, ArrowRight, Key, CheckCircle, Shield } from 'lucide-react'
 import { useUi } from '../../context/UiContext'
 import { TwoFactorSetupModal } from '../../components/auth/TwoFactorSetupModal'
+import { useLocation } from 'react-router-dom'
 
 export default function LoginPage() {
     const { currentBg, logo } = useUi()
     const navigate = useNavigate()
     const dispatch = useAppDispatch()
+    const location = useLocation()
+    const from = location.state?.from || '/dashboard'
+
+    // ... (rest of hook calls)
+    // ... (rest of hook calls)
     const [login, { isLoading: isLoginLoading }] = useLoginMutation()
     const [loginWithOtp, { isLoading: isOtpLoading }] = useLoginWithOtpMutation()
     const [forgotPassword, { isLoading: isForgotLoading }] = useForgotPasswordMutation()
@@ -38,7 +44,7 @@ export default function LoginPage() {
 
             if (isOtp) {
                 const result = await loginWithOtp({ email, code: password }).unwrap()
-                dispatch(setCredentials(result))
+                dispatch(setCredentials(result as any))
                 // For OTP login, we redirect to profile update to encourage password reset/update
                 navigate('/profile/update')
             } else {
@@ -59,8 +65,8 @@ export default function LoginPage() {
                     setSuccessMessage('Lütfen Google Authenticator kodunuzu girin')
                     return
                 }
-                dispatch(setCredentials(result))
-                navigate('/dashboard')
+                dispatch(setCredentials(result as any))
+                navigate(from, { replace: true })
             }
         } catch (err: any) {
             setError(err?.data?.message || 'Giriş yapılamadı. Bilgilerinizi kontrol edin.')
@@ -79,12 +85,13 @@ export default function LoginPage() {
         }
     }
 
+
     const handleVerifyOtp = async (e: React.FormEvent) => {
         e.preventDefault()
         setError('')
         try {
             const result = await loginWithOtp({ email, code: otpCode }).unwrap()
-            dispatch(setCredentials(result))
+            dispatch(setCredentials(result as any))
             // Always redirect to profile update after OTP login to force password change per requirement
             navigate('/profile/update')
         } catch (err: any) {
@@ -97,8 +104,8 @@ export default function LoginPage() {
         setError('')
         try {
             const result = await verify2FA({ email, code: twoFACode }).unwrap()
-            dispatch(setCredentials(result))
-            navigate('/dashboard')
+            dispatch(setCredentials(result as any))
+            navigate(from, { replace: true })
         } catch (err: any) {
             setError(err?.data?.message || '2FA kodu doğrulanamadı. Lütfen kontrol edin.')
         }

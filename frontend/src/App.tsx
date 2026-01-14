@@ -17,6 +17,8 @@ import OrderReceiptsPage from './pages/OrderReceiptsPage'
 import SalesPage from './pages/sales/SalesPage'
 import RequestsPage from './pages/RequestsPage'
 import SettingsPage from './pages/SettingsPage'
+import SupportRequestsPage from './pages/SupportRequestsPage'
+import AboutPage from './pages/AboutPage'
 import ProtectedRoute from './routes/ProtectedRoute'
 import SidebarLayout from './components/layout/SidebarLayout'
 import ShipmentOperationsPage from './pages/shipment/ShipmentOperationsPage'
@@ -28,8 +30,13 @@ import { EventsPage } from './pages/events/EventsPage'
 import { ProtectedRoute as RoleProtectedRoute } from './components/auth/ProtectedRoute'
 import NotFoundPage from './pages/NotFoundPage'
 import AccessDeniedModal from './components/common/AccessDeniedModal'
+import SessionExpiredModal from './components/auth/SessionExpiredModal'
 
-// Placeholder components
+import DeliveryConfirmPage from './pages/delivery/DeliveryConfirmPage'
+
+// ...
+
+
 
 
 const ReportsPage = () => (
@@ -50,17 +57,21 @@ const Unauthorized = () => (
   </div>
 )
 
+import { ToastProvider } from './context/ToastContext'
+
 function App() {
   return (
-    <>
+    <ToastProvider>
       <AccessDeniedModal />
       <BrowserRouter>
+        <SessionExpiredModal />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/unauthorized" element={<Unauthorized />} />
 
           {/* Protected routes with sidebar */}
           <Route element={<ProtectedRoute />}>
+            <Route path="/delivery-confirm/:token" element={<DeliveryConfirmPage />} />
             <Route element={<SidebarLayout><Outlet /></SidebarLayout>}>
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/profile" element={<ProfilePage />} />
@@ -75,22 +86,26 @@ function App() {
               <Route path="/sales/:id" element={<SaleDetailsPage />} />
               <Route path="/shipment" element={<ShipmentOperationsPage />} />
               <Route path="/shipment/:orderId" element={<ShipmentDetailsPage />} />
-              <Route path="/requests" element={<RequestsPage />} />
+              <Route path="/requests" element={<SupportRequestsPage />} />
               <Route path="/customers" element={<CustomersPage />} />
               <Route path="/reports" element={<ReportsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/support-requests" element={<SupportRequestsPage />} />
+              <Route path="/about" element={<AboutPage />} />
 
-              {/* Admin/Manager only routes */}
-              <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'MANAGER']} />}>
-                <Route path="/users" element={<UsersPage />} />
-                <Route path="/events" element={<EventsPage />} />
+              <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'MANAGER', 'DIRECTOR']} />}>
                 <Route path="/stores" element={<StoresPage />} />
                 <Route path="/stores/:id" element={<StoreDetailsPage />} />
+              </Route>
+
+              <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'MANAGER', 'DIRECTOR']} />}>
+                <Route path="/users" element={<UsersPage />} />
+                <Route path="/events" element={<EventsPage />} />
                 <Route path="/products/:id" element={<ProductDetailsPage />} />
               </Route>
 
               {/* Admin/Manager/Warehouse Manager routes */}
-              <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'MANAGER', 'OPERATIONS_MANAGER', 'LOGISTICS_MANAGER']} />}>
+              <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'MANAGER', 'DIRECTOR', 'OPERATIONS_MANAGER', 'LOGISTICS_MANAGER']} />}>
                 <Route path="/vehicles" element={<VehiclesPage />} />
               </Route>
             </Route>
@@ -100,7 +115,7 @@ function App() {
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </BrowserRouter>
-    </>
+    </ToastProvider>
   )
 }
 

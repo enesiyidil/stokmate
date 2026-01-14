@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { X, Plus, Trash2, FileText, User as UserIcon, Calendar, Save, AlertCircle } from 'lucide-react';
 import { useCreateSaleMutation, type SaleRequest, type SaleProductRequest } from '../../services/saleApi';
 import { useListCustomersQuery } from '../../services/customerApi';
+import { useGetSalesConsultantsQuery } from '../../services/userApi';
 
 import ProductSearchModal from './ProductSearchModal';
 import type { ProductResponse } from '../../services/productApi';
@@ -22,12 +23,15 @@ const AddSaleModal: React.FC<AddSaleModalProps> = ({ isOpen, onClose }) => {
     const { user: currentUser } = useAppSelector(state => state.auth);
     const [createSale, { isLoading }] = useCreateSaleMutation();
     const { data: customers } = useListCustomersQuery();
+    const { data: consultants } = useGetSalesConsultantsQuery();
 
 
     const [formData, setFormData] = useState<Omit<Partial<SaleRequest>, 'products'> & { products: UIProductRequest[] }>({
         saleDate: new Date().toISOString().split('T')[0],
         products: [],
-        salesConsultantId: currentUser?.id
+        salesConsultantId: (currentUser?.role === 'STORE_EMPLOYEE' || currentUser?.role === 'STORE_MANAGER')
+            ? currentUser?.id
+            : ''
     });
 
     const [isProductSearchOpen, setIsProductSearchOpen] = useState(false);
@@ -111,6 +115,7 @@ const AddSaleModal: React.FC<AddSaleModalProps> = ({ isOpen, onClose }) => {
 
                 <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-8 space-y-8">
 
+
                     {/* Top Row: Info */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div className="space-y-2">
@@ -131,7 +136,24 @@ const AddSaleModal: React.FC<AddSaleModalProps> = ({ isOpen, onClose }) => {
                             </select>
                         </div>
 
-
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-amber-900 flex items-center gap-2">
+                                <UserIcon className="w-4 h-4 text-amber-500" />
+                                Satış Danışmanı
+                            </label>
+                            <select
+                                className="w-full p-3 bg-white border border-amber-200 rounded-xl focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400 text-amber-900"
+                                value={formData.salesConsultantId || ''}
+                                onChange={e => setFormData(prev => ({ ...prev, salesConsultantId: e.target.value }))}
+                            >
+                                <option value="">-- Seçiniz --</option>
+                                {consultants?.map(c => (
+                                    <option key={c.id} value={c.id}>
+                                        {c.firstName} {c.lastName}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
 
                         <div className="space-y-2">
                             <label className="text-sm font-medium text-amber-900 flex items-center gap-2">

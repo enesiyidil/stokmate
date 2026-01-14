@@ -17,6 +17,8 @@ export default function ProductAcceptanceModal({ onClose, onSuccess }: ProductAc
         vehiclePlate: '',
         driverInfo: ''
     })
+    const [isManualVehicle, setIsManualVehicle] = useState(false)
+    const [manualVehiclePlate, setManualVehiclePlate] = useState('')
     const [images, setImages] = useState<File[]>([])
     const [error, setError] = useState('')
 
@@ -156,9 +158,17 @@ export default function ProductAcceptanceModal({ onClose, onSuccess }: ProductAc
                             <div>
                                 <label className="block text-sm font-medium text-amber-700 mb-2">Araç Plakası *</label>
                                 <select
-                                    required
-                                    value={formData.vehiclePlate}
-                                    onChange={(e) => setFormData(prev => ({ ...prev, vehiclePlate: e.target.value }))}
+                                    required={!isManualVehicle}
+                                    value={isManualVehicle ? 'MANUEL' : formData.vehiclePlate}
+                                    onChange={(e) => {
+                                        if (e.target.value === 'MANUEL') {
+                                            setIsManualVehicle(true)
+                                            setManualVehiclePlate('')
+                                        } else {
+                                            setIsManualVehicle(false)
+                                            setFormData(prev => ({ ...prev, vehiclePlate: e.target.value }))
+                                        }
+                                    }}
                                     className="w-full px-4 py-3 bg-white border border-amber-300 rounded-xl text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
                                 >
                                     <option value="">-- Araç Seçiniz --</option>
@@ -169,12 +179,16 @@ export default function ProductAcceptanceModal({ onClose, onSuccess }: ProductAc
                                     ))}
                                     <option value="MANUEL">Manuel Giriş (Dış Araç)</option>
                                 </select>
-                                {formData.vehiclePlate === 'MANUEL' && (
+                                {isManualVehicle && (
                                     <input
                                         type="text"
                                         required
                                         placeholder="Araç plakasını girin"
-                                        onChange={(e) => setFormData(prev => ({ ...prev, vehiclePlate: e.target.value }))}
+                                        value={manualVehiclePlate}
+                                        onChange={(e) => {
+                                            setManualVehiclePlate(e.target.value)
+                                            setFormData(prev => ({ ...prev, vehiclePlate: e.target.value }))
+                                        }}
                                         className="w-full px-4 py-3 bg-white border border-amber-300 rounded-xl text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-500 mt-2"
                                     />
                                 )}

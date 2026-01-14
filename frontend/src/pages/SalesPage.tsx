@@ -7,8 +7,8 @@ export default function SalesPage() {
 
     useEffect(() => {
         setTopbarContent({
-            title: 'Satışlar',
-            description: 'Satış işlemlerini görüntüleyin ve yönetin',
+            title: 'Stoklu Satışlar',
+            description: 'Stoklu satış işlemlerini görüntüleyin ve yönetin',
             icon: <ShoppingBag className="w-6 h-6" />,
         })
     }, [setTopbarContent])

@@ -1,257 +1,185 @@
-import React, { useEffect, useState } from 'react';
-import { usePermissions } from '../../hooks/usePermissions';
-import axios from 'axios';
+import { useState } from 'react';
+import { useGetBusinessActivitiesQuery } from '../../services/orderApi';
+import { useTopbar } from '../../context/TopbarContext';
+import { useEffect } from 'react';
+import { Bell, ChevronLeft, ChevronRight, Package, Truck, AlertTriangle, FileText } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
+import { tr } from 'date-fns/locale';
+import FilterSearchBar from '../../components/common/FilterSearchBar';
+import { Link } from 'react-router-dom';
 
-interface PendingAction {
-    id: string;
-    actionType: 'DELETE_VEHICLE' | 'DELETE_STORE' | 'DELETE_CUSTOMER' | 'CANCEL_ORDER';
-    entityType: string;
-    entityId: string;
-    requestedByEmail: string;
-    requestedByName: string;
-    requestedAt: string;
-    status: 'PENDING' | 'APPROVED' | 'REJECTED';
-    reviewedByEmail?: string;
-    reviewedByName?: string;
-    reviewedAt?: string;
-    reviewNotes?: string;
-}
+export function EventsPage() {
+    const { setTopbarContent } = useTopbar();
+    const [page, setPage] = useState(0);
+    const [pageSize] = useState(20);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedType, setSelectedType] = useState<string>('');
 
-const ACTION_TYPE_LABELS: Record<string, string> = {
-    DELETE_VEHICLE: 'Araç Silme',
-    DELETE_STORE: 'Mağaza Silme',
-    DELETE_CUSTOMER: 'Müşteri Silme',
-    CANCEL_ORDER: 'Sipariş İptali'
-};
+    // Fetch data
+    const { data: activitiesData, isLoading } = useGetBusinessActivitiesQuery({
+        page,
+        size: pageSize,
+        search: searchQuery || undefined,
+        category: selectedType || undefined
+    });
 
-const STATUS_LABELS: Record<string, string> = {
-    PENDING: 'Beklemede',
-    APPROVED: 'Onaylandı',
-    REJECTED: 'Reddedildi'
-};
-
-export const EventsPage: React.FC = () => {
-    const { canAccessEventsPage, canApproveActions } = usePermissions();
-    const [pendingActions, setPendingActions] = useState<PendingAction[]>([]);
-    const [allActions, setAllActions] = useState<PendingAction[]>([]);
-    const [showAll, setShowAll] = useState(false);
-    const [loading, setLoading] = useState(true);
-    const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
+    const activities = activitiesData?.content || [];
+    const totalPages = activitiesData?.totalPages || 0;
 
     useEffect(() => {
-        if (!canAccessEventsPage) {
-            window.location.href = '/';
-            return;
-        }
-        loadActions();
-    }, [canAccessEventsPage]);
+        setTopbarContent({
+            title: 'Sistem Olayları',
+            description: 'Tüm sipariş ve satış aktivitelerini görüntüleyin',
+            icon: <Bell className="w-8 h-8 text-amber-500" />,
+            showFiltersInTopbar: false, // Don't show filters in topbar
+            filters: null // Explicitly clear filters
+        });
+        return () => setTopbarContent(null);
+    }, [setTopbarContent]);
 
-    const loadActions = async () => {
-        try {
-            setLoading(true);
-            const token = localStorage.getItem('token');
 
-            // Load pending actions
-            const pendingResponse = await axios.get('/api/pending-actions', {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setPendingActions(Array.isArray(pendingResponse.data) ? pendingResponse.data : []);
+    // Helper to get icon and color based on type
+    const getActivityConfig = (domain: string, type: string) => {
+        if (domain === 'SALE') return { icon: Package, color: 'text-purple-600 bg-purple-50 border-purple-200', label: 'Satış İşlemi' };
 
-            // Load all actions for history
-            const allResponse = await axios.get('/api/pending-actions/all', {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setAllActions(Array.isArray(allResponse.data) ? allResponse.data : []);
-        } catch (error) {
-            console.error('Failed to load actions:', error);
-            setPendingActions([]);
-            setAllActions([]);
-        } finally {
-            setLoading(false);
-        }
+        if (type.includes('ORDER')) return { icon: Package, color: 'text-blue-600 bg-blue-50 border-blue-200', label: 'Sipariş' };
+        if (type.includes('SHIPMENT')) return { icon: Truck, color: 'text-green-600 bg-green-50 border-green-200', label: 'Sevkiyat' };
+        if (type.includes('NOTE')) return { icon: FileText, color: 'text-amber-600 bg-amber-50 border-amber-200', label: 'Not' };
+        if (type.includes('ALERT')) return { icon: AlertTriangle, color: 'text-red-600 bg-red-50 border-red-200', label: 'Uyarı' };
+        return { icon: Bell, color: 'text-gray-600 bg-gray-50 border-gray-200', label: 'Sistem' };
     };
-
-    const handleApprove = async (id: string) => {
-        if (!canApproveActions) {
-            alert('Bu işlem için yetkiniz yok');
-            return;
-        }
-
-        try {
-            const token = localStorage.getItem('token');
-            await axios.post(`/api/pending-actions/${id}/approve`,
-                { reviewNotes: reviewNotes[id] || '' },
-                { headers: { Authorization: `Bearer ${token}` } }
-            );
-            alert('İşlem onaylandı');
-            loadActions();
-            setReviewNotes(prev => {
-                const updated = { ...prev };
-                delete updated[id];
-                return updated;
-            });
-        } catch (error) {
-            console.error('Failed to approve action:', error);
-            alert('Onaylama başarısız');
-        }
-    };
-
-    const handleReject = async (id: string) => {
-        if (!canApproveActions) {
-            alert('Bu işlem için yetkiniz yok');
-            return;
-        }
-
-        try {
-            const token = localStorage.getItem('token');
-            await axios.post(`/api/pending-actions/${id}/reject`,
-                { reviewNotes: reviewNotes[id] || '' },
-                { headers: { Authorization: `Bearer ${token}` } }
-            );
-            alert('İşlemreddedildi');
-            loadActions();
-            setReviewNotes(prev => {
-                const updated = { ...prev };
-                delete updated[id];
-                return updated;
-            });
-        } catch (error) {
-            console.error('Failed to reject action:', error);
-            alert('Reddetme başarısız');
-        }
-    };
-
-    const formatDate = (dateString: string) => {
-        return new Date(dateString).toLocaleString('tr-TR');
-    };
-
-    const displayActions = showAll ? allActions : pendingActions;
-
-    if (loading) {
-        return (
-            <div className="flex items-center justify-center h-full">
-                <div className="text-gray-600">Yükleniyor...</div>
-            </div>
-        );
-    }
 
     return (
-        <div className="p-6">
-            <div className="mb-6 flex justify-between items-center">
-                <h1 className="text-2xl font-bold text-gray-900">Olaylar ve Onaylar</h1>
-                <div className="flex gap-2">
-                    <button
-                        onClick={() => setShowAll(false)}
-                        className={`px-4 py-2 rounded-lg font-medium transition-colors ${!showAll
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                            }`}
-                    >
-                        Bekleyen ({pendingActions.length})
-                    </button>
-                    <button
-                        onClick={() => setShowAll(true)}
-                        className={`px-4 py-2 rounded-lg font-medium transition-colors ${showAll
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                            }`}
-                    >
-                        Tümü ({allActions.length})
-                    </button>
-                </div>
-            </div>
+        <div className="space-y-6">
+            {/* Filter Bar */}
+            <FilterSearchBar
+                searchPlaceholder="Kullanıcı, açıklama veya referans no ara..."
+                searchValue={searchQuery}
+                onSearchChange={setSearchQuery}
+                filters={[
+                    {
+                        label: 'Kategori',
+                        value: selectedType,
+                        onChange: setSelectedType,
+                        options: [
+                            { key: '', label: 'Tümü' },
+                            { key: 'ORDER', label: 'Siparişler' },
+                            { key: 'SALE', label: 'Satışlar' }
+                        ]
+                    }
+                ]}
+            />
 
-            {displayActions.length === 0 ? (
-                <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
-                    {showAll ? 'Henüz hiç işlem yok' : 'Bekleyen işlem yok'}
-                </div>
-            ) : (
-                <div className="bg-white rounded-lg shadow overflow-hidden">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    İşlem Tipi
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Talep Eden
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Talep Tarihi
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Durum
-                                </th>
-                                {canApproveActions && !showAll && (
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        İşlemler
-                                    </th>
-                                )}
-                            </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                            {displayActions.map((action) => (
-                                <tr key={action.id}>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="text-sm font-medium text-gray-900">
-                                            {ACTION_TYPE_LABELS[action.actionType]}
-                                        </div>
-                                        <div className="text-sm text-gray-500">
-                                            {action.entityType}
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="text-sm text-gray-900">{action.requestedByName}</div>
-                                        <div className="text-sm text-gray-500">{action.requestedByEmail}</div>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        {formatDate(action.requestedAt)}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <span
-                                            className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${action.status === 'PENDING'
-                                                ? 'bg-yellow-100 text-yellow-800'
-                                                : action.status === 'APPROVED'
-                                                    ? 'bg-green-100 text-green-800'
-                                                    : 'bg-red-100 text-red-800'
-                                                }`}
-                                        >
-                                            {STATUS_LABELS[action.status]}
-                                        </span>
-                                    </td>
-                                    {canApproveActions && action.status === 'PENDING' && !showAll && (
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                            <div className="flex gap-2 items-center">
-                                                <input
-                                                    type="text"
-                                                    placeholder="Not (opsiyonel)"
-                                                    value={reviewNotes[action.id] || ''}
-                                                    onChange={(e) =>
-                                                        setReviewNotes(prev => ({ ...prev, [action.id]: e.target.value }))
-                                                    }
-                                                    className="border rounded px-2 py-1 text-sm"
-                                                />
-                                                <button
-                                                    onClick={() => handleApprove(action.id)}
-                                                    className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700"
-                                                >
-                                                    Onayla
-                                                </button>
-                                                <button
-                                                    onClick={() => handleReject(action.id)}
-                                                    className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700"
-                                                >
-                                                    Reddet
-                                                </button>
-                                            </div>
-                                        </td>
-                                    )}
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            )}
-        </div>
+            {/* Content Card */}
+            <div className="bg-white border border-amber-200 rounded-2xl shadow-lg overflow-hidden backdrop-blur-md bg-opacity-90">
+
+                {isLoading ? (
+                    <div className="p-12 text-center text-gray-500">Yükleniyor...</div>
+                ) : activities.length === 0 ? (
+                    <div className="p-12 text-center text-gray-500 flex flex-col items-center">
+                        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                            <Bell className="w-8 h-8 text-gray-400" />
+                        </div>
+                        <h3 className="text-lg font-medium text-gray-900">Kayıt Bulunamadı</h3>
+                        <p className="text-sm text-gray-500 mt-1">Arama kriterlerinize uygun olay bulunmamaktadır.</p>
+                    </div>
+                ) : (
+                    <>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="bg-amber-50/50 border-b border-amber-100/50 text-xs uppercase text-gray-500 font-semibold tracking-wider">
+                                        <th className="px-6 py-4">Kullanıcı</th>
+                                        <th className="px-6 py-4">İşlem Türü</th>
+                                        <th className="px-6 py-4">Açıklama</th>
+                                        <th className="px-6 py-4">İlgili Kayıt</th>
+                                        <th className="px-6 py-4 text-right">Zaman</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {activities.map((activity) => {
+                                        const config = getActivityConfig(activity.domain, activity.activityType);
+                                        const Icon = config.icon;
+                                        return (
+                                            <tr key={activity.id} className="hover:bg-amber-50/30 transition-colors group">
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 bg-gradient-to-br from-amber-600 to-orange-600 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm">
+                                                            {activity.userFullName.charAt(0)}
+                                                        </div>
+                                                        <div>
+                                                            <div className="font-medium text-gray-900">{activity.userFullName}</div>
+                                                            <div className="text-xs text-gray-500">{activity.userEmail}</div>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border ${config.color} text-xs font-medium`}>
+                                                        <Icon className="w-3.5 h-3.5" />
+                                                        {config.label}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className="text-sm text-gray-700 font-medium">{activity.description}</span>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    {activity.referenceNo ? (
+                                                        <Link
+                                                            to={activity.domain === 'SALE' ? `/sales/${activity.referenceId}` : `/orders/${activity.referenceId}`}
+                                                            state={{ from: '/events' }}
+                                                            className="inline-flex items-center px-2 py-1 bg-gray-100 hover:bg-amber-100 text-gray-600 hover:text-amber-700 rounded text-xs font-mono transition-colors"
+                                                        >
+                                                            #{activity.referenceNo}
+                                                        </Link>
+                                                    ) : (
+                                                        <span className="text-xs text-gray-400">-</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <div className="text-sm text-gray-500 font-medium">
+                                                        {formatDistanceToNow(new Date(activity.createdAt), { addSuffix: true, locale: tr })}
+                                                    </div>
+                                                    <div className="text-[10px] text-gray-400 mt-0.5">
+                                                        {new Date(activity.createdAt).toLocaleString('tr-TR')}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Pagination */}
+                        {totalPages > 1 && (
+                            <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-gray-50/30">
+                                <div className="text-sm text-gray-500">
+                                    Toplam <span className="font-medium text-gray-900">{activitiesData?.totalElements}</span> kayıttan <span className="font-medium text-gray-900">{(page * pageSize) + 1}</span> - <span className="font-medium text-gray-900">{Math.min((page + 1) * pageSize, activitiesData?.totalElements || 0)}</span> arası gösteriliyor
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => setPage(p => Math.max(0, p - 1))}
+                                        disabled={page === 0}
+                                        className="p-2 rounded-lg border border-gray-200 hover:bg-white hover:border-amber-300 disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:border-gray-200 transition-all"
+                                    >
+                                        <ChevronLeft className="w-4 h-4 text-gray-600" />
+                                    </button>
+                                    <span className="text-sm font-medium text-gray-700 px-2">
+                                        Sayfa {page + 1} / {totalPages}
+                                    </span>
+                                    <button
+                                        onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                                        disabled={page >= totalPages - 1}
+                                        className="p-2 rounded-lg border border-gray-200 hover:bg-white hover:border-amber-300 disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:border-gray-200 transition-all"
+                                    >
+                                        <ChevronRight className="w-4 h-4 text-gray-600" />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </>
+                )}
+            </div>
+        </div >
     );
-};
+}

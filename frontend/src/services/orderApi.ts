@@ -110,6 +110,28 @@ export interface OrderResponse {
     deliveryLastUpdatedAt?: string
     // Brand info
     brand?: string
+    // SSH from problematic shipment fields
+    parentOrderId?: string
+    hidden?: boolean
+    linkedShipmentId?: string
+    childSshOrders?: SshOrderSummary[]
+    problemShipments?: ProblemShipmentSummary[]
+}
+
+export interface SshOrderSummary {
+    id: string
+    orderNo: string
+    linkedShipmentId: string
+    problemType: string
+    orderDate: string
+}
+
+export interface ProblemShipmentSummary {
+    shipmentId: string
+    problemType: string
+    completedAt: string
+    hasSshOrder: boolean
+    sshOrderId?: string
 }
 
 export interface OrderProductExcelRow {
@@ -188,19 +210,45 @@ export interface OrderCreateRequest {
     products: OrderProductCreateRequest[]
     customerId?: string // Use existing customer
     customerData?: CustomerRequest // Create new customer
+    // SSH order fields
+    parentOrderId?: string
+    linkedShipmentId?: string
+    hidden?: boolean
 }
 
 export interface InvoiceUrlResponse {
     url: string
 }
 
+// Dashboard Stats DTO
+export interface StatItem {
+    value: string;
+    subValue: string;
+    trend: string;
+    trendType: 'up' | 'down' | 'neutral';
+}
+
+export interface DashboardStatsDTO {
+    totalOrders: StatItem;
+    activeStaff: StatItem;
+    totalShipments: StatItem;
+    totalSales: StatItem;
+}
+
 export const orderApi = api.injectEndpoints({
     endpoints: (builder) => ({
+        // Get dashboard stats
+        getDashboardStats: builder.query<DashboardStatsDTO, void>({
+            query: () => '/dashboard/stats',
+        }),
         // List all orders or filter by status
-        listOrders: builder.query<OrderResponse[], { status?: OrderStatus }>({
-            query: ({ status }) => ({
+        listOrders: builder.query<OrderResponse[], { status?: OrderStatus; includeHidden?: boolean }>({
+            query: ({ status, includeHidden }) => ({
                 url: '/orders',
-                params: status ? { status } : {},
+                params: {
+                    ...(status && { status }),
+                    ...(includeHidden && { includeHidden }),
+                },
             }),
             providesTags: ['Orders'],
         }),
@@ -327,8 +375,102 @@ export const orderApi = api.injectEndpoints({
         getOrderEvents: builder.query<OrderEventResponse[], string>({
             query: (orderId) => `/orders/${orderId}/events`,
         }),
+
+        // Get order notes
+        getOrderNotes: builder.query<OrderNoteResponse[], string>({
+            query: (orderId) => `/orders/${orderId}/notes`,
+            providesTags: ['Orders'],
+        }),
+
+        // Add note to order
+        addOrderNote: builder.mutation<OrderNoteResponse, { orderId: string; content: string }>({
+            query: ({ orderId, content }) => ({
+                url: `/orders/${orderId}/notes`,
+                method: 'POST',
+                body: { content },
+            }),
+            invalidatesTags: ['Orders'],
+        }),
+
+        // Strike through note
+        strikeOrderNote: builder.mutation<OrderNoteResponse, { orderId: string; noteId: string }>({
+            query: ({ orderId, noteId }) => ({
+                url: `/orders/${orderId}/notes/${noteId}/strike`,
+                method: 'PUT',
+            }),
+            invalidatesTags: ['Orders'],
+        }),
+        // Get recent system activities
+        getRecentSystemActivities: builder.query<OrderActivityResponse[], void>({
+            query: () => '/order-activities/recent',
+        }),
+
+        // Get all system activities (paginated)
+        getAllSystemActivities: builder.query<{ content: OrderActivityResponse[]; totalElements: number; totalPages: number }, { page: number; size: number; category?: string; search?: string }>({
+            query: ({ page, size, category, search }) => ({
+                url: '/order-activities',
+                params: {
+                    page,
+                    size,
+                    category,
+                    search,
+                },
+            }),
+            providesTags: ['Orders'],
+        }),
+
+        // Get unified business activities
+        getBusinessActivities: builder.query<{ content: BusinessActivity[]; totalElements: number; totalPages: number }, { page: number; size: number; category?: string; search?: string }>({
+            query: ({ page, size, category, search }) => ({
+                url: '/business-activities',
+                params: {
+                    page,
+                    size,
+                    category,
+                    search,
+                },
+            }),
+            providesTags: ['Orders'], // Re-using Orders tag for simplicity, ideally should be generic
+        }),
     }),
 })
+
+export interface BusinessActivity {
+    id: string
+    domain: 'ORDER' | 'SALE'
+    activityType: string
+    description: string
+    createdAt: string
+    userId: string
+    userFullName: string
+    userEmail: string
+    referenceId: string
+    referenceNo: string
+}
+
+export interface OrderActivityResponse {
+    id: string
+    orderId: string
+    orderNo: string
+    userId: string
+    userEmail: string
+    userFullName: string
+    activityType: string
+    description: string
+    createdAt: string
+}
+
+export interface OrderNoteResponse {
+    id: string
+    content: string
+    strikethrough: boolean
+    createdByName: string
+    createdByEmail: string
+    createdAt: string
+    strikethroughByName?: string
+    strikethroughAt?: string
+}
+
 export const {
     useListOrdersQuery,
     useGetOrderQuery,
@@ -346,4 +488,11 @@ export const {
     useUpdateSalesConsultantMutation,
     useUpdateBrandMutation,
     useGetOrderEventsQuery,
+    useGetOrderNotesQuery,
+    useAddOrderNoteMutation,
+    useStrikeOrderNoteMutation,
+    useGetRecentSystemActivitiesQuery,
+    useGetAllSystemActivitiesQuery,
+    useGetBusinessActivitiesQuery,
+    useGetDashboardStatsQuery,
 } = orderApi

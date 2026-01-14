@@ -1,20 +1,39 @@
 import { useState, useEffect, useRef } from 'react'
-import { Package, Plus, Search, Edit2, Trash2, AlertCircle, X, Eye } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { Package, Plus, Edit2, Trash2, AlertCircle, X, Eye } from 'lucide-react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useGetProductsQuery, useDeleteProductMutation, useUploadProductImageMutation } from '../../services/productApi'
 import type { ProductResponse } from '../../services/productApi'
 import type { Brand } from '../../constants/brandConstants'
 import AddProductModal from '../../components/products/AddProductModal'
 import ImageCropperModal from '../../components/products/ImageCropperModal'
 import { useTopbar } from '../../context/TopbarContext'
+import { useAppSelector } from '../../hooks/useAuth'
+import { useToast } from '../../context/ToastContext'
 import BrandBadge from '../../components/common/BrandBadge'
+import FilterSearchBar from '../../components/common/FilterSearchBar'
+import ConfirmModal from '../../components/common/ConfirmModal'
 
 export default function ProductsPage() {
     const navigate = useNavigate()
+    const { user } = useAppSelector(state => state.auth)
+    const [searchParams] = useSearchParams()
     const [showAddModal, setShowAddModal] = useState(false)
     const [editingProduct, setEditingProduct] = useState<ProductResponse | null>(null)
     const [searchQuery, setSearchQuery] = useState('')
     const [page, setPage] = useState(0)
+    const { success, error } = useToast()
+
+    // Confrim Modal State
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+    const [productToDelete, setProductToDelete] = useState<string | null>(null)
+
+    // Filter states
+    const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL')
+    const [stockFilter, setStockFilter] = useState<'ALL' | 'IN_STOCK' | 'OUT_OF_STOCK'>('ALL')
+    // Initialize brand filter from URL param if present
+    const [brandFilter, setBrandFilter] = useState<'ALL' | 'OAK' | 'MAPLE' | 'PINE' | 'MARKASIZ'>(
+        (searchParams.get('brand') as any) || 'ALL'
+    )
 
     // Image upload states
     const fileInputRef = useRef<HTMLInputElement>(null)
@@ -28,33 +47,44 @@ export default function ProductsPage() {
     const { setTopbarContent } = useTopbar()
     const { data, isLoading, refetch } = useGetProductsQuery({ page, size: 20 })
     const [deleteProduct] = useDeleteProductMutation()
-    const [uploadImage, { isLoading: isUploading }] = useUploadProductImageMutation()
+    const [uploadImage] = useUploadProductImageMutation()
 
     // Set topbar content
     useEffect(() => {
         setTopbarContent({
-            title: 'Ürünler',
-            description: 'Ürünleri görüntüleyin ve yönetin',
+            title: 'Stoklu Ürünler',
+            description: 'Stoklu ürünleri görüntüleyin ve yönetin',
             icon: <Package className="w-8 h-8" />,
             actions: (
-                <button
-                    onClick={() => setShowAddModal(true)}
-                    className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-amber-700 to-orange-700 text-white rounded-xl hover:from-amber-800 hover:to-orange-800 transition-all duration-300 shadow-lg hover:shadow-xl"
-                >
-                    <Plus className="w-5 h-5" />
-                    Yeni Ürün Ekle
-                </button>
+                !['STORE_MANAGER', 'STORE_EMPLOYEE', 'LOGISTICS_MANAGER'].includes(user?.role || '') ? (
+                    <button
+                        onClick={() => setShowAddModal(true)}
+                        className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-amber-700 to-orange-700 text-white rounded-xl hover:from-amber-800 hover:to-orange-800 transition-all duration-300 shadow-lg hover:shadow-xl"
+                    >
+                        <Plus className="w-5 h-5" />
+                        Yeni Ürün Ekle
+                    </button>
+                ) : undefined
             )
         })
     }, [setTopbarContent])
 
-    const handleDelete = async (id: string) => {
-        if (!confirm('Bu ürünü silmek istediğinizden emin misiniz?')) return
+    const handleDeleteClick = (id: string) => {
+        setProductToDelete(id)
+        setShowDeleteConfirm(true)
+    }
+
+    const handleConfirmDelete = async () => {
+        if (!productToDelete) return
+
         try {
-            await deleteProduct(id).unwrap()
-        } catch (error) {
-            console.error('Ürün silinirken hata oluştu:', error)
-            alert('Ürün silinirken bir hata oluştu')
+            await deleteProduct(productToDelete).unwrap()
+            success('Ürün başarıyla silindi')
+            setShowDeleteConfirm(false)
+            setProductToDelete(null)
+        } catch (err) {
+            console.error('Ürün silinirken hata oluştu:', err)
+            error('Ürün silinirken bir hata oluştu')
         }
     }
 
@@ -90,35 +120,88 @@ export default function ProductsPage() {
             setSelectedImage(null)
             setSelectedProductForImage(null)
             refetch()
-        } catch (error) {
-            console.error('Resim yüklenirken hata oluştu:', error)
-            alert('Resim yüklenirken bir hata oluştu')
+        } catch (err) {
+            console.error('Resim yüklenirken hata oluştu:', err)
+            error('Resim yüklenirken bir hata oluştu')
         }
     }
 
-    const filteredProducts = data?.content.filter(product =>
-        product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.brand?.toLowerCase().includes(searchQuery.toLowerCase())
-    ) || []
+    const filteredProducts = data?.content.filter(product => {
+        // Search filter
+        if (searchQuery.trim()) {
+            const query = searchQuery.toLocaleLowerCase('tr-TR')
+            const matchesName = product.name.toLocaleLowerCase('tr-TR').includes(query)
+            const matchesCode = product.code.toLocaleLowerCase('tr-TR').includes(query)
+            const matchesBrand = product.brand?.toLocaleLowerCase('tr-TR').includes(query)
+            if (!matchesName && !matchesCode && !matchesBrand) return false
+        }
+
+        // Status filter
+        if (statusFilter !== 'ALL') {
+            if (statusFilter === 'ACTIVE' && !product.activeForSale) return false
+            if (statusFilter === 'INACTIVE' && product.activeForSale) return false
+        }
+
+        // Stock filter
+        if (stockFilter !== 'ALL') {
+            if (stockFilter === 'IN_STOCK' && product.stockQuantity <= 0) return false
+            if (stockFilter === 'OUT_OF_STOCK' && product.stockQuantity > 0) return false
+        }
+
+        // Brand filter
+        if (brandFilter !== 'ALL') {
+            if (brandFilter === 'MARKASIZ') {
+                if (product.brand && product.brand !== '') return false
+            } else {
+                if (product.brand !== brandFilter) return false
+            }
+        }
+
+        return true
+    }) || []
 
     return (
         <div className="p-6 space-y-6">
-            {/* Search Bar */}
-            <div className="backdrop-blur-sm bg-white/95 border border-amber-200 rounded-2xl p-4 shadow-lg">
-                <div className="flex gap-4">
-                    <div className="flex-1 relative">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-amber-600" />
-                        <input
-                            type="text"
-                            placeholder="Ürün adı, kodu veya marka ile ara..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pl-12 pr-4 py-3 bg-white border border-amber-300 rounded-xl text-amber-900 placeholder-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                        />
-                    </div>
-                </div>
-            </div>
+            {/* Filter and Search Bar */}
+            <FilterSearchBar
+                filters={[
+                    {
+                        label: 'Durum',
+                        value: statusFilter,
+                        onChange: setStatusFilter,
+                        options: [
+                            { key: 'ALL', label: 'Tümü' },
+                            { key: 'ACTIVE', label: 'Aktif', activeColor: 'bg-green-600' },
+                            { key: 'INACTIVE', label: 'Pasif', activeColor: 'bg-red-600' }
+                        ]
+                    },
+                    {
+                        label: 'Stok',
+                        value: stockFilter,
+                        onChange: setStockFilter,
+                        options: [
+                            { key: 'ALL', label: 'Tümü' },
+                            { key: 'IN_STOCK', label: 'Var', activeColor: 'bg-green-600' },
+                            { key: 'OUT_OF_STOCK', label: 'Bitmiş', activeColor: 'bg-red-600' }
+                        ]
+                    },
+                    {
+                        label: 'Marka',
+                        value: brandFilter,
+                        onChange: setBrandFilter,
+                        options: [
+                            { key: 'ALL', label: 'Tümü' },
+                            { key: 'OAK', label: 'Doğtaş', activeColor: 'bg-red-600' },
+                            { key: 'MAPLE', label: 'Maple', activeColor: 'bg-blue-600' },
+                            { key: 'PINE', label: 'Pine', activeColor: 'bg-purple-600' },
+                            { key: 'MARKASIZ', label: 'Markasız', activeColor: 'bg-gray-600' }
+                        ]
+                    }
+                ]}
+                searchPlaceholder="Ürün adı, kodu veya marka ile ara..."
+                searchValue={searchQuery}
+                onSearchChange={setSearchQuery}
+            />
 
             {/* Products Table */}
             <div className="backdrop-blur-sm bg-white/95 border border-amber-200 rounded-2xl overflow-hidden shadow-lg">
@@ -150,7 +233,9 @@ export default function ProductsPage() {
                                     <th className="text-left p-4 text-amber-900 font-semibold">Marka</th>
                                     <th className="text-left p-4 text-amber-900 font-semibold">Stok</th>
                                     <th className="text-left p-4 text-amber-900 font-semibold">Durum</th>
-                                    <th className="text-right p-4 text-amber-900 font-semibold">İşlemler</th>
+                                    {!['STORE_MANAGER', 'STORE_EMPLOYEE', 'LOGISTICS_MANAGER'].includes(user?.role || '') && (
+                                        <th className="text-right p-4 text-amber-900 font-semibold">İşlemler</th>
+                                    )}
                                 </tr>
                             </thead>
                             <tbody>
@@ -192,7 +277,7 @@ export default function ProductsPage() {
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="p-4">
+                                        <td className="px-6 py-4">
                                             <BrandBadge brand={product.brand as Brand} />
                                         </td>
                                         <td className="p-4">
@@ -212,32 +297,34 @@ export default function ProductsPage() {
                                                 </span>
                                             )}
                                         </td>
-                                        <td className="p-4">
-                                            <div className="flex items-center justify-end gap-2">
-                                                {/* Eye Icon for Details - Admin/Manager only */}
-                                                <button
-                                                    onClick={() => navigate(`/products/${product.id}`)}
-                                                    className="p-2 hover:bg-blue-100 rounded-lg transition-colors group"
-                                                    title="Detayları Gör"
-                                                >
-                                                    <Eye className="w-4 h-4 text-blue-600 group-hover:text-blue-700" />
-                                                </button>
-                                                <button
-                                                    onClick={() => setEditingProduct(product)}
-                                                    className="p-2 hover:bg-amber-100 rounded-lg transition-colors group"
-                                                    title="Düzenle"
-                                                >
-                                                    <Edit2 className="w-4 h-4 text-amber-700 group-hover:text-amber-900" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(product.id)}
-                                                    className="p-2 hover:bg-red-100 rounded-lg transition-colors group"
-                                                    title="Sil"
-                                                >
-                                                    <Trash2 className="w-4 h-4 text-red-600 group-hover:text-red-700" />
-                                                </button>
-                                            </div>
-                                        </td>
+                                        {!['STORE_MANAGER', 'STORE_EMPLOYEE', 'LOGISTICS_MANAGER'].includes(user?.role || '') && (
+                                            <td className="p-4">
+                                                <div className="flex items-center justify-end gap-2">
+                                                    {/* Eye Icon for Details - Admin/Manager only */}
+                                                    <button
+                                                        onClick={() => navigate(`/products/${product.id}`)}
+                                                        className="p-2 hover:bg-blue-100 rounded-lg transition-colors group"
+                                                        title="Detayları Gör"
+                                                    >
+                                                        <Eye className="w-4 h-4 text-blue-600 group-hover:text-blue-700" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setEditingProduct(product)}
+                                                        className="p-2 hover:bg-amber-100 rounded-lg transition-colors group"
+                                                        title="Düzenle"
+                                                    >
+                                                        <Edit2 className="w-4 h-4 text-amber-700 group-hover:text-amber-900" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDeleteClick(product.id)}
+                                                        className="p-2 hover:bg-red-100 rounded-lg transition-colors group"
+                                                        title="Sil"
+                                                    >
+                                                        <Trash2 className="w-4 h-4 text-red-600 group-hover:text-red-700" />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        )}
                                     </tr>
                                 ))}
                             </tbody>
@@ -334,6 +421,18 @@ export default function ProductsPage() {
                     </div>
                 </div>
             )}
+
+            <ConfirmModal
+                isOpen={showDeleteConfirm}
+                onClose={() => setShowDeleteConfirm(false)}
+                onCancel={() => setShowDeleteConfirm(false)}
+                onConfirm={handleConfirmDelete}
+                title="Ürünü Sil"
+                message="Bu ürünü silmek istediğinizden emin misiniz? Bu işlem geri alınamaz."
+                confirmText="Sil"
+                cancelText="İptal"
+                type="danger"
+            />
         </div>
     )
 }

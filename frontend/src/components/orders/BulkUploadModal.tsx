@@ -278,6 +278,7 @@ export default function BulkUploadModal({ onClose, onSuccess }: Props) {
                         productCode: p.productCode,
                         productName: p.productName,
                         quantity: p.quantity,
+                        brand: selectedBrand,
                         // Include all price/discount fields
                         specName: p.specName,
                         productGroupDefinition: p.productGroupDefinition,

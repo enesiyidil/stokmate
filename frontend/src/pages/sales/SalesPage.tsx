@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-    Search, Plus, FileText, ChevronRight,
+    Plus, FileText, ChevronRight,
     Calendar, User, CreditCard, CheckCircle, XCircle, Clock
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useGetSalesQuery, SaleStatus } from '../../services/saleApi';
-import { useGetAllUsersQuery } from '../../services/userApi';
+import { useGetUserSummariesQuery } from '../../services/userApi';
 import AddSaleModal from './AddSaleModal';
 import { useTopbar } from '../../context/TopbarContext';
+import FilterSearchBar from '../../components/common/FilterSearchBar';
 
 const SalesPage: React.FC = () => {
     const navigate = useNavigate();
@@ -16,11 +17,11 @@ const SalesPage: React.FC = () => {
     // State
     const [statusFilter, setStatusFilter] = useState<SaleStatus | 'ALL'>('ALL');
     const [consultantFilter, setConsultantFilter] = useState<string>('ALL');
+    const [brandFilter, setBrandFilter] = useState<'ALL' | 'OAK' | 'MAPLE' | 'PINE' | 'MARKASIZ'>('ALL');
     const [searchTerm, setSearchTerm] = useState('');
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-
     // Queries
-    const { data: users } = useGetAllUsersQuery();
+    const { data: users } = useGetUserSummariesQuery();
     const { data: allSales, isLoading } = useGetSalesQuery({
         status: statusFilter === 'ALL' ? undefined : statusFilter,
         consultantId: consultantFilter === 'ALL' ? undefined : consultantFilter
@@ -33,17 +34,42 @@ const SalesPage: React.FC = () => {
 
     const filteredSales = useMemo(() => {
         if (!allSales) return [];
-        return allSales.filter(sale =>
-            sale.saleNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            sale.customerName.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-    }, [allSales, searchTerm]);
+        return allSales.filter(sale => {
+            // Search filter - includes product name/code, consultant name
+            if (searchTerm.trim()) {
+                const query = searchTerm.toLocaleLowerCase('tr-TR');
+                const matchesSaleNo = sale.saleNo.toLocaleLowerCase('tr-TR').includes(query);
+                const matchesContractNo = sale.contractNo?.toLocaleLowerCase('tr-TR').includes(query);
+                const matchesCustomer = sale.customerName.toLocaleLowerCase('tr-TR').includes(query);
+                const matchesConsultant = sale.salesConsultantName?.toLocaleLowerCase('tr-TR').includes(query);
+                const matchesProduct = sale.products?.some((p) =>
+                    p.productName?.toLocaleLowerCase('tr-TR').includes(query) ||
+                    p.productCode?.toLocaleLowerCase('tr-TR').includes(query) ||
+                    p.brand?.toLocaleLowerCase('tr-TR').includes(query)
+                );
+                if (!matchesSaleNo && !matchesContractNo && !matchesCustomer && !matchesConsultant && !matchesProduct) return false;
+            }
+
+            // Brand filter - filter by products' brands
+            if (brandFilter !== 'ALL') {
+                const hasMatchingBrand = sale.products?.some((p) => {
+                    if (brandFilter === 'MARKASIZ') {
+                        return !p.brand || p.brand === '';
+                    }
+                    return p.brand === brandFilter;
+                });
+                if (!hasMatchingBrand) return false;
+            }
+
+            return true;
+        });
+    }, [allSales, searchTerm, brandFilter]);
 
     // Topbar Configuration
     useEffect(() => {
         setTopbarContent({
-            title: 'Satışlar',
-            description: 'Müşteri satışlarını yönetin ve takip edin',
+            title: 'Stoklu Satışlar',
+            description: 'Stoklu satışlarınızı yönetin ve takip edin',
             icon: <FileText className="w-8 h-8" />,
             actions: (
                 <button
@@ -53,58 +79,9 @@ const SalesPage: React.FC = () => {
                     <Plus className="w-5 h-5" />
                     Yeni Satış
                 </button>
-            ),
-            filters: (
-                <div className="flex items-start gap-6 flex-wrap">
-                    {/* Status Filters */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-amber-200 text-sm font-medium">Durum:</span>
-                        <button
-                            onClick={() => setStatusFilter('ALL')}
-                            className={`px-3 py-1.5 rounded-lg text-sm transition-all ${statusFilter === 'ALL'
-                                ? 'bg-amber-600 text-white shadow-md'
-                                : 'bg-amber-950/40 text-amber-200 hover:bg-amber-900/50'
-                                }`}
-                        >
-                            Tümü
-                        </button>
-                        {(Object.keys(SaleStatus) as Array<keyof typeof SaleStatus>).map((status) => (
-                            <button
-                                key={status}
-                                onClick={() => setStatusFilter(SaleStatus[status])}
-                                className={`px-3 py-1.5 rounded-lg text-sm transition-all ${statusFilter === SaleStatus[status]
-                                    ? 'bg-amber-600 text-white shadow-md'
-                                    : 'bg-amber-950/40 text-amber-200 hover:bg-amber-900/50'
-                                    }`}
-                            >
-                                {status === 'DEVAM_EDIYOR' ? 'Devam Edenler' :
-                                    status === 'TAMAMLANDI' ? 'Tamamlananlar' : 'İptal Edilenler'}
-                            </button>
-                        ))}
-                    </div>
-
-                    <div className="h-8 w-px bg-amber-700/30"></div>
-
-                    {/* Consultant Filter */}
-                    <div className="flex items-center gap-2">
-                        <span className="text-amber-200 text-sm font-medium">Danışman:</span>
-                        <select
-                            value={consultantFilter}
-                            onChange={(e) => setConsultantFilter(e.target.value)}
-                            className="px-3 py-1.5 rounded-lg text-sm bg-amber-950/40 text-amber-200 border border-amber-700/30 hover:bg-amber-900/50 focus:outline-none focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all cursor-pointer"
-                        >
-                            <option value="ALL" className="bg-amber-950 text-amber-200">Tümü</option>
-                            {consultants.map(c => (
-                                <option key={c.id} value={c.id} className="bg-amber-950 text-amber-200">
-                                    {c.firstName} {c.lastName}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-                </div>
             )
         });
-    }, [setTopbarContent, statusFilter, consultantFilter, consultants]);
+    }, [setTopbarContent]);
 
     const getStatusBadge = (status: SaleStatus) => {
         switch (status) {
@@ -131,19 +108,47 @@ const SalesPage: React.FC = () => {
 
     return (
         <div className="p-6 space-y-6">
-            {/* Search Bar */}
-            <div className="backdrop-blur-sm bg-white/95 border border-amber-200 rounded-2xl p-4 shadow-lg">
-                <div className="relative">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-amber-600" />
-                    <input
-                        type="text"
-                        placeholder="Satış No veya Müşteri Adı ile ara..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full pl-12 pr-4 py-3 bg-white border border-amber-300 rounded-xl text-amber-900 placeholder-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                    />
-                </div>
-            </div>
+            {/* Filter and Search Bar */}
+            <FilterSearchBar
+                filters={[
+                    {
+                        label: 'Durum',
+                        value: statusFilter,
+                        onChange: setStatusFilter,
+                        options: [
+                            { key: 'ALL', label: 'Tümü' },
+                            { key: 'DEVAM_EDIYOR', label: 'Devam Edenler', activeColor: 'bg-blue-600' },
+                            { key: 'TAMAMLANDI', label: 'Tamamlananlar', activeColor: 'bg-green-600' },
+                            { key: 'IPTAL_EDILDI', label: 'İptal Edilenler', activeColor: 'bg-red-600' }
+                        ]
+                    },
+                    {
+                        label: 'Danışman',
+                        value: consultantFilter,
+                        onChange: setConsultantFilter,
+                        type: 'dropdown',
+                        options: [
+                            { key: 'ALL', label: 'Tümü' },
+                            ...consultants.map(c => ({ key: c.id, label: `${c.firstName} ${c.lastName}` }))
+                        ]
+                    },
+                    {
+                        label: 'Marka',
+                        value: brandFilter,
+                        onChange: setBrandFilter,
+                        options: [
+                            { key: 'ALL', label: 'Tümü' },
+                            { key: 'OAK', label: 'Doğtaş', activeColor: 'bg-red-600' },
+                            { key: 'MAPLE', label: 'Maple', activeColor: 'bg-blue-600' },
+                            { key: 'PINE', label: 'Pine', activeColor: 'bg-purple-600' },
+                            { key: 'MARKASIZ', label: 'Markasız', activeColor: 'bg-gray-600' }
+                        ]
+                    }
+                ]}
+                searchPlaceholder="Satış no, sözleşme no, müşteri adı, danışman adı, ürün adı veya kodu..."
+                searchValue={searchTerm}
+                onSearchChange={setSearchTerm}
+            />
 
             {/* Sales Table */}
             <div className="backdrop-blur-sm bg-white/95 border border-amber-200 rounded-2xl shadow-xl overflow-hidden">

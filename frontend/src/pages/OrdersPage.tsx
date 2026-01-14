@@ -1,47 +1,67 @@
 import { useState, useEffect, useMemo } from 'react'
-import { ShoppingCart, Plus, Filter, CheckCircle, XCircle, Clock, FileText, Upload, Search } from 'lucide-react'
+import { ShoppingCart, Plus, CheckCircle, XCircle, Clock, Upload, FileText } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { useListOrdersQuery, type OrderStatus } from '../services/orderApi'
-import { useGetAllUsersQuery } from '../services/userApi'
-import AddOrderModal from '../components/orders/AddOrderModal'
-import BulkUploadModal from '../components/orders/BulkUploadModal'
+import { useListOrdersQuery } from '../services/orderApi'
+import { useGetUserSummariesQuery } from '../services/userApi'
 import { useTopbar } from '../context/TopbarContext'
 import BrandBadge from '../components/common/BrandBadge'
+import AddOrderModal from '../components/orders/AddOrderModal'
+import BulkUploadModal from '../components/orders/BulkUploadModal'
+import FilterSearchBar from '../components/common/FilterSearchBar'
+import type { Brand } from '../constants/brandConstants'
 
 export default function OrdersPage() {
     const navigate = useNavigate()
+    const { setTopbarContent } = useTopbar()
+    const [statusFilter, setStatusFilter] = useState('ALL')
+    const [typeFilter, setTypeFilter] = useState('ALL')
+    const [consultantFilter, setConsultantFilter] = useState('ALL')
+    const [brandFilter, setBrandFilter] = useState('ALL')
+    const [searchQuery, setSearchQuery] = useState('')
     const [showAddMenu, setShowAddMenu] = useState(false)
     const [showManualModal, setShowManualModal] = useState(false)
     const [showBulkModal, setShowBulkModal] = useState(false)
-    const [statusFilter, setStatusFilter] = useState<'ALL' | 'DEVAM_EDIYOR' | 'TAMAMLANDI' | 'IPTAL_EDILDI'>('ALL')
-    const [typeFilter, setTypeFilter] = useState<'ALL' | 'STOCK' | 'CUSTOMER_SPECIFIC' | 'AFTER_SALES_SERVICE'>('ALL')
-    const [consultantFilter, setConsultantFilter] = useState<string>('ALL')
-    const [searchQuery, setSearchQuery] = useState('')
 
-    const { setTopbarContent } = useTopbar()
-    const { data: allOrders = [], isLoading } = useListOrdersQuery({})
-    const { data: users = [] } = useGetAllUsersQuery()
+    const { data: allOrders = [], isLoading } = useListOrdersQuery({ includeHidden: true })
+    const { data: users = [] } = useGetUserSummariesQuery()
 
     // Get sales consultants (users with role STORE_EMPLOYEE)
     const salesConsultants = useMemo(() => {
-        const consultants = users.filter((user: any) => user.role === 'STORE_EMPLOYEE')
-        console.log('Users:', users)
-        console.log('Sales Consultants:', consultants)
-        return consultants
+        return users.filter((user) => user.role === 'STORE_EMPLOYEE')
     }, [users])
 
-    // Filter orders based on all criteria
+    // Filter and sort orders
     const orders = useMemo(() => {
-        return allOrders.filter(order => {
+        const filtered = allOrders.filter(order => {
             // Status filter
             if (statusFilter !== 'ALL') {
-                const matchesStatus = order.status === statusFilter
-                if (!matchesStatus) return false
+                if (statusFilter === 'DEVAM_EDIYOR') {
+                    // Include all in-progress statuses
+                    const inProgressStatuses = [
+                        'DEVAM_EDIYOR', 'IN_PROGRESS', 'CREATED', 'PENDING_ACCEPTANCE',
+                        'PARTIALLY_ACCEPTED', 'ACCEPTED', 'PENDING_SHIPMENT_APPROVAL',
+                        'SHIPMENT_APPROVED', 'IN_SHIPMENT', 'PARTIALLY_SHIPPED'
+                    ]
+                    if (!inProgressStatuses.includes(order.status)) return false
+                } else if (statusFilter === 'TAMAMLANDI') {
+                    const completedStatuses = ['TAMAMLANDI', 'COMPLETED', 'DELIVERED']
+                    if (!completedStatuses.includes(order.status)) return false
+                } else if (statusFilter === 'IPTAL_EDILDI') {
+                    const cancelledStatuses = ['IPTAL_EDILDI', 'CANCELLED']
+                    if (!cancelledStatuses.includes(order.status)) return false
+                }
             }
 
             // Type filter
             if (typeFilter !== 'ALL') {
-                if (order.orderType !== typeFilter) return false
+                if (typeFilter === 'HAS_SSH') {
+                    if (!order.childSshOrders || order.childSshOrders.length === 0) return false
+                } else {
+                    if (order.orderType !== typeFilter) return false
+                }
+            } else {
+                // Default view (ALL): Hide hidden orders (including SSH)
+                if (order.hidden) return false
             }
 
             // Consultant filter
@@ -49,7 +69,7 @@ export default function OrdersPage() {
                 if (!order.salesConsultant || order.salesConsultant.id !== consultantFilter) return false
             }
 
-            // Search query (Turkish locale-aware)
+            // Search query (Turkish locale-aware) - includes product name/code
             if (searchQuery.trim()) {
                 const query = searchQuery.toLocaleLowerCase('tr-TR')
                 const matchesOrderNo = order.orderNo?.toLocaleLowerCase('tr-TR').includes(query)
@@ -57,13 +77,49 @@ export default function OrdersPage() {
                 const matchesCustomerName = order.customer
                     ? `${order.customer.firstName} ${order.customer.lastName}`.toLocaleLowerCase('tr-TR').includes(query)
                     : order.prosapContractNameSurname?.toLocaleLowerCase('tr-TR').includes(query)
+                const matchesConsultant = order.salesConsultant
+                    ? `${order.salesConsultant.firstName} ${order.salesConsultant.lastName}`.toLocaleLowerCase('tr-TR').includes(query)
+                    : false
+                const matchesProduct = order.products?.some((p: any) =>
+                    p.productName?.toLocaleLowerCase('tr-TR').includes(query) ||
+                    p.productCode?.toLocaleLowerCase('tr-TR').includes(query)
+                )
 
-                if (!matchesOrderNo && !matchesContractNo && !matchesCustomerName) return false
+                if (!matchesOrderNo && !matchesContractNo && !matchesCustomerName && !matchesConsultant && !matchesProduct) return false
+            }
+
+            // Brand filter
+            if (brandFilter !== 'ALL') {
+                const brandMap: Record<string, string> = {
+                    'OAK': 'OAK',
+                    'MAPLE': 'MAPLE',
+                    'PINE': 'PINE',
+                    'MARKASIZ': ''
+                }
+                if (brandFilter === 'MARKASIZ') {
+                    if (order.brand && order.brand !== '') return false
+                } else {
+                    if (order.brand !== brandMap[brandFilter]) return false
+                }
             }
 
             return true
         })
-    }, [allOrders, statusFilter, typeFilter, consultantFilter, searchQuery])
+
+        // Split and sort logic
+        const completedStatuses = ['TAMAMLANDI', 'COMPLETED', 'DELIVERED', 'IPTAL_EDILDI', 'CANCELLED']
+
+        const ongoing = filtered.filter(o => !completedStatuses.includes(o.status))
+        const completed = filtered.filter(o => completedStatuses.includes(o.status))
+
+        // Ongoing: Oldest first (Date ASC)
+        ongoing.sort((a, b) => new Date(a.orderDate).getTime() - new Date(b.orderDate).getTime())
+
+        // Completed: Newest first (Date DESC)
+        completed.sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime())
+
+        return [...ongoing, ...completed]
+    }, [allOrders, statusFilter, typeFilter, consultantFilter, brandFilter, searchQuery])
 
     // Set topbar content
     useEffect(() => {
@@ -117,120 +173,9 @@ export default function OrdersPage() {
                         </div>
                     )}
                 </div>
-            ),
-            filters: (
-                <div className="flex items-start gap-6 flex-wrap">
-                    {/* Status Filters */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-amber-200 text-sm font-medium">Durum:</span>
-                        <button
-                            onClick={() => setStatusFilter('ALL')}
-                            className={`px-3 py-1.5 rounded-lg text-sm transition-all ${statusFilter === 'ALL'
-                                ? 'bg-amber-600 text-white shadow-md'
-                                : 'bg-amber-950/40 text-amber-200 hover:bg-amber-900/50'
-                                }`}
-                        >
-                            Tümü
-                        </button>
-                        <button
-                            onClick={() => setStatusFilter('DEVAM_EDIYOR')}
-                            className={`px-3 py-1.5 rounded-lg text-sm transition-all ${statusFilter === 'DEVAM_EDIYOR'
-                                ? 'bg-yellow-600 text-white shadow-md'
-                                : 'bg-amber-950/40 text-amber-200 hover:bg-amber-900/50'
-                                }`}
-                        >
-                            Devam Ediyor
-                        </button>
-                        <button
-                            onClick={() => setStatusFilter('TAMAMLANDI')}
-                            className={`px-3 py-1.5 rounded-lg text-sm transition-all ${statusFilter === 'TAMAMLANDI'
-                                ? 'bg-green-600 text-white shadow-md'
-                                : 'bg-amber-950/40 text-amber-200 hover:bg-amber-900/50'
-                                }`}
-                        >
-                            Tamamlandı
-                        </button>
-                        <button
-                            onClick={() => setStatusFilter('IPTAL_EDILDI')}
-                            className={`px-3 py-1.5 rounded-lg text-sm transition-all ${statusFilter === 'IPTAL_EDILDI'
-                                ? 'bg-red-600 text-white shadow-md'
-                                : 'bg-amber-950/40 text-amber-200 hover:bg-amber-900/50'
-                                }`}
-                        >
-                            İptal Edildi
-                        </button>
-                    </div>
-
-                    <div className="h-8 w-px bg-amber-700/30"></div>
-
-                    {/* Type Filters */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-amber-200 text-sm font-medium">Tür:</span>
-                        <button
-                            onClick={() => setTypeFilter('ALL')}
-                            className={`px-3 py-1.5 rounded-lg text-sm transition-all ${typeFilter === 'ALL'
-                                ? 'bg-amber-600 text-white shadow-md'
-                                : 'bg-amber-950/40 text-amber-200 hover:bg-amber-900/50'
-                                }`}
-                        >
-                            Tümü
-                        </button>
-                        <button
-                            onClick={() => setTypeFilter('CUSTOMER_SPECIFIC')}
-                            className={`px-3 py-1.5 rounded-lg text-sm transition-all ${typeFilter === 'CUSTOMER_SPECIFIC'
-                                ? 'bg-blue-600 text-white shadow-md'
-                                : 'bg-amber-950/40 text-amber-200 hover:bg-amber-900/50'
-                                }`}
-                        >
-                            Müşteriye Özel
-                        </button>
-                        <button
-                            onClick={() => setTypeFilter('STOCK')}
-                            className={`px-3 py-1.5 rounded-lg text-sm transition-all ${typeFilter === 'STOCK'
-                                ? 'bg-green-600 text-white shadow-md'
-                                : 'bg-amber-950/40 text-amber-200 hover:bg-amber-900/50'
-                                }`}
-                        >
-                            Stok
-                        </button>
-                        <button
-                            onClick={() => setTypeFilter('AFTER_SALES_SERVICE')}
-                            className={`px-3 py-1.5 rounded-lg text-sm transition-all ${typeFilter === 'AFTER_SALES_SERVICE'
-                                ? 'bg-orange-600 text-white shadow-md'
-                                : 'bg-amber-950/40 text-amber-200 hover:bg-amber-900/50'
-                                }`}
-                        >
-                            SSH
-                        </button>
-                    </div>
-
-                    {/* Consultant Filter */}
-                    <>
-                        <div className="h-8 w-px bg-amber-700/30"></div>
-                        <div className="flex items-center gap-2">
-                            <span className="text-amber-200 text-sm font-medium">Danışman:</span>
-                            <select
-                                value={consultantFilter}
-                                onChange={(e) => setConsultantFilter(e.target.value)}
-                                className="px-3 py-1.5 rounded-lg text-sm bg-amber-950/40 text-amber-200 border border-amber-700/30 hover:bg-amber-900/50 focus:outline-none focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all cursor-pointer"
-                            >
-                                <option value="ALL" className="bg-amber-950 text-amber-200">Tümü</option>
-                                {salesConsultants.map(consultant => (
-                                    <option
-                                        key={consultant.id}
-                                        value={consultant.id}
-                                        className="bg-amber-950 text-amber-200"
-                                    >
-                                        {consultant.firstName} {consultant.lastName}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                    </>
-                </div>
             )
         })
-    }, [showAddMenu, statusFilter, typeFilter, consultantFilter, salesConsultants, setTopbarContent])
+    }, [showAddMenu, setTopbarContent])
 
     const getStatusBadge = (status: string) => {
         // Simplified 3-state status system: IN_PROGRESS, COMPLETED, CANCELLED
@@ -268,19 +213,59 @@ export default function OrdersPage() {
 
     return (
         <div className="p-6 space-y-6">
-            {/* Search Bar */}
-            <div className="backdrop-blur-sm bg-white/95 border border-amber-200 rounded-2xl p-4 shadow-lg">
-                <div className="relative">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-amber-600" />
-                    <input
-                        type="text"
-                        placeholder="Sipariş no, sözleşme no veya müşteri adına göre ara..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-12 pr-4 py-3 bg-white border border-amber-300 rounded-xl text-amber-900 placeholder-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                    />
-                </div>
-            </div>
+            {/* Filter and Search Bar */}
+            <FilterSearchBar
+                filters={[
+                    {
+                        label: 'Durum',
+                        value: statusFilter,
+                        onChange: setStatusFilter,
+                        options: [
+                            { key: 'ALL', label: 'Tümü' },
+                            { key: 'DEVAM_EDIYOR', label: 'Devam Ediyor', activeColor: 'bg-yellow-600' },
+                            { key: 'TAMAMLANDI', label: 'Tamamlandı', activeColor: 'bg-green-600' },
+                            { key: 'IPTAL_EDILDI', label: 'İptal Edildi', activeColor: 'bg-red-600' }
+                        ]
+                    },
+                    {
+                        label: 'Tür',
+                        value: typeFilter,
+                        onChange: setTypeFilter,
+                        options: [
+                            { key: 'ALL', label: 'Tümü' },
+                            { key: 'CUSTOMER_SPECIFIC', label: 'Müşteriye Özel', activeColor: 'bg-blue-600' },
+                            { key: 'STOCK', label: 'Stok', activeColor: 'bg-green-600' },
+                            { key: 'AFTER_SALES_SERVICE', label: 'SSH', activeColor: 'bg-orange-600' },
+                            { key: 'HAS_SSH', label: 'SSH İçeren', activeColor: 'bg-red-600' }
+                        ]
+                    },
+                    {
+                        label: 'Danışman',
+                        value: consultantFilter,
+                        onChange: setConsultantFilter,
+                        type: 'dropdown',
+                        options: [
+                            { key: 'ALL', label: 'Tümü' },
+                            ...salesConsultants.map(c => ({ key: c.id, label: `${c.firstName} ${c.lastName}` }))
+                        ]
+                    },
+                    {
+                        label: 'Marka',
+                        value: brandFilter,
+                        onChange: setBrandFilter,
+                        options: [
+                            { key: 'ALL', label: 'Tümü' },
+                            { key: 'OAK', label: 'Doğtaş', activeColor: 'bg-red-600' },
+                            { key: 'MAPLE', label: 'Maple', activeColor: 'bg-blue-600' },
+                            { key: 'PINE', label: 'Pine', activeColor: 'bg-purple-600' },
+                            { key: 'MARKASIZ', label: 'Markasız', activeColor: 'bg-gray-600' }
+                        ]
+                    }
+                ]}
+                searchPlaceholder="Sipariş no, sözleşme no, müşteri adı, danışman adı, ürün adı veya kodu..."
+                searchValue={searchQuery}
+                onSearchChange={setSearchQuery}
+            />
 
             {/* Orders Table */}
             <div className="backdrop-blur-sm bg-white/95 border border-amber-200 rounded-2xl shadow-xl overflow-hidden">
@@ -315,14 +300,6 @@ export default function OrdersPage() {
                                         const statusBadge = getStatusBadge(order.status)
                                         const StatusIcon = statusBadge.icon
 
-                                        // Debug: Log order data to console
-                                        if (order.orderNo) {
-                                            console.log(`Order ${order.orderNo}:`, {
-                                                orderType: order.orderType,
-                                                salesConsultant: order.salesConsultant,
-                                                hasSalesConsultant: !!order.salesConsultant
-                                            })
-                                        }
 
                                         return (
                                             <tr
@@ -339,18 +316,27 @@ export default function OrdersPage() {
                                                     <p className="text-amber-900 font-medium">{order.orderNo}</p>
                                                 </td>
                                                 <td className="px-6 py-4">
-                                                    <span className={`px-2 py-1 rounded-lg text-xs font-medium ${order.orderType === 'STOCK'
-                                                        ? 'bg-green-100 text-green-800 border border-green-300'
-                                                        : order.orderType === 'CUSTOMER_SPECIFIC'
-                                                            ? 'bg-blue-100 text-blue-800 border border-blue-300'
-                                                            : 'bg-gray-100 text-gray-800 border border-gray-300'
-                                                        }`}>
-                                                        {order.orderType === 'STOCK' ? 'STOK' : order.orderType === 'CUSTOMER_SPECIFIC' ? 'MÜŞTERİ' : order.orderType}
-                                                    </span>
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className={`px-2 py-1 rounded-lg text-xs font-medium ${order.orderType === 'STOCK'
+                                                            ? 'bg-green-100 text-green-800 border border-green-300'
+                                                            : order.orderType === 'CUSTOMER_SPECIFIC'
+                                                                ? 'bg-blue-100 text-blue-800 border border-blue-300'
+                                                                : order.orderType === 'AFTER_SALES_SERVICE'
+                                                                    ? 'bg-orange-100 text-orange-800 border border-orange-300'
+                                                                    : 'bg-gray-100 text-gray-800 border border-gray-300'
+                                                            }`}>
+                                                            {order.orderType === 'STOCK' ? 'STOK' : order.orderType === 'CUSTOMER_SPECIFIC' ? 'MÜŞTERİ' : order.orderType === 'AFTER_SALES_SERVICE' ? 'SSH' : order.orderType}
+                                                        </span>
+                                                        {order.childSshOrders && order.childSshOrders.length > 0 && (
+                                                            <span className="px-1.5 py-0.5 bg-red-100 text-red-700 border border-red-300 rounded text-xs font-bold">
+                                                                +{order.childSshOrders.length} SSH
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     {order.brand ? (
-                                                        <BrandBadge brand={order.brand} />
+                                                        <BrandBadge brand={order.brand as Brand} />
                                                     ) : (
                                                         <span className="text-amber-400">-</span>
                                                     )}
@@ -428,8 +414,4 @@ export default function OrdersPage() {
             )}
         </div>
     )
-
-
-
-
 }

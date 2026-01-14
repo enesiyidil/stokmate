@@ -16,6 +16,7 @@ interface AuthState {
     user: User | null
     token: string | null
     isAuthenticated: boolean
+    sessionExpired: boolean
 }
 
 const loadUserFromStorage = (): User | null => {
@@ -31,6 +32,7 @@ const initialState: AuthState = {
     user: loadUserFromStorage(),
     token: localStorage.getItem('token'),
     isAuthenticated: !!localStorage.getItem('token'),
+    sessionExpired: false,
 }
 
 const authSlice = createSlice({
@@ -44,6 +46,7 @@ const authSlice = createSlice({
             state.user = action.payload.user
             state.token = action.payload.token
             state.isAuthenticated = true
+            state.sessionExpired = false
             localStorage.setItem('token', action.payload.token)
             localStorage.setItem('user', JSON.stringify(action.payload.user))
         },
@@ -51,6 +54,7 @@ const authSlice = createSlice({
             state.user = null
             state.token = null
             state.isAuthenticated = false
+            state.sessionExpired = false
             localStorage.removeItem('token')
             localStorage.removeItem('user')
         },
@@ -58,8 +62,17 @@ const authSlice = createSlice({
             state.user = action.payload
             localStorage.setItem('user', JSON.stringify(action.payload))
         },
+        setSessionExpired: (state, action: PayloadAction<boolean>) => {
+            state.sessionExpired = action.payload
+        },
+        refreshToken: (state, action: PayloadAction<string>) => {
+            state.token = action.payload
+            state.sessionExpired = false
+            localStorage.setItem('token', action.payload)
+        },
     },
 })
 
-export const { setCredentials, logout, setUser } = authSlice.actions
+export const { setCredentials, logout, setUser, setSessionExpired, refreshToken } = authSlice.actions
 export default authSlice.reducer
+

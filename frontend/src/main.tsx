@@ -6,12 +6,16 @@ import App from './App.tsx'
 import './index.css'
 import { UiProvider } from './context/UiContext.tsx'
 
+import { GlobalErrorBoundary } from './components/common/GlobalErrorBoundary.tsx'
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <Provider store={store}>
-      <UiProvider>
-        <App />
-      </UiProvider>
-    </Provider>
+    <GlobalErrorBoundary>
+      <Provider store={store}>
+        <UiProvider>
+          <App />
+        </UiProvider>
+      </Provider>
+    </GlobalErrorBoundary>
   </React.StrictMode>,
 )

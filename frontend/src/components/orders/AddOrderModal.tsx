@@ -7,9 +7,22 @@ import SearchableSelect from '../common/SearchableSelect'
 import { cities, districts, neighborhoods } from '../../data/turkeyLocations'
 import { BRANDS, getBrandLabel, getBrandColor, type Brand } from '../../constants/brandConstants'
 
+interface PrefillData {
+    orderType?: 'STOCK' | 'CUSTOMER_SPECIFIC' | 'AFTER_SALES_SERVICE'
+    customerId?: string
+    salesConsultantId?: string
+    brand?: string
+    parentOrderId?: string
+    linkedShipmentId?: string
+    hidden?: boolean
+    problemType?: string
+}
+
 interface Props {
     onClose: () => void
-    onSuccess: () => void
+    onSuccess?: () => void
+    isOpen?: boolean
+    prefillData?: PrefillData
 }
 
 type OrderType = 'CUSTOMER_SPECIFIC' | 'STOCK' | 'AFTER_SALES_SERVICE'
@@ -18,7 +31,7 @@ interface ProductWithPricing extends OrderProductCreateRequest {
     showPricing: boolean
 }
 
-export default function AddOrderModal({ onClose, onSuccess }: Props) {
+export default function AddOrderModal({ onClose, onSuccess, isOpen = true, prefillData }: Props) {
     const [createOrder, { isLoading }] = useCreateOrderMutation()
     const [orderType, setOrderType] = useState<OrderType>('STOCK')
 
@@ -36,6 +49,20 @@ export default function AddOrderModal({ onClose, onSuccess }: Props) {
     const { data: parentOrders = [] } = useGetOrdersByCustomerQuery(selectedCustomerId, {
         skip: orderType !== 'AFTER_SALES_SERVICE' || !selectedCustomerId
     })
+
+    // Apply prefill data on mount
+    useEffect(() => {
+        if (prefillData) {
+            if (prefillData.orderType) setOrderType(prefillData.orderType)
+            if (prefillData.customerId) {
+                setSelectedCustomerId(prefillData.customerId)
+                setUseExistingCustomer(true)
+            }
+            if (prefillData.salesConsultantId) setSelectedSalesConsultantId(prefillData.salesConsultantId)
+            if (prefillData.brand) setSelectedBrand(prefillData.brand as Brand)
+            if (prefillData.parentOrderId) setSelectedParentOrderId(prefillData.parentOrderId)
+        }
+    }, [prefillData])
 
     const [formData, setFormData] = useState({
         orderNo: '',
@@ -160,11 +187,17 @@ export default function AddOrderModal({ onClose, onSuccess }: Props) {
             if (selectedParentOrderId) {
                 orderData.parentOrderId = selectedParentOrderId
             }
+            // Add SSH linkage for problematic shipment
+            if (prefillData?.linkedShipmentId) {
+                orderData.linkedShipmentId = prefillData.linkedShipmentId
+                orderData.hidden = true
+            }
         }
 
         try {
             await createOrder(orderData).unwrap()
-            onSuccess()
+            onSuccess?.()
+            onClose() // Close modal after successful creation
         } catch (error: any) {
             console.error('Failed to create order:', error)
 
@@ -253,8 +286,8 @@ export default function AddOrderModal({ onClose, onSuccess }: Props) {
                                         type="button"
                                         onClick={() => setSelectedBrand(brand)}
                                         className={`px-4 py-3 rounded-lg font-medium transition-all ${selectedBrand === brand
-                                                ? 'ring-2 ring-offset-2 shadow-lg transform scale-105'
-                                                : 'hover:shadow-md hover:scale-102'
+                                            ? 'ring-2 ring-offset-2 shadow-lg transform scale-105'
+                                            : 'hover:shadow-md hover:scale-102'
                                             }`}
                                         style={{
                                             backgroundColor: selectedBrand === brand ? getBrandColor(brand) : '#fff',

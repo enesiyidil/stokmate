@@ -15,17 +15,18 @@ import {
     LogOut,
     ChevronLeft,
     ChevronRight,
-    Sparkles,
     User,
     Bell,
     UserCircle,
-    MessageSquare
+    MessageSquare,
+    Info
 } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '../../hooks/useAuth'
 import { logout } from '../../store/authSlice'
 import { TopbarProvider, useTopbar } from '../../context/TopbarContext'
 import { useUi } from '../../context/UiContext'
 import { getRoleDisplayName } from '../../constants/roles'
+import NotificationBell from '../notifications/NotificationBell'
 
 interface MenuItem {
     name: string
@@ -48,19 +49,18 @@ const menuItems: MenuItem[] = [
         path: '/order-receipts',
         roles: ['ADMIN', 'MANAGER', 'DIRECTOR', 'OPERATIONS_MANAGER']
     },
-    { name: 'Ürünler', icon: Package, path: '/products' },
-    { name: 'Satışlar', icon: ShoppingBag, path: '/sales' },
+    { name: 'Stoklu Ürünler', icon: Package, path: '/products' },
+    {
+        name: 'Stoklu Satışlar',
+        icon: ShoppingBag,
+        path: '/sales',
+        roles: ['ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE', 'OPERATIONS_MANAGER']
+    },
     {
         name: 'Sevkiyat',
         icon: TruckIcon,
         path: '/shipment',
         roles: ['ADMIN', 'MANAGER', 'DIRECTOR', 'OPERATIONS_MANAGER', 'LOGISTICS_MANAGER', 'STORE_MANAGER', 'STORE_EMPLOYEE']
-    },
-    {
-        name: 'Talepler',
-        icon: MessageSquare,
-        path: '/requests',
-        roles: ['ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER']
     },
     {
         name: 'Müşteriler',
@@ -72,7 +72,7 @@ const menuItems: MenuItem[] = [
         name: 'Kullanıcılar',
         icon: Users,
         path: '/users',
-        roles: ['ADMIN', 'MANAGER']
+        roles: ['ADMIN', 'MANAGER', 'DIRECTOR']
     },
     {
         name: 'Mağazalar',
@@ -151,8 +151,7 @@ function SidebarLayoutContent({ children }: SidebarLayoutProps) {
                             {!isCollapsed && (
                                 <div className="flex-1 animate-fade-in">
                                     <h1 className="text-xl font-bold text-amber-100 flex items-center gap-1">
-                                        StokMate
-                                        <Sparkles className="w-4 h-4 text-amber-400" />
+                                        StokMate <span className="text-amber-400 mx-1">|</span> StokMate
                                     </h1>
                                     <p className="text-xs text-amber-300">Stok Yönetimi</p>
                                 </div>
@@ -185,19 +184,21 @@ function SidebarLayoutContent({ children }: SidebarLayoutProps) {
                         </div>
                     </nav>
 
+
+
                     {/* User Section */}
-                    <div className="p-4 border-t border-amber-600/30">
+                    <div className="px-3 pt-3 pb-0 border-t border-amber-600/30">
                         {/* User Info & Dropdown */}
                         <div className="relative">
                             <button
                                 onClick={() => setShowUserMenu(!showUserMenu)}
                                 className={`
-                                    w-full backdrop-blur-sm bg-amber-900/40 border border-amber-600/50 rounded-xl p-3
+                                    w-full backdrop-blur-sm bg-amber-900/40 border border-amber-600/50 rounded-xl p-2
                                     hover:bg-amber-800/50 transition-all duration-300
                                     ${isCollapsed ? 'flex justify-center' : 'flex items-center gap-3'}
                                 `}
                             >
-                                <div className="w-10 h-10 bg-gradient-to-br from-amber-700 to-orange-700 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <div className="w-9 h-9 bg-gradient-to-br from-amber-700 to-orange-700 rounded-lg flex items-center justify-center flex-shrink-0">
                                     <User className="w-5 h-5 text-white" />
                                 </div>
                                 {!isCollapsed && (
@@ -217,7 +218,7 @@ function SidebarLayoutContent({ children }: SidebarLayoutProps) {
 
                             {/* User Menu Dropdown */}
                             {showUserMenu && !isCollapsed && (
-                                <div className="absolute bottom-full left-0 right-0 mb-2 backdrop-blur-sm bg-stone-900/98 border border-amber-600/50 rounded-xl shadow-2xl overflow-hidden animate-slide-up z-50">
+                                <div className="absolute bottom-full left-0 right-0 mb-2 bg-stone-900 border border-amber-600/50 rounded-xl shadow-2xl overflow-hidden animate-slide-up z-50">
                                     <button
                                         onClick={() => handleUserMenuClick('/profile')}
                                         className="w-full flex items-center gap-3 px-4 py-3 text-amber-200 hover:bg-amber-800/50 hover:text-amber-50 transition-all duration-300"
@@ -226,11 +227,25 @@ function SidebarLayoutContent({ children }: SidebarLayoutProps) {
                                         <span className="text-sm font-medium">Profilim</span>
                                     </button>
                                     <button
+                                        onClick={() => handleUserMenuClick('/support-requests')}
+                                        className="w-full flex items-center gap-3 px-4 py-3 text-amber-200 hover:bg-amber-800/50 hover:text-amber-50 transition-all duration-300 border-t border-amber-600/40"
+                                    >
+                                        <MessageSquare className="w-4 h-4" />
+                                        <span className="text-sm font-medium">Talepler</span>
+                                    </button>
+                                    <button
                                         onClick={() => handleUserMenuClick('/settings')}
                                         className="w-full flex items-center gap-3 px-4 py-3 text-amber-200 hover:bg-amber-800/50 hover:text-amber-50 transition-all duration-300 border-t border-amber-600/40"
                                     >
                                         <Settings className="w-4 h-4" />
                                         <span className="text-sm font-medium">Ayarlar</span>
+                                    </button>
+                                    <button
+                                        onClick={() => handleUserMenuClick('/about')}
+                                        className="w-full flex items-center gap-3 px-4 py-3 text-amber-200 hover:bg-amber-800/50 hover:text-amber-50 transition-all duration-300 border-t border-amber-600/40"
+                                    >
+                                        <Info className="w-4 h-4" />
+                                        <span className="text-sm font-medium">Hakkında</span>
                                     </button>
                                     <button
                                         onClick={handleLogout}
@@ -243,6 +258,13 @@ function SidebarLayoutContent({ children }: SidebarLayoutProps) {
                             )}
                         </div>
                     </div>
+
+                    {/* Version Tag - Below User Section */}
+                    {!isCollapsed && (
+                        <div className="text-center py-1">
+                            <span className="text-[10px] text-amber-500/50 font-mono">{import.meta.env.VITE_APP_VERSION}</span>
+                        </div>
+                    )}
 
                     {/* Collapse Toggle */}
                     <button
@@ -278,10 +300,7 @@ function SidebarLayoutContent({ children }: SidebarLayoutProps) {
                             </div>
                             <div className="flex items-center gap-3">
                                 {actions}
-                                <button className="relative p-2 text-amber-300 hover:text-amber-100 transition-colors">
-                                    <Bell className="w-6 h-6" />
-                                    <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-                                </button>
+                                <NotificationBell />
                             </div>
                         </div>
                     </div>

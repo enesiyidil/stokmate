@@ -22,6 +22,7 @@ export default function AddOrderReceiptModal({ isOpen, onClose, onSuccess }: Add
     // Form State
     const [receivedQuantity, setReceivedQuantity] = useState('')
     const [vehiclePlate, setVehiclePlate] = useState('')
+    const [isManualPlate, setIsManualPlate] = useState(false)
     const [driverName, setDriverName] = useState('')
     const [driverPhone, setDriverPhone] = useState('')
     const [notes, setNotes] = useState('')
@@ -31,8 +32,8 @@ export default function AddOrderReceiptModal({ isOpen, onClose, onSuccess }: Add
     const [createReceipt, { isLoading: isSubmitting }] = useCreateOrderReceiptMutation()
     const { data: vehicles = [] } = useListVehiclesQuery()
 
-    // Fetch all orders and filter for "Ongoing" statuses on frontend
-    const { data: orders = [], isLoading: isLoadingOrders } = useListOrdersQuery({})
+    // Fetch all orders including hidden (SSH) ones
+    const { data: orders = [], isLoading: isLoadingOrders } = useListOrdersQuery({ includeHidden: true })
 
     const activeOrders = useMemo(() => {
         const activeStatuses = [
@@ -98,6 +99,7 @@ export default function AddOrderReceiptModal({ isOpen, onClose, onSuccess }: Add
         setSearchQuery('')
         setReceivedQuantity('')
         setVehiclePlate('')
+        setIsManualPlate(false)
         setDriverName('')
         setDriverPhone('')
         setNotes('')
@@ -268,8 +270,17 @@ export default function AddOrderReceiptModal({ isOpen, onClose, onSuccess }: Add
                                     <div className="relative">
                                         <Truck className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-amber-600" />
                                         <select
-                                            value={vehiclePlate}
-                                            onChange={(e) => setVehiclePlate(e.target.value)}
+                                            value={isManualPlate ? 'MANUEL' : vehiclePlate}
+                                            onChange={(e) => {
+                                                const val = e.target.value
+                                                if (val === 'MANUEL') {
+                                                    setIsManualPlate(true)
+                                                    setVehiclePlate('')
+                                                } else {
+                                                    setIsManualPlate(false)
+                                                    setVehiclePlate(val)
+                                                }
+                                            }}
                                             className="w-full bg-white border border-amber-300 rounded-xl py-3 pl-10 pr-4 text-amber-900 focus:outline-none focus:border-amber-500 transition-colors"
                                         >
                                             <option value="">-- Araç Seçiniz --</option>
@@ -281,12 +292,14 @@ export default function AddOrderReceiptModal({ isOpen, onClose, onSuccess }: Add
                                             <option value="MANUEL">Manuel Giriş (Dış Araç)</option>
                                         </select>
                                     </div>
-                                    {vehiclePlate === 'MANUEL' && (
+                                    {isManualPlate && (
                                         <input
                                             type="text"
+                                            value={vehiclePlate}
                                             placeholder="Araç plakasını girin"
                                             onChange={(e) => setVehiclePlate(e.target.value)}
                                             className="w-full bg-white border border-amber-300 rounded-xl py-3 px-4 text-amber-900 focus:outline-none focus:border-amber-500 transition-colors mt-2"
+                                            autoFocus
                                         />
                                     )}
                                 </div>
@@ -354,7 +367,7 @@ export default function AddOrderReceiptModal({ isOpen, onClose, onSuccess }: Add
                                 <div className="text-sm">
                                     <p className="font-medium text-blue-800">Bilgilendirme</p>
                                     <p className="text-blue-700 mt-1">
-                                        {currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER' || currentUser?.role === 'OPERATIONS_MANAGER'
+                                        {currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER' || currentUser?.role === 'DIRECTOR'
                                             ? 'Yetkiniz dahilinde bu işlem otomatik olarak ONAYLANACAKTIR.'
                                             : 'Bu işlem yönetici ONAYINA gönderilecektir.'}
                                     </p>

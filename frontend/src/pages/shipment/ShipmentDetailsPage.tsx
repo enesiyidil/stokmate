@@ -1,20 +1,31 @@
-import { ArrowLeft, Package, User, FileText, Calendar, Truck, Activity, Clock, CheckCircle } from 'lucide-react'
+import { ArrowLeft, Package, User, FileText, Calendar, Truck, Activity, Clock, CheckCircle, AlertTriangle } from 'lucide-react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useGetShipmentDetailsQuery, useGetShipmentDetailsByIdQuery, usePlanShipmentMutation, useListVehiclesQuery, useDownloadShipmentReportMutation, useCompleteShipmentMutation, useFinalizeShipmentMutation, useDownloadSignedDocumentMutation } from '../../services/shipmentApi'
-import { useGetAllUsersQuery } from '../../services/userApi'
+import { useAddOrderNoteMutation } from '../../services/orderApi'
+import { useGetUserSummariesQuery } from '../../services/userApi'
 import { useGetOrderActivitiesQuery } from '../../services/orderActivityApi'
 import { formatDistanceToNow } from 'date-fns'
 import { tr } from 'date-fns/locale'
 import { useTopbar } from '../../context/TopbarContext'
 import { useEffect, useState, useMemo } from 'react'
 import CompleteShipmentModal from '../../components/shipment/CompleteShipmentModal'
+import { useAppSelector } from '../../hooks/useAuth'
+import { useToast } from '../../context/ToastContext'
+import ConfirmModal from '../../components/common/ConfirmModal'
+import ImageGalleryModal from '../../components/common/ImageGalleryModal'
 
 export default function ShipmentDetailsPage() {
     const { orderId } = useParams<{ orderId: string }>()
     const navigate = useNavigate()
     const { setTopbarContent } = useTopbar()
+    const { user } = useAppSelector((state) => state.auth)
     const [searchParams] = useSearchParams()
     const isShipmentId = searchParams.get('type') === 'SHIPMENT'
+
+    // Permissions
+    const canPlan = ['ADMIN', 'MANAGER', 'DIRECTOR', 'LOGISTICS_MANAGER', 'OPERATIONS_MANAGER'].includes(user?.role || '')
+    const canComplete = ['ADMIN', 'MANAGER', 'DIRECTOR', 'LOGISTICS_MANAGER', 'OPERATIONS_MANAGER'].includes(user?.role || '')
+    const canFinalize = ['ADMIN', 'MANAGER', 'DIRECTOR'].includes(user?.role || '')
 
     // Conditional query based on ID type
     const orderQuery = useGetShipmentDetailsQuery(orderId!, { skip: isShipmentId })
@@ -40,7 +51,7 @@ export default function ShipmentDetailsPage() {
     }, [allActivities, isShipmentId, orderId])
 
     const { data: vehicles = [] } = useListVehiclesQuery()
-    const { data: users = [] } = useGetAllUsersQuery()
+    const { data: users = [] } = useGetUserSummariesQuery()
     const [planShipmentMutation, { isLoading: isPlanning }] = usePlanShipmentMutation()
     const [downloadReport] = useDownloadShipmentReportMutation()
     const [downloadSignedDocument, { isLoading: isDownloadingDoc }] = useDownloadSignedDocumentMutation()
@@ -50,12 +61,17 @@ export default function ShipmentDetailsPage() {
     const [showPlanningModal, setShowPlanningModal] = useState(false)
     const [showCompleteModal, setShowCompleteModal] = useState(false)
     const [showDocumentModal, setShowDocumentModal] = useState(false)
+    const [showGallery, setShowGallery] = useState(false)
+    const [galleryStartIndex, setGalleryStartIndex] = useState(0)
     const [documentUrl, setDocumentUrl] = useState<string | null>(null)
     const [documentType, setDocumentType] = useState<'pdf' | 'image' | null>(null)
+    const { success, error } = useToast()
+    const [showApproveConfirm, setShowApproveConfirm] = useState(false)
 
     const [plannedDate, setPlannedDate] = useState('')
     const [selectedVehicleId, setSelectedVehicleId] = useState('')
     const [selectedDriverIdForPlanning, setSelectedDriverIdForPlanning] = useState('')
+    const [addOrderNote, { isLoading: isAddingNote }] = useAddOrderNoteMutation()
 
 
     const productsToShip = useMemo(() => {
@@ -72,17 +88,17 @@ export default function ShipmentDetailsPage() {
             const StatusIcon = statusBadge.icon
 
             setTopbarContent({
-                title: shipmentDetails.orderNo || shipmentDetails.saleNo || 'Detay',
+                title: shipmentDetails.orderNo || 'Detay',
                 description: 'Sevk Detayı',
                 icon: <Truck className="w-8 h-8" />,
                 showFiltersInTopbar: true,
                 actions: (
                     <div className="flex items-center gap-3">
-                        <span className={`px-3 py-1 rounded-lg text-sm font-medium border flex items-center gap-2 ${statusBadge.className}`}>
+                        <span className={`px - 3 py - 1 rounded - lg text - sm font - medium border flex items - center gap - 2 ${statusBadge.className} `}>
                             <StatusIcon className="w-4 h-4" />
                             {statusBadge.label}
                         </span>
-                        {shipmentDetails.shipmentStatus === 'PLANNED' && (
+                        {shipmentDetails.shipmentStatus === 'PLANNED' && canComplete && (
                             <button
                                 onClick={() => setShowCompleteModal(true)}
                                 className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:from-green-600 hover:to-emerald-700 transition-all text-xs font-medium"
@@ -91,7 +107,7 @@ export default function ShipmentDetailsPage() {
                                 <span className="hidden lg:inline">Sevk Tamamla</span>
                             </button>
                         )}
-                        {shipmentDetails.shipmentStatus === 'APPROVED' && (
+                        {shipmentDetails.shipmentStatus === 'APPROVED' && canPlan && (
                             <button
                                 onClick={() => setShowPlanningModal(true)}
                                 className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-lg hover:from-orange-600 hover:to-amber-700 transition-all"
@@ -156,10 +172,10 @@ export default function ShipmentDetailsPage() {
                     driverId: selectedDriverIdForPlanning || undefined
                 }
             }).unwrap()
-            alert('Sevk başarıyla planlandı!')
+            success('Sevk başarıyla planlandı!')
             setShowPlanningModal(false)
-        } catch (error: any) {
-            alert('Hata: ' + (error.data?.message || error.message || 'Bir hata oluştu'))
+        } catch (err: any) {
+            error('Hata: ' + (err.data?.message || err.message || 'Bir hata oluştu'))
         }
     }
 
@@ -198,30 +214,32 @@ export default function ShipmentDetailsPage() {
             }
 
             await completeShipmentMutation(formData).unwrap()
-            alert('Sevk başarıyla tamamlandı! Onay bekliyor.')
+            success('Sevk başarıyla tamamlandı! Onay bekliyor.')
             setShowCompleteModal(false)
             refetch() // Refresh page data
-        } catch (error: any) {
-            alert('Hata: ' + (error.data?.message || error.message || 'Bir hata oluştu'))
+        } catch (err: any) {
+            error('Hata: ' + (err.data?.message || err.message || 'Bir hata oluştu'))
         }
     }
 
-    const handleApproveShipment = async () => {
+    const handleConfirmApprove = async () => {
         if (!shipmentDetails?.shipmentId) return
-        if (!confirm('Sevki onaylamak istediğinizden emin misiniz?')) return
 
         try {
             await finalizeShipmentMutation(shipmentDetails.shipmentId).unwrap()
-            alert('Sevk başarıyla onaylandı!')
+            success('Sevk başarıyla onaylandı!')
+            setShowApproveConfirm(false)
             refetch()
-        } catch (error: any) {
-            alert('Hata: ' + (error.data?.message || error.message || 'Bir hata oluştu'))
+        } catch (err: any) {
+            error('Hata: ' + (err.data?.message || err.message || 'Bir hata oluştu'))
         }
     }
 
     const handleDownloadReport = async () => {
+        // Use realOrderId to ensure we have the correct orderId even when viewing via shipmentId
+        const orderIdForReport = realOrderId || orderId!
         try {
-            const blob = await downloadReport(orderId!).unwrap()
+            const blob = await downloadReport(orderIdForReport).unwrap()
             const url = window.URL.createObjectURL(blob)
 
             // Open PDF in new window and trigger print dialog
@@ -236,14 +254,14 @@ export default function ShipmentDetailsPage() {
                 // Fallback if popup blocked - download instead
                 const link = document.createElement('a')
                 link.href = url
-                link.download = `sevk-raporu-${shipmentDetails.orderNo}.pdf`
+                link.download = `sevk-raporu-${shipmentDetails?.orderNo}.pdf`
                 document.body.appendChild(link)
                 link.click()
                 document.body.removeChild(link)
                 window.URL.revokeObjectURL(url)
             }
-        } catch (error: any) {
-            alert('Hata: ' + (error.data?.message || error.message || 'Rapor oluşturulamadı'))
+        } catch (err: any) {
+            error('Hata: ' + (err.data?.message || err.message || 'Rapor oluşturulamadı'))
         }
     }
 
@@ -263,8 +281,8 @@ export default function ShipmentDetailsPage() {
             }
 
             setShowDocumentModal(true)
-        } catch (error: any) {
-            alert('Belge yüklenirken hata oluştu: ' + (error.data?.message || 'Erişim hatası veya dosya bulunamadı'))
+        } catch (err: any) {
+            error('Belge yüklenirken hata oluştu: ' + (err.data?.message || 'Erişim hatası veya dosya bulunamadı'))
         }
     }
 
@@ -276,6 +294,31 @@ export default function ShipmentDetailsPage() {
         }
         setDocumentType(null)
     }
+
+    const handleReportMissingInfo = async () => {
+        if (!realOrderId) return
+
+        const missingFields: string[] = []
+        if (!shipmentDetails?.customer?.phone) missingFields.push('Telefon numarası')
+        if (!shipmentDetails?.customer?.address) missingFields.push('Adres bilgisi')
+
+        if (missingFields.length === 0) {
+            alert('Tüm müşteri bilgileri mevcut.')
+            return
+        }
+
+        const noteContent = `⚠️ UYARI: Bu siparişte eksik müşteri bilgileri bulunmaktadır.Eksik alanlar: ${missingFields.join(', ')}. Sevk planlaması yapılabilmesi için lütfen bu bilgileri güncelleyiniz.`
+
+        try {
+            await addOrderNote({ orderId: realOrderId, content: noteContent }).unwrap()
+            success('Eksik bilgi notu siparişe başarıyla eklendi. İlgili kişiler bilgilendirildi.')
+        } catch (err: any) {
+            error('Hata: ' + (err.data?.message || err.message || 'Bir hata oluştu'))
+        }
+    }
+
+    // Check if customer info is missing
+    const hasCustomerInfoMissing = !shipmentDetails?.customer?.phone || !shipmentDetails?.customer?.address
 
     if (isLoading || !shipmentDetails) {
         return <div className="flex items-center justify-center min-h-screen"><p className="text-white text-xl">Yükleniyor...</p></div>
@@ -305,6 +348,16 @@ export default function ShipmentDetailsPage() {
                                 {shipmentDetails.salesConsultant && (<div><p className="text-xs text-amber-700">Satış Danışmanı</p><p className="text-amber-900">{shipmentDetails.salesConsultant.name}</p></div>)}
                                 {shipmentDetails.customer.address && (<div><p className="text-xs text-amber-700">Adres</p><p className="text-amber-900 text-sm">{shipmentDetails.customer.address}</p></div>)}
                             </div>
+                            {hasCustomerInfoMissing && (
+                                <button
+                                    onClick={handleReportMissingInfo}
+                                    disabled={isAddingNote}
+                                    className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-yellow-100 text-yellow-800 rounded-lg hover:bg-yellow-200 transition-colors border border-yellow-400 text-sm font-medium disabled:opacity-50"
+                                >
+                                    <AlertTriangle className="w-4 h-4" />
+                                    {isAddingNote ? 'Bildirim Gönderiliyor...' : 'Eksik Bilgi Bildir'}
+                                </button>
+                            )}
                         </div>
 
                         {otherProducts.length > 0 && (
@@ -334,9 +387,9 @@ export default function ShipmentDetailsPage() {
                                         <Package className="w-5 h-5" />
                                         Teslim Bilgileri
                                     </h3>
-                                    {shipmentDetails.shipmentStatus === 'COMPLETED' && (
+                                    {shipmentDetails.shipmentStatus === 'COMPLETED' && canFinalize && (
                                         <button
-                                            onClick={handleApproveShipment}
+                                            onClick={() => setShowApproveConfirm(true)}
                                             className="px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-700 text-white rounded-lg hover:from-green-700 hover:to-emerald-800 transition-all shadow-md"
                                         >
                                             Sevk Onayla
@@ -348,7 +401,7 @@ export default function ShipmentDetailsPage() {
                                     {shipmentDetails.deliveryStatus && (
                                         <div>
                                             <p className="text-xs text-amber-700 mb-1">Durum</p>
-                                            <p className={`font-semibold ${shipmentDetails.deliveryStatus === 'PROBLEM_FREE' ? 'text-green-700' : 'text-red-700'}`}>
+                                            <p className={`font - semibold ${shipmentDetails.deliveryStatus === 'PROBLEM_FREE' ? 'text-green-700' : 'text-red-700'} `}>
                                                 {shipmentDetails.deliveryStatus === 'PROBLEM_FREE' ? '✓ Sorunsuz Teslimat' : '⚠ Sorunlu Teslimat'}
                                             </p>
                                         </div>
@@ -375,9 +428,20 @@ export default function ShipmentDetailsPage() {
                                             <p className="text-xs text-amber-700 mb-2">Teslimat Fotoğrafları ({shipmentDetails.deliveryPhotoUrls.length})</p>
                                             <div className="grid grid-cols-3 gap-2">
                                                 {shipmentDetails.deliveryPhotoUrls.map((url, idx) => (
-                                                    <a key={idx} href={`/api/files/view?path=${encodeURIComponent(url)}`} target="_blank" rel="noreferrer" className="aspect-square rounded-lg overflow-hidden border-2 border-amber-300 hover:border-amber-500 transition-colors">
-                                                        <img src={`/api/files/view?path=${encodeURIComponent(url)}`} alt={`Teslimat ${idx + 1}`} className="w-full h-full object-cover" />
-                                                    </a>
+                                                    <div
+                                                        key={idx}
+                                                        onClick={() => {
+                                                            setGalleryStartIndex(idx)
+                                                            setShowGallery(true)
+                                                        }}
+                                                        className="aspect-square rounded-lg overflow-hidden border-2 border-amber-300 hover:border-amber-500 transition-colors cursor-pointer"
+                                                    >
+                                                        <img
+                                                            src={`/api/files/view?path=${encodeURIComponent(url)}`}
+                                                            alt={`Teslimat ${idx + 1}`}
+                                                            className="w-full h-full object-cover"
+                                                        />
+                                                    </div>
                                                 ))}
                                             </div>
                                         </div>
@@ -442,7 +506,7 @@ export default function ShipmentDetailsPage() {
                                                         <p className="text-amber-900 font-medium text-sm">{activity.description}</p>
                                                         <div className="flex items-center gap-3 mt-1 text-xs text-amber-700">
                                                             <span className="flex items-center gap-1"><User className="w-3 h-3" />{activity.userFullName || activity.userEmail}</span>
-                                                            <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{formatDistanceToNow(new Date(activity.createdAt), { addSuffix: true, locale: tr })}</span>
+                                                            <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{formatDistanceToNow(new Date(activity.createdAt), { addSuffix: true, locale: tr })} · {new Date(activity.createdAt).toLocaleDateString('tr-TR')} - {new Date(activity.createdAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</span>
                                                         </div>
                                                     </div>
                                                     <span className="text-xs text-purple-400 font-mono">{activity.activityType.replace(/_/g, ' ')}</span>
@@ -489,7 +553,7 @@ export default function ShipmentDetailsPage() {
                         <div className="space-y-4">
                             <div><label className="block text-sm font-medium text-green-900 mb-2">Planlanan Sevk Tarihi</label><input type="date" value={plannedDate} onChange={(e) => setPlannedDate(e.target.value)} className="w-full px-4 py-3 bg-white border border-green-300 rounded-lg text-green-900 focus:outline-none focus:ring-2 focus:ring-green-500" /></div>
                             <div><label className="block text-sm font-medium text-green-900 mb-2">Araç Seçimi</label><select value={selectedVehicleId} onChange={(e) => setSelectedVehicleId(e.target.value)} className="w-full px-4 py-3 bg-white border border-green-300 rounded-lg text-green-900 focus:outline-none focus:ring-2 focus:ring-green-500"><option value="">Araç Seçiniz</option>{vehicles.map((vehicle) => (<option key={vehicle.id} value={vehicle.id}>{vehicle.licensePlate} - {vehicle.vehicleType}</option>))}</select></div>
-                            <div><label className="block text-sm font-medium text-green-900 mb-2">Şoför Seçimi</label><select value={selectedDriverIdForPlanning} onChange={(e) => setSelectedDriverIdForPlanning(e.target.value)} className="w-full px-4 py-3 bg-white border border-green-300 rounded-lg text-green-900 focus:outline-none focus:ring-2 focus:ring-green-500"><option value="">Otomatik Ata (Giriş Yapan Kullanıcı)</option>{users.map((user) => (<option key={user.id} value={user.id}>{user.firstName} {user.lastName} ({user.email})</option>))}</select></div>
+                            <div><label className="block text-sm font-medium text-green-900 mb-2">Şoför Seçimi</label><select value={selectedDriverIdForPlanning} onChange={(e) => setSelectedDriverIdForPlanning(e.target.value)} className="w-full px-4 py-3 bg-white border border-green-300 rounded-lg text-green-900 focus:outline-none focus:ring-2 focus:ring-green-500"><option value="">Otomatik Ata (Giriş Yapan Kullanıcı)</option>{users.map((user: any) => (<option key={user.id} value={user.id}>{user.firstName} {user.lastName}</option>))}</select></div>
                         </div>
                         <div className="flex gap-3 mt-6">
                             <button onClick={() => setShowPlanningModal(false)} disabled={isPlanning} className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-medium disabled:opacity-50">İptal</button>
@@ -499,6 +563,13 @@ export default function ShipmentDetailsPage() {
                 </div>
             )}
 
+            <ImageGalleryModal
+                isOpen={showGallery}
+                onClose={() => setShowGallery(false)}
+                images={shipmentDetails?.deliveryPhotoUrls || []}
+                initialIndex={galleryStartIndex}
+            />
+
             <CompleteShipmentModal
                 isOpen={showCompleteModal}
                 onClose={() => setShowCompleteModal(false)}
@@ -506,7 +577,19 @@ export default function ShipmentDetailsPage() {
                 isLoading={isCompleting}
             />
 
+            {/* Success Modal removed in favor of Toast */}
 
+            <ConfirmModal
+                isOpen={showApproveConfirm}
+                onClose={() => setShowApproveConfirm(false)}
+                onCancel={() => setShowApproveConfirm(false)}
+                onConfirm={handleConfirmApprove}
+                title="Sevki Onayla"
+                message="Bu sevkiyatı onaylamak istediğinizden emin misiniz? Stoklar kalıcı olarak düşülecektir."
+                confirmText="Onayla"
+                cancelText="İptal"
+                type="success"
+            />
         </div>
     )
 }

@@ -35,11 +35,15 @@ export interface SaleProductResponse {
     productCode: string;
     productName: string;
     productImageUrl?: string;
+    brand?: string;
     quantity: number;
     unitPriceExcludingVat: number;
     vatRate: number;
     internetSalesPrice: number;
     totalPrice: number;
+    pendingShipmentQuantity?: number;
+    shippedQuantity?: number;
+    deliveredQuantity?: number;
 }
 
 export interface SaleResponse {

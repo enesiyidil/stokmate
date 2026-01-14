@@ -12,7 +12,10 @@ import {
     useDeleteContractMutation,
     SaleStatus,
 } from '../../services/saleApi'
+import CreateSaleShipmentModal from '../../components/sales/CreateSaleShipmentModal'
 import { useTopbar } from '../../context/TopbarContext'
+import { useToast } from '../../context/ToastContext'
+import ConfirmModal from '../../components/common/ConfirmModal'
 
 const SaleDetailsPage: React.FC = () => {
     const { id } = useParams<{ id: string }>()
@@ -25,6 +28,10 @@ const SaleDetailsPage: React.FC = () => {
     const [updateStatus, { isLoading: isUpdating }] = useUpdateStatusMutation()
     const [uploadContract, { isLoading: isUploading }] = useUploadContractMutation()
     const [deleteContract, { isLoading: isDeleting }] = useDeleteContractMutation()
+    const { success, error } = useToast()
+    const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false)
+
+    const [isShipmentModalOpen, setIsShipmentModalOpen] = React.useState(false)
 
     const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -33,10 +40,10 @@ const SaleDetailsPage: React.FC = () => {
         try {
             await updateStatus({ id, status: newStatus }).unwrap()
             refetch()
-            alert('Durum güncellendi')
-        } catch (error) {
-            console.error('Failed to update status', error)
-            alert('Durum güncellenirken bir hata oluştu')
+            success('Durum güncellendi')
+        } catch (err) {
+            console.error('Failed to update status', err)
+            error('Durum güncellenirken bir hata oluştu')
         }
     }
 
@@ -47,22 +54,23 @@ const SaleDetailsPage: React.FC = () => {
         try {
             await uploadContract({ id, file }).unwrap()
             refetch()
-            alert('Sözleşme başarıyla yüklendi')
-        } catch (error) {
-            console.error('Failed to upload contract', error)
-            alert('Sözleşme yüklenirken bir hata oluştu')
+            success('Sözleşme başarıyla yüklendi')
+        } catch (err) {
+            console.error('Failed to upload contract', err)
+            error('Sözleşme yüklenirken bir hata oluştu')
         }
     }
 
-    const handleContractDelete = async () => {
-        if (!id || !confirm('Sözleşme dosyasını silmek istediğinize emin misiniz?')) return
+    const handleConfirmDelete = async () => {
+        if (!id) return
         try {
             await deleteContract(id).unwrap()
             refetch()
-            alert('Sözleşme silindi')
-        } catch (error) {
-            console.error('Failed to delete contract', error)
-            alert('Sözleşme silinirken bir hata oluştu')
+            success('Sözleşme silindi')
+            setShowDeleteConfirm(false)
+        } catch (err) {
+            console.error('Failed to delete contract', err)
+            error('Sözleşme silinirken bir hata oluştu')
         }
     }
 
@@ -92,24 +100,14 @@ const SaleDetailsPage: React.FC = () => {
                             {statusBadge.label}
                         </span>
                         {sale.status === SaleStatus.DEVAM_EDIYOR && (
-                            <>
-                                <button
-                                    onClick={() => handleStatusChange(SaleStatus.TAMAMLANDI)}
-                                    disabled={isUpdating}
-                                    className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:from-green-600 hover:to-emerald-700 transition-all disabled:opacity-50"
-                                >
-                                    <CheckCircle className="w-4 h-4" />
-                                    <span className="hidden lg:inline">Tamamla</span>
-                                </button>
-                                <button
-                                    onClick={() => handleStatusChange(SaleStatus.IPTAL_EDILDI)}
-                                    disabled={isUpdating}
-                                    className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-red-500 to-pink-600 text-white rounded-lg hover:from-red-600 hover:to-pink-700 transition-all disabled:opacity-50"
-                                >
-                                    <XCircle className="w-4 h-4" />
-                                    <span className="hidden lg:inline">İptal Et</span>
-                                </button>
-                            </>
+                            <button
+                                onClick={() => handleStatusChange(SaleStatus.IPTAL_EDILDI)}
+                                disabled={isUpdating}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-red-500 to-pink-600 text-white rounded-lg hover:from-red-600 hover:to-pink-700 transition-all disabled:opacity-50"
+                            >
+                                <XCircle className="w-4 h-4" />
+                                <span className="hidden lg:inline">İptal Et</span>
+                            </button>
                         )}
                     </div>
                 ),
@@ -208,7 +206,7 @@ const SaleDetailsPage: React.FC = () => {
                                         </a>
                                     </div>
                                     <button
-                                        onClick={handleContractDelete}
+                                        onClick={() => setShowDeleteConfirm(true)}
                                         disabled={isDeleting}
                                         className="w-full py-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors flex items-center justify-center gap-2"
                                     >
@@ -240,27 +238,73 @@ const SaleDetailsPage: React.FC = () => {
                     <div className="lg:col-span-8 space-y-6">
                         {/* Products */}
                         <div className="backdrop-blur-xl bg-white border border-amber-200 rounded-2xl shadow-2xl p-6">
-                            <h3 className="text-lg font-semibold text-amber-900 flex items-center gap-2 mb-4">
-                                <Package className="w-5 h-5" />
-                                Ürünler ({sale.products.length})
-                            </h3>
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-lg font-semibold text-amber-900 flex items-center gap-2">
+                                    <Package className="w-5 h-5" />
+                                    Ürünler ({sale.products.length})
+                                </h3>
+                                {sale.status === SaleStatus.DEVAM_EDIYOR && (
+                                    <button
+                                        onClick={() => setIsShipmentModalOpen(true)}
+                                        className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-blue-500 to-cyan-600 text-white rounded-lg hover:from-blue-600 hover:to-cyan-700 transition-all text-sm font-medium shadow-md"
+                                    >
+                                        <Package className="w-4 h-4" />
+                                        Sevke Sun
+                                    </button>
+                                )}
+                            </div>
                             <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
                                 {sale.products.map((product, index) => (
-                                    <div key={index} className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                            <div className="md:col-span-2">
-                                                <p className="text-xs text-amber-700">Ürün Adı</p>
-                                                <p className="text-amber-900 font-medium">{product.productName}</p>
-                                                <p className="text-xs text-amber-500 font-mono mt-1">{product.productCode}</p>
-                                            </div>
+                                    <div key={index} className="p-4 bg-amber-50 border border-amber-200 rounded-lg space-y-3">
+                                        <div className="flex justify-between items-start">
                                             <div>
-                                                <p className="text-xs text-amber-700">Miktar</p>
-                                                <p className="text-amber-900 font-medium">{product.quantity}</p>
+                                                <p className="font-medium text-amber-900">{product.productName}</p>
+                                                <p className="text-sm text-amber-600">Kod: {product.productCode}</p>
                                             </div>
-                                            <div>
-                                                <p className="text-xs text-amber-700">Toplam</p>
-                                                <p className="text-amber-900 font-medium">{product.totalPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} TL</p>
+                                            <p className="font-bold text-amber-900">{product.quantity} Adet</p>
+                                        </div>
+
+                                        {/* Shipment Progress */}
+                                        <div className="mt-3">
+                                            <div className="flex items-center justify-between text-xs text-blue-700 mb-1">
+                                                <span className="font-medium">Sevk İlerlemesi</span>
+                                                <div className="flex gap-3">
+                                                    <span className="text-amber-900"><span className="font-bold">{product.quantity}</span> Toplam</span>
+                                                    {(product.pendingShipmentQuantity || 0) + (product.shippedQuantity || 0) > 0 && (
+                                                        <span className="text-blue-700"><span className="font-bold">{(product.pendingShipmentQuantity || 0) + (product.shippedQuantity || 0)}</span> Sevkte</span>
+                                                    )}
+                                                    {(product.deliveredQuantity || 0) > 0 && (
+                                                        <span className="text-green-700"><span className="font-bold">{product.deliveredQuantity}</span> Teslim</span>
+                                                    )}
+                                                </div>
                                             </div>
+                                            <div className="w-full bg-gray-100 rounded-full h-2.5 flex overflow-hidden border border-gray-200">
+                                                {/* Delivered (Green) */}
+                                                <div
+                                                    className="bg-gradient-to-r from-green-500 to-emerald-600 h-full transition-all"
+                                                    style={{ width: `${Math.min(((product.deliveredQuantity || 0) / product.quantity) * 100, 100)}%` }}
+                                                    title={`${product.deliveredQuantity} Teslim Edildi`}
+                                                />
+                                                {/* Shipped (Blue) */}
+                                                <div
+                                                    className="bg-blue-500 h-full transition-all"
+                                                    style={{ width: `${Math.min(((product.shippedQuantity || 0) / product.quantity) * 100, 100)}%` }}
+                                                    title={`${product.shippedQuantity} Sevkte`}
+                                                />
+                                                {/* Pending (Orange Striped) */}
+                                                <div
+                                                    className="bg-orange-400 h-full transition-all striped-bg opacity-70"
+                                                    style={{ width: `${Math.min(((product.pendingShipmentQuantity || 0) / product.quantity) * 100, 100)}%` }}
+                                                    title={`${product.pendingShipmentQuantity} Onay Bekliyor`}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="flex justify-between items-center text-sm pt-2 border-t border-amber-200/50">
+                                            <span className="text-amber-700">Birim Fiyat: {product.unitPriceExcludingVat.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} TL</span>
+                                            <span className="font-bold text-amber-900">
+                                                {product.totalPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} TL
+                                            </span>
                                         </div>
                                     </div>
                                 ))}
@@ -311,8 +355,30 @@ const SaleDetailsPage: React.FC = () => {
                         </div>
                     </div>
                 </div>
+
+                <CreateSaleShipmentModal
+                    isOpen={isShipmentModalOpen}
+                    onClose={() => setIsShipmentModalOpen(false)}
+                    saleId={id!}
+                    products={sale.products}
+                    onSuccess={() => {
+                        refetch()
+                    }}
+                />
+
+                <ConfirmModal
+                    isOpen={showDeleteConfirm}
+                    onClose={() => setShowDeleteConfirm(false)}
+                    onCancel={() => setShowDeleteConfirm(false)}
+                    onConfirm={handleConfirmDelete}
+                    title="Sözleşmeyi Sil"
+                    message="Sözleşme dosyasını silmek istediğinize emin misiniz? Bu işlem geri alınamaz."
+                    confirmText="Sil"
+                    cancelText="İptal"
+                    type="danger"
+                />
             </div>
-        </div>
+        </div >
     )
 }
 

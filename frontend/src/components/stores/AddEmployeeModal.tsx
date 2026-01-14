@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { X, UserPlus } from 'lucide-react'
 import { useAssignEmployeeMutation, useGetStoreEmployeesQuery } from '../../services/storeEmployeeApi'
-import { useGetAllUsersQuery, type UserResponse } from '../../services/userApi'
+import { useGetUserSummariesQuery } from '../../services/userApi'
 
 interface AddEmployeeModalProps {
     storeId: string
@@ -16,7 +16,7 @@ export default function AddEmployeeModal({ storeId, onClose, onSuccess }: AddEmp
     })
     const [error, setError] = useState('')
 
-    const { data: users = [] } = useGetAllUsersQuery()
+    const { data: users = [] } = useGetUserSummariesQuery()
     const { data: currentEmployees = [] } = useGetStoreEmployeesQuery(storeId)
     const [assignEmployee, { isLoading }] = useAssignEmployeeMutation()
 
@@ -25,7 +25,7 @@ export default function AddEmployeeModal({ storeId, onClose, onSuccess }: AddEmp
 
     // Filter users to only show STORE_MANAGER and STORE_EMPLOYEE who are NOT already assigned
     const availableEmployees = users.filter(
-        (u: UserResponse) =>
+        (u) =>
             (u.role === 'STORE_MANAGER' || u.role === 'STORE_EMPLOYEE') &&
             !assignedUserIds.has(u.id)
     )
@@ -77,9 +77,9 @@ export default function AddEmployeeModal({ storeId, onClose, onSuccess }: AddEmp
                             <option value="" disabled>
                                 {availableEmployees.length === 0 ? 'Atanabilecek çalışan yok' : 'Çalışan seçin'}
                             </option>
-                            {availableEmployees.map((user: UserResponse) => (
+                            {availableEmployees.map((user) => (
                                 <option key={user.id} value={user.id}>
-                                    {user.firstName || ''} {user.lastName || ''} ({user.email})
+                                    {user.firstName || ''} {user.lastName || ''} ({user.displayName || user.firstName})
                                 </option>
                             ))}
                         </select>

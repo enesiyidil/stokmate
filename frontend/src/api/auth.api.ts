@@ -10,6 +10,12 @@ interface OtpLoginRequest {
     code: string
 }
 
+interface ReauthRequest {
+    email: string
+    password: string
+    twoFactorCode?: string
+}
+
 type UserRole = 'ADMIN' | 'MANAGER' | 'DIRECTOR' | 'OPERATIONS_MANAGER' | 'LOGISTICS_MANAGER' | 'STORE_MANAGER' | 'STORE_EMPLOYEE'
 
 interface AuthResponse {
@@ -69,6 +75,13 @@ export const authApi = api.injectEndpoints({
                 body: data
             })
         }),
+        reauthenticate: builder.mutation<AuthResponse, ReauthRequest>({
+            query: (body) => ({
+                url: '/auth/reauth',
+                method: 'POST',
+                body,
+            }),
+        }),
         getMe: builder.query<MeResponse, void>({
             query: () => '/auth/me',
             providesTags: ['Auth'],
@@ -88,5 +101,7 @@ export const {
     useVerify2FAMutation,
     useGetMeQuery,
     useLogoutMutation,
-    useForgotPasswordMutation
+    useForgotPasswordMutation,
+    useReauthenticateMutation,
 } = authApi
+

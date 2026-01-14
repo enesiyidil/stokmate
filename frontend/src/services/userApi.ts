@@ -12,6 +12,15 @@ export interface UserResponse {
     deleted?: boolean
     deletedAlias?: string
     displayName?: string
+    totpEnabled?: boolean
+}
+
+export interface UserSummaryResponse {
+    id: string
+    firstName: string
+    lastName: string
+    role: string
+    displayName: string
 }
 
 export interface CreateUserRequest {
@@ -43,6 +52,10 @@ export const userApi = api.injectEndpoints({
     endpoints: (builder) => ({
         getAllUsers: builder.query<UserResponse[], void>({
             query: () => '/users',
+            providesTags: ['Users'],
+        }),
+        getUserSummaries: builder.query<UserSummaryResponse[], void>({
+            query: () => '/users/summary',
             providesTags: ['Users'],
         }),
         createUser: builder.mutation<UserResponse, CreateUserRequest>({
@@ -96,11 +109,20 @@ export const userApi = api.injectEndpoints({
             query: () => '/users/sales-consultants',
             providesTags: ['Users'],
         }),
+        toggle2FA: builder.mutation<UserResponse, { id: string; enabled: boolean }>({
+            query: ({ id, enabled }) => ({
+                url: `/users/${id}/toggle-2fa`,
+                method: 'PUT',
+                body: { enabled },
+            }),
+            invalidatesTags: ['Users'],
+        }),
     }),
 })
 
 export const {
     useGetAllUsersQuery,
+    useGetUserSummariesQuery,
     useCreateUserMutation,
     useUpdateProfileMutation,
     useDeleteUserMutation,
@@ -108,4 +130,5 @@ export const {
     useToggleUserActiveMutation,
     useSoftDeleteUserMutation,
     useGetSalesConsultantsQuery,
+    useToggle2FAMutation,
 } = userApi
