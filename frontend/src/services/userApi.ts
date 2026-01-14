@@ -12,6 +12,7 @@ export interface UserResponse {
     deleted?: boolean
     deletedAlias?: string
     displayName?: string
+    totpEnabled?: boolean
 }
 
 export interface CreateUserRequest {
@@ -96,6 +97,14 @@ export const userApi = api.injectEndpoints({
             query: () => '/users/sales-consultants',
             providesTags: ['Users'],
         }),
+        toggle2FA: builder.mutation<UserResponse, { id: string; enabled: boolean }>({
+            query: ({ id, enabled }) => ({
+                url: `/users/${id}/toggle-2fa`,
+                method: 'PUT',
+                body: { enabled },
+            }),
+            invalidatesTags: ['Users'],
+        }),
     }),
 })
 
@@ -108,4 +117,5 @@ export const {
     useToggleUserActiveMutation,
     useSoftDeleteUserMutation,
     useGetSalesConsultantsQuery,
+    useToggle2FAMutation,
 } = userApi

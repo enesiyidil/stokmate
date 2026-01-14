@@ -36,7 +36,6 @@ export default function StoreDetailsPage() {
     }, [store, setTopbarContent, navigate])
 
     const handleRemoveClick = (userId: string, userName: string) => {
-        console.log('Remove button clicked:', userId, userName)
         setEmployeeToRemove({ userId, userName })
     }
 
@@ -48,7 +47,6 @@ export default function StoreDetailsPage() {
             refetchEmployees()
             setEmployeeToRemove(null)
         } catch (error) {
-            console.error('Failed to remove employee:', error)
             alert('Çalışan çıkarılırken bir hata oluştu')
         }
     }

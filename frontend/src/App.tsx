@@ -17,6 +17,8 @@ import OrderReceiptsPage from './pages/OrderReceiptsPage'
 import SalesPage from './pages/sales/SalesPage'
 import RequestsPage from './pages/RequestsPage'
 import SettingsPage from './pages/SettingsPage'
+import SupportRequestsPage from './pages/SupportRequestsPage'
+import AboutPage from './pages/AboutPage'
 import ProtectedRoute from './routes/ProtectedRoute'
 import SidebarLayout from './components/layout/SidebarLayout'
 import ShipmentOperationsPage from './pages/shipment/ShipmentOperationsPage'
@@ -75,10 +77,12 @@ function App() {
               <Route path="/sales/:id" element={<SaleDetailsPage />} />
               <Route path="/shipment" element={<ShipmentOperationsPage />} />
               <Route path="/shipment/:orderId" element={<ShipmentDetailsPage />} />
-              <Route path="/requests" element={<RequestsPage />} />
+              <Route path="/requests" element={<SupportRequestsPage />} />
               <Route path="/customers" element={<CustomersPage />} />
               <Route path="/reports" element={<ReportsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/support-requests" element={<SupportRequestsPage />} />
+              <Route path="/about" element={<AboutPage />} />
 
               {/* Admin/Manager only routes */}
               <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'MANAGER']} />}>

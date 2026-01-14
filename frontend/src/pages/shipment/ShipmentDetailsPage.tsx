@@ -442,7 +442,7 @@ export default function ShipmentDetailsPage() {
                                                         <p className="text-amber-900 font-medium text-sm">{activity.description}</p>
                                                         <div className="flex items-center gap-3 mt-1 text-xs text-amber-700">
                                                             <span className="flex items-center gap-1"><User className="w-3 h-3" />{activity.userFullName || activity.userEmail}</span>
-                                                            <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{formatDistanceToNow(new Date(activity.createdAt), { addSuffix: true, locale: tr })}</span>
+                                                            <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{formatDistanceToNow(new Date(activity.createdAt), { addSuffix: true, locale: tr })} · {new Date(activity.createdAt).toLocaleDateString('tr-TR')} - {new Date(activity.createdAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</span>
                                                         </div>
                                                     </div>
                                                     <span className="text-xs text-purple-400 font-mono">{activity.activityType.replace(/_/g, ' ')}</span>

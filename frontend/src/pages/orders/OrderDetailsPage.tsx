@@ -1,6 +1,6 @@
-import { ArrowLeft, Package, User, FileText, CheckCircle, XCircle, Clock, Upload, Download, Activity, Edit, Eye, Pencil, Truck } from 'lucide-react'
+import { ArrowLeft, Package, User, FileText, CheckCircle, XCircle, Clock, Upload, Download, Activity, Edit, Eye, Pencil, Truck, StickyNote, Plus, Strikethrough } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { useCancelOrderMutation, useUploadInvoiceMutation, useGetInvoiceUrlQuery, useGetOrderQuery, useUpdateSalesConsultantMutation, useApproveShipmentMutation, useUpdateBrandMutation } from '../../services/orderApi'
+import { useCancelOrderMutation, useUploadInvoiceMutation, useGetInvoiceUrlQuery, useGetOrderQuery, useUpdateSalesConsultantMutation, useApproveShipmentMutation, useUpdateBrandMutation, useGetOrderNotesQuery, useAddOrderNoteMutation, useStrikeOrderNoteMutation } from '../../services/orderApi'
 import { useCreatePartialShipmentMutation } from '../../services/shipmentApi'
 import { useGetOrderActivitiesQuery } from '../../services/orderActivityApi'
 import { useListOrderReceiptsQuery } from '../../services/orderReceiptApi'
@@ -45,18 +45,43 @@ export default function OrderDetailsPage() {
     const [showBrandModal, setShowBrandModal] = useState(false)
     const [selectedBrandForUpdate, setSelectedBrandForUpdate] = useState<string>('')
 
-    // Check if user can ship products (for customer-specific orders)
-    const canEdit = useMemo(() => {
+    // Order Notes state
+    const { data: orderNotes = [], refetch: refetchNotes } = useGetOrderNotesQuery(id!)
+    const [addOrderNote] = useAddOrderNoteMutation()
+    const [strikeOrderNote] = useStrikeOrderNoteMutation()
+    const [newNoteContent, setNewNoteContent] = useState('')
+    const [isAddingNote, setIsAddingNote] = useState(false)
+
+    // Expanded price details state (tracks which product's price details are visible)
+    const [expandedPriceDetails, setExpandedPriceDetails] = useState<Record<string, boolean>>({})
+
+    const togglePriceDetails = (productId: string) => {
+        setExpandedPriceDetails(prev => ({
+            ...prev,
+            [productId]: !prev[productId]
+        }))
+    }
+
+    // Check if user can ship products - everyone except LOGISTICS_MANAGER
+    const canShipProducts = useMemo(() => {
         if (!order || !user) return false
         if (order.orderType !== 'CUSTOMER_SPECIFIC') return false
-        // Admin, Manager can always edit
-        if (user.role === 'ADMIN' || user.role === 'MANAGER') return true
-        // Store manager can edit
-        if (user.role === 'STORE_MANAGER') return true
-        // Store employee (satış danışmanı) can edit only their own orders
-        if (user.role === 'STORE_EMPLOYEE' && order.salesConsultant?.id === user.id) return true
-        return false
+        // Logistics manager cannot ship products (they manage shipments, not create them)
+        if (user.role === 'LOGISTICS_MANAGER') return false
+        return true
     }, [order, user])
+
+    // Check if user can assign sales consultant - everyone except LOGISTICS_MANAGER and OPERATIONS_MANAGER
+    const canAssignConsultant = useMemo(() => {
+        if (!user) return false
+        if (user.role === 'LOGISTICS_MANAGER' || user.role === 'OPERATIONS_MANAGER') return false
+        return true
+    }, [user])
+
+    // Check if user is admin or manager (for edit brand button)
+    const isAdminOrManager = useMemo(() => {
+        return user?.role === 'ADMIN' || user?.role === 'MANAGER'
+    }, [user])
 
     const shippableProducts = useMemo(() => {
         if (!order?.products) return []
@@ -74,11 +99,6 @@ export default function OrderDetailsPage() {
         // taking into account shipped, pending shipment quantities
         return product.availableForShipmentQuantity || 0
     }
-
-    // Check if user is admin or manager
-    const isAdminOrManager = useMemo(() => {
-        return user?.role === 'ADMIN' || user?.role === 'MANAGER'
-    }, [user])
 
     // Helper to get pending quantity
     const getPendingQuantity = (productId: string) => {
@@ -100,6 +120,32 @@ export default function OrderDetailsPage() {
         navigate('/products/accept-order', {
             state: { orderId: order!.id, orderNo: order!.orderNo, products: order!.products }
         })
+    }
+
+    const handleAddNote = async () => {
+        if (!newNoteContent.trim() || !id) return
+        setIsAddingNote(true)
+        try {
+            await addOrderNote({ orderId: id, content: newNoteContent.trim() }).unwrap()
+            setNewNoteContent('')
+            refetchNotes()
+        } catch (error) {
+            console.error('Failed to add note:', error)
+            alert('Not eklenirken bir hata oluştu')
+        } finally {
+            setIsAddingNote(false)
+        }
+    }
+
+    const handleStrikeNote = async (noteId: string) => {
+        if (!id) return
+        try {
+            await strikeOrderNote({ orderId: id, noteId }).unwrap()
+            refetchNotes()
+        } catch (error) {
+            console.error('Failed to strike note:', error)
+            alert('Not işaretlenirken bir hata oluştu')
+        }
     }
 
     const handleInvoiceUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -231,7 +277,7 @@ export default function OrderDetailsPage() {
         }
 
         return () => setTopbarContent(null)
-    }, [order, setTopbarContent, navigate, isCanceling, canEdit, shippableProducts, isAdminOrManager])
+    }, [order, setTopbarContent, navigate, isCanceling, shippableProducts, isAdminOrManager, canShipProducts, canAssignConsultant])
 
     if (isLoading || !order) {
         return <div className="flex items-center justify-center min-h-screen"><p className="text-white text-xl">Yükleniyor...</p></div>
@@ -319,7 +365,7 @@ export default function OrderDetailsPage() {
                         <div className="mt-4 pt-4 border-t border-amber-200">
                             <div className="flex items-center justify-between mb-3">
                                 <p className="text-sm font-semibold text-amber-800">👨‍💼 Satış Danışmanı</p>
-                                {isAdminOrManager && (
+                                {canAssignConsultant && (
                                     <button
                                         onClick={handleOpenSalesConsultantModal}
                                         className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 text-amber-800 rounded-lg hover:bg-amber-200 transition-all text-xs font-medium"
@@ -358,9 +404,9 @@ export default function OrderDetailsPage() {
                 </div>
 
                 {/* 2 Column Layout: Left Fixed, Right Scrollable */}
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
                     {/* Left Column - Fixed */}
-                    <div className="lg:col-span-4 space-y-6">
+                    <div className="lg:col-span-4 space-y-6 flex flex-col">
                         {/* Customer Info */}
                         {order.customer && (
                             <div className="backdrop-blur-xl bg-white border border-amber-200 rounded-2xl shadow-2xl p-6 space-y-4">
@@ -443,10 +489,89 @@ export default function OrderDetailsPage() {
                                 </div>
                             )}
                         </div>
+
+                        {/* Order Notes / Not Defteri */}
+                        <div className="flex-1 backdrop-blur-xl bg-white border border-amber-200 rounded-2xl shadow-2xl p-6 flex flex-col">
+                            <h3 className="text-lg font-semibold text-amber-900 flex items-center gap-2 mb-4">
+                                <StickyNote className="w-5 h-5" />
+                                Not Defteri ({orderNotes.length})
+                            </h3>
+
+                            {/* Add Note Input */}
+                            <div className="flex gap-2 mb-4">
+                                <input
+                                    type="text"
+                                    value={newNoteContent}
+                                    onChange={(e) => setNewNoteContent(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleAddNote()}
+                                    placeholder="Yeni not ekle..."
+                                    className="flex-1 px-4 py-2 bg-white border border-amber-300 rounded-lg text-amber-900 placeholder-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm"
+                                    maxLength={1000}
+                                />
+                                <button
+                                    onClick={handleAddNote}
+                                    disabled={isAddingNote || !newNoteContent.trim()}
+                                    className="px-4 py-2 bg-gradient-to-r from-amber-600 to-orange-600 text-white rounded-lg hover:from-amber-700 hover:to-orange-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                                >
+                                    <Plus className="w-4 h-4" />
+                                    Ekle
+                                </button>
+                            </div>
+
+                            {/* Notes List */}
+                            <div className="space-y-2 flex-1 overflow-y-auto pr-2">
+                                {orderNotes.length > 0 ? (
+                                    orderNotes.map((note) => (
+                                        <div
+                                            key={note.id}
+                                            className={`p-3 border rounded-lg flex items-start justify-between gap-3 ${note.strikethrough
+                                                ? 'bg-gray-100 border-gray-300'
+                                                : 'bg-amber-50 border-amber-200'
+                                                }`}
+                                        >
+                                            <div className="flex-1">
+                                                <p className={`text-sm ${note.strikethrough
+                                                    ? 'text-gray-500 line-through'
+                                                    : 'text-amber-900'
+                                                    }`}>
+                                                    {note.content}
+                                                </p>
+                                                <div className="flex items-center gap-3 mt-1 text-xs text-amber-700">
+                                                    <span className="flex items-center gap-1">
+                                                        <User className="w-3 h-3" />
+                                                        {note.createdByName}
+                                                    </span>
+                                                    <span className="flex items-center gap-1">
+                                                        <Clock className="w-3 h-3" />
+                                                        {formatDistanceToNow(new Date(note.createdAt), { addSuffix: true, locale: tr })}
+                                                    </span>
+                                                    {note.strikethrough && note.strikethroughByName && (
+                                                        <span className="text-gray-500">
+                                                            (Çizen: {note.strikethroughByName})
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            {!note.strikethrough && (
+                                                <button
+                                                    onClick={() => handleStrikeNote(note.id)}
+                                                    title="Üstünü Çiz"
+                                                    className="p-1.5 text-amber-600 hover:text-amber-800 hover:bg-amber-200 rounded transition-colors"
+                                                >
+                                                    <Strikethrough className="w-4 h-4" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    ))
+                                ) : (
+                                    <p className="text-center text-amber-700 py-8">Henüz not bulunmuyor</p>
+                                )}
+                            </div>
+                        </div>
                     </div>
 
                     {/* Right Column - Scrollable */}
-                    <div className="lg:col-span-8 space-y-6">
+                    <div className="lg:col-span-8 space-y-6 flex flex-col">
                         {/* Products */}
                         <div className="backdrop-blur-xl bg-white border border-amber-200 rounded-2xl shadow-2xl p-6">
                             <div className="flex items-center justify-between mb-4">
@@ -454,7 +579,7 @@ export default function OrderDetailsPage() {
                                     <Package className="w-5 h-5" />
                                     Ürünler ({order.products.length})
                                 </h3>
-                                {shippableProducts.length > 0 && canEdit && (
+                                {shippableProducts.length > 0 && canShipProducts && (
                                     <button
                                         onClick={handleOpenShipmentModal}
                                         className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-blue-500 to-cyan-600 text-white rounded-lg hover:from-blue-600 hover:to-cyan-700 transition-all text-sm font-medium shadow-md"
@@ -516,6 +641,98 @@ export default function OrderDetailsPage() {
                                                 </div>
                                             </div>
 
+                                            {/* Price Details - Only for Admin/Manager */}
+                                            {/* Price Details Accordion - Only for Admin/Manager */}
+                                            {isAdminOrManager && (product.grossPrice || product.netPrice) && (
+                                                <div className="mt-3">
+                                                    <button
+                                                        onClick={() => togglePriceDetails(product.id)}
+                                                        className="w-full flex items-center justify-between p-2 bg-amber-100/50 hover:bg-amber-100 border border-amber-300 rounded-lg transition-colors"
+                                                    >
+                                                        <span className="text-xs font-semibold text-amber-800 flex items-center gap-1">
+                                                            💰 Fiyat Bilgileri (Sadece Yöneticiler)
+                                                        </span>
+                                                        <span className={`text-amber-600 transition-transform ${expandedPriceDetails[product.id] ? 'rotate-180' : ''}`}>
+                                                            ▼
+                                                        </span>
+                                                    </button>
+                                                    {expandedPriceDetails[product.id] && (
+                                                        <div className="mt-2 p-3 bg-amber-50/50 border border-amber-200 rounded-lg">
+                                                            {/* Row 1: Main prices */}
+                                                            <div className="grid grid-cols-3 md:grid-cols-6 gap-2 text-xs">
+                                                                <div className="bg-white/70 p-2 rounded border border-amber-200">
+                                                                    <p className="text-amber-700 text-[10px]">Brüt Fiyat</p>
+                                                                    <p className="font-bold text-amber-900">₺{Number(product.grossPrice || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</p>
+                                                                </div>
+                                                                <div className="bg-white/70 p-2 rounded border border-amber-200">
+                                                                    <p className="text-amber-700 text-[10px]">Net Fiyat</p>
+                                                                    <p className="font-bold text-amber-900">₺{Number(product.netPrice || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</p>
+                                                                </div>
+                                                                <div className="bg-white/70 p-2 rounded border border-amber-200">
+                                                                    <p className="text-amber-700 text-[10px]">Sabit İskonto</p>
+                                                                    <p className="font-semibold text-amber-900">₺{Number(product.fixedDiscount || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</p>
+                                                                </div>
+                                                                <div className="bg-white/70 p-2 rounded border border-amber-200">
+                                                                    <p className="text-amber-700 text-[10px]">Nakit İskonto</p>
+                                                                    <p className="font-semibold text-amber-900">₺{Number(product.cashDiscount || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</p>
+                                                                </div>
+                                                                <div className="bg-white/70 p-2 rounded border border-amber-200">
+                                                                    <p className="text-amber-700 text-[10px]">Teşhir İskonto</p>
+                                                                    <p className="font-semibold text-amber-900">₺{Number(product.displayDiscount || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</p>
+                                                                </div>
+                                                                <div className="bg-white/70 p-2 rounded border border-amber-200">
+                                                                    <p className="text-amber-700 text-[10px]">KDV (%)</p>
+                                                                    <p className="font-semibold text-amber-900">{Number(product.vat || 0) * 100}</p>
+                                                                </div>
+                                                            </div>
+                                                            {/* Row 2: Discounts */}
+                                                            <div className="grid grid-cols-5 gap-2 text-xs mt-2">
+                                                                <div className="bg-orange-100/50 p-2 rounded border border-orange-300">
+                                                                    <p className="text-orange-700 text-[10px]">İskonto 1</p>
+                                                                    <p className="font-semibold text-orange-900">₺{Number(product.discount1 || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</p>
+                                                                </div>
+                                                                <div className="bg-orange-100/50 p-2 rounded border border-orange-300">
+                                                                    <p className="text-orange-700 text-[10px]">İskonto 2</p>
+                                                                    <p className="font-semibold text-orange-900">₺{Number(product.discount2 || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</p>
+                                                                </div>
+                                                                <div className="bg-orange-100/50 p-2 rounded border border-orange-300">
+                                                                    <p className="text-orange-700 text-[10px]">İskonto 3</p>
+                                                                    <p className="font-semibold text-orange-900">₺{Number(product.discount3 || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</p>
+                                                                </div>
+                                                                <div className="bg-orange-100/50 p-2 rounded border border-orange-300">
+                                                                    <p className="text-orange-700 text-[10px]">İskonto 4</p>
+                                                                    <p className="font-semibold text-orange-900">₺{Number(product.discount4 || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</p>
+                                                                </div>
+                                                                <div className="bg-orange-100/50 p-2 rounded border border-orange-300">
+                                                                    <p className="text-orange-700 text-[10px]">İskonto 5</p>
+                                                                    <p className="font-semibold text-orange-900">₺{Number(product.discount5 || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</p>
+                                                                </div>
+                                                            </div>
+                                                            {/* Row 3: Calculated values */}
+                                                            <div className="grid grid-cols-3 gap-2 text-xs mt-2">
+                                                                <div className="bg-amber-100/50 p-2 rounded border border-amber-300">
+                                                                    <p className="text-amber-700 text-[10px]">KDV Tutar</p>
+                                                                    <p className="font-semibold text-amber-900">₺{(Number(product.netPrice || 0) * Number(product.vat || 0)).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</p>
+                                                                </div>
+                                                                <div className="bg-amber-100/50 p-2 rounded border border-amber-300">
+                                                                    <p className="text-amber-700 text-[10px]">KDV Dahil Fiyat</p>
+                                                                    <p className="font-bold text-amber-900">₺{(Number(product.netPrice || 0) * (1 + Number(product.vat || 0))).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</p>
+                                                                </div>
+                                                                <div className="bg-amber-100/50 p-2 rounded border border-amber-300">
+                                                                    <p className="text-amber-700 text-[10px]">Kalan Tutar</p>
+                                                                    <p className="font-semibold text-amber-900">₺{(Number(product.grossPrice || 0) - Number(product.netPrice || 0)).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</p>
+                                                                </div>
+                                                            </div>
+                                                            {product.paymentConditionDefinition && (
+                                                                <div className="mt-2 pt-2 border-t border-amber-300">
+                                                                    <span className="text-xs text-amber-700">Ödeme Koşulu:</span>
+                                                                    <span className="ml-1 text-xs font-medium text-amber-900">{product.paymentConditionDefinition}</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
                                             {/* Acceptance Progress */}
                                             <div className="mt-3">
                                                 <div className="flex items-center justify-between text-xs text-amber-700 mb-1">
@@ -560,12 +777,12 @@ export default function OrderDetailsPage() {
                         </div>
 
                         {/* Activities */}
-                        <div className="backdrop-blur-xl bg-white border border-amber-200 rounded-2xl shadow-2xl p-6">
+                        <div className="flex-1 backdrop-blur-xl bg-white border border-amber-200 rounded-2xl shadow-2xl p-6 flex flex-col">
                             <h3 className="text-lg font-semibold text-amber-900 flex items-center gap-2 mb-4">
                                 <Activity className="w-5 h-5" />
                                 Sipariş Olayları ({activities.length})
                             </h3>
-                            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+                            <div className="space-y-3 flex-1 overflow-y-auto pr-2">
                                 {activities.length > 0 ? (
                                     activities.map((activity, index) => (
                                         <div key={activity.id} className="relative pl-6">
@@ -582,7 +799,7 @@ export default function OrderDetailsPage() {
                                                             </span>
                                                             <span className="flex items-center gap-1">
                                                                 <Clock className="w-3 h-3" />
-                                                                {formatDistanceToNow(new Date(activity.createdAt), { addSuffix: true, locale: tr })}
+                                                                {formatDistanceToNow(new Date(activity.createdAt), { addSuffix: true, locale: tr })} · {new Date(activity.createdAt).toLocaleDateString('tr-TR')} - {new Date(activity.createdAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
                                                             </span>
                                                         </div>
                                                     </div>
@@ -594,7 +811,7 @@ export default function OrderDetailsPage() {
                                                                 'INVOICE_DELETED': 'Fatura Silindi', 'PRODUCTS_ACCEPTED': 'Ürünler Kabul Edildi',
                                                                 'PRODUCT_ACCEPTED': 'Ürün Kabul Edildi', 'SHIPMENT_CREATED': 'Sevkiyat Oluşturuldu',
                                                                 'SHIPMENT_UPDATED': 'Sevkiyat Güncellendi', 'NOTE_ADDED': 'Not Eklendi',
-                                                                'ORDER_UPDATED': 'Sipariş Güncellendi', 'SHIPMENT_APPROVED': 'Sevk Onaylandı'
+                                                                'NOTE_STRIKETHROUGH': 'Not Çizildi', 'ORDER_UPDATED': 'Sipariş Güncellendi', 'SHIPMENT_APPROVED': 'Sevk Onaylandı'
                                                             }
                                                             return labels[activity.activityType] || activity.activityType.replace(/_/g, ' ')
                                                         })()}
@@ -610,189 +827,190 @@ export default function OrderDetailsPage() {
                         </div>
                     </div>
                 </div>
-            </div>
 
-            {/* Sales Consultant Selection Modal */}
-            {showSalesConsultantModal && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div className="bg-white border border-amber-200 rounded-2xl shadow-2xl w-full max-w-md p-6">
-                        <h3 className="text-xl font-bold text-amber-900 mb-4">Satış Danışmanı Seç</h3>
-                        <select
-                            value={selectedConsultantId}
-                            onChange={(e) => setSelectedConsultantId(e.target.value)}
-                            className="w-full px-4 py-3 bg-white border border-amber-300 rounded-lg text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-500 mb-4"
-                        >
-                            <option value="">-- Seçiniz (Kaldır) --</option>
-                            {salesConsultants.map(sc => (
-                                <option key={sc.id} value={sc.id}>
-                                    {sc.firstName} {sc.lastName}
-                                </option>
-                            ))}
-                        </select>
-                        <div className="flex gap-3">
-                            <button
-                                onClick={() => setShowSalesConsultantModal(false)}
-                                className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+
+                {/* Sales Consultant Selection Modal */}
+                {showSalesConsultantModal && (
+                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                        <div className="bg-white border border-amber-200 rounded-2xl shadow-2xl w-full max-w-md p-6">
+                            <h3 className="text-xl font-bold text-amber-900 mb-4">Satış Danışmanı Seç</h3>
+                            <select
+                                value={selectedConsultantId}
+                                onChange={(e) => setSelectedConsultantId(e.target.value)}
+                                className="w-full px-4 py-3 bg-white border border-amber-300 rounded-lg text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-500 mb-4"
                             >
-                                İptal
-                            </button>
-                            <button
-                                onClick={handleSaveSalesConsultant}
-                                className="flex-1 px-4 py-2 bg-gradient-to-r from-amber-600 to-orange-600 text-white rounded-lg hover:from-amber-700 hover:to-orange-700 transition-all font-medium"
-                            >
-                                Kaydet
-                            </button>
+                                <option value="">-- Seçiniz (Kaldır) --</option>
+                                {salesConsultants.map(sc => (
+                                    <option key={sc.id} value={sc.id}>
+                                        {sc.firstName} {sc.lastName}
+                                    </option>
+                                ))}
+                            </select>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setShowSalesConsultantModal(false)}
+                                    className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                                >
+                                    İptal
+                                </button>
+                                <button
+                                    onClick={handleSaveSalesConsultant}
+                                    className="flex-1 px-4 py-2 bg-gradient-to-r from-amber-600 to-orange-600 text-white rounded-lg hover:from-amber-700 hover:to-orange-700 transition-all font-medium"
+                                >
+                                    Kaydet
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )}
 
-            {/* Shipment Modal */}
-            {showShipmentModal && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div className="bg-white border border-blue-200 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-                        <div className="p-6 border-b border-blue-100">
-                            <h3 className="text-xl font-bold text-blue-900">Kısmi Sevk Talebi</h3>
-                            <p className="text-sm text-blue-600 mt-1">Sevk etmek istediğiniz ürünlerin miktarını giriniz.</p>
-                        </div>
+                {/* Shipment Modal */}
+                {showShipmentModal && (
+                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                        <div className="bg-white border border-blue-200 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+                            <div className="p-6 border-b border-blue-100">
+                                <h3 className="text-xl font-bold text-blue-900">Kısmi Sevk Talebi</h3>
+                                <p className="text-sm text-blue-600 mt-1">Sevk etmek istediğiniz ürünlerin miktarını giriniz.</p>
+                            </div>
 
-                        <div className="p-6 overflow-y-auto flex-1 space-y-6">
-                            {/* Products List */}
-                            <div className="space-y-4">
-                                {shippableProducts.map(product => {
-                                    const accepted = product.acceptedQuantity || 0
-                                    const effectiveRemaining = getEffectiveRemaining(product)
-                                    const currentQty = shipmentQuantities[product.id] || 0
+                            <div className="p-6 overflow-y-auto flex-1 space-y-6">
+                                {/* Products List */}
+                                <div className="space-y-4">
+                                    {shippableProducts.map(product => {
+                                        const accepted = product.acceptedQuantity || 0
+                                        const effectiveRemaining = getEffectiveRemaining(product)
+                                        const currentQty = shipmentQuantities[product.id] || 0
 
-                                    return (
-                                        <div key={product.id} className="p-4 bg-blue-50/50 border border-blue-100 rounded-xl">
-                                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                                <div className="flex-1">
-                                                    <p className="font-medium text-blue-900">{product.productName}</p>
-                                                    <div className="flex items-center gap-3 mt-1 text-sm">
-                                                        <span className="text-blue-600">Sevk Edilebilir: <span className="font-bold">{effectiveRemaining}</span></span>
-                                                        <span className="text-gray-400">|</span>
-                                                        <span className="text-gray-600">Kabul: {accepted}</span>
+                                        return (
+                                            <div key={product.id} className="p-4 bg-blue-50/50 border border-blue-100 rounded-xl">
+                                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                                    <div className="flex-1">
+                                                        <p className="font-medium text-blue-900">{product.productName}</p>
+                                                        <div className="flex items-center gap-3 mt-1 text-sm">
+                                                            <span className="text-blue-600">Sevk Edilebilir: <span className="font-bold">{effectiveRemaining}</span></span>
+                                                            <span className="text-gray-400">|</span>
+                                                            <span className="text-gray-600">Kabul: {accepted}</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="w-full md:w-32">
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            max={effectiveRemaining}
+                                                            value={currentQty}
+                                                            onChange={(e) => {
+                                                                const val = Math.min(Math.max(0, Number(e.target.value)), effectiveRemaining)
+                                                                setShipmentQuantities(prev => ({ ...prev, [product.id]: val }))
+                                                            }}
+                                                            className="w-full px-3 py-2 bg-white border border-blue-200 rounded-lg text-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500 text-center font-medium"
+                                                            placeholder="0"
+                                                        />
                                                     </div>
                                                 </div>
-                                                <div className="w-full md:w-32">
-                                                    <input
-                                                        type="number"
-                                                        min="0"
-                                                        max={effectiveRemaining}
-                                                        value={currentQty}
-                                                        onChange={(e) => {
-                                                            const val = Math.min(Math.max(0, Number(e.target.value)), effectiveRemaining)
-                                                            setShipmentQuantities(prev => ({ ...prev, [product.id]: val }))
-                                                        }}
-                                                        className="w-full px-3 py-2 bg-white border border-blue-200 rounded-lg text-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500 text-center font-medium"
-                                                        placeholder="0"
-                                                    />
-                                                </div>
                                             </div>
-                                        </div>
-                                    )
-                                })}
+                                        )
+                                    })}
+                                </div>
+
+                                {/* Notes */}
+                                <div>
+                                    <label className="block text-sm font-medium text-blue-900 mb-2">
+                                        Notlar (Opsiyonel)
+                                    </label>
+                                    <textarea
+                                        value={shipmentNotes}
+                                        onChange={(e) => setShipmentNotes(e.target.value)}
+                                        rows={3}
+                                        className="w-full px-4 py-3 bg-white border border-blue-300 rounded-lg text-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        placeholder="Sevk ile ilgili notlar..."
+                                    />
+                                </div>
                             </div>
 
-                            {/* Notes */}
-                            <div>
-                                <label className="block text-sm font-medium text-blue-900 mb-2">
-                                    Notlar (Opsiyonel)
-                                </label>
-                                <textarea
-                                    value={shipmentNotes}
-                                    onChange={(e) => setShipmentNotes(e.target.value)}
-                                    rows={3}
-                                    className="w-full px-4 py-3 bg-white border border-blue-300 rounded-lg text-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    placeholder="Sevk ile ilgili notlar..."
-                                />
+                            <div className="p-6 border-t border-blue-100 bg-gray-50 rounded-b-2xl flex gap-3">
+                                <button
+                                    onClick={() => setShowShipmentModal(false)}
+                                    disabled={isCreatingShipment}
+                                    className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-medium disabled:opacity-50"
+                                >
+                                    İptal
+                                </button>
+                                <button
+                                    onClick={handleSubmitShipment}
+                                    disabled={isCreatingShipment}
+                                    className="flex-1 px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-700 text-white rounded-lg hover:from-blue-700 hover:to-cyan-800 transition-all font-medium disabled:opacity-50 shadow-lg shadow-blue-500/30"
+                                >
+                                    {isCreatingShipment ? 'Gönderiliyor...' : 'Sevke Sun'}
+                                </button>
                             </div>
                         </div>
+                    </div>
+                )}
 
-                        <div className="p-6 border-t border-blue-100 bg-gray-50 rounded-b-2xl flex gap-3">
-                            <button
-                                onClick={() => setShowShipmentModal(false)}
-                                disabled={isCreatingShipment}
-                                className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-medium disabled:opacity-50"
+                {/* Brand Update Modal */}
+                {showBrandModal && (
+                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                        <div className="bg-white border border-amber-200 rounded-2xl shadow-2xl w-full max-w-md p-6">
+                            <h3 className="text-xl font-bold text-amber-900 mb-4">Marka Güncelle</h3>
+                            <select
+                                value={selectedBrandForUpdate}
+                                onChange={(e) => setSelectedBrandForUpdate(e.target.value)}
+                                className="w-full px-4 py-3 bg-white border border-amber-300 rounded-lg text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-500 mb-4"
                             >
-                                İptal
-                            </button>
-                            <button
-                                onClick={handleSubmitShipment}
-                                disabled={isCreatingShipment}
-                                className="flex-1 px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-700 text-white rounded-lg hover:from-blue-700 hover:to-cyan-800 transition-all font-medium disabled:opacity-50 shadow-lg shadow-blue-500/30"
-                            >
-                                {isCreatingShipment ? 'Gönderiliyor...' : 'Sevke Sun'}
-                            </button>
+                                <option value="">-- Marka Seçiniz --</option>
+                                {BRANDS.map(brand => (
+                                    <option key={brand} value={brand}>
+                                        {brand}
+                                    </option>
+                                ))}
+                            </select>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setShowBrandModal(false)}
+                                    className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                                >
+                                    İptal
+                                </button>
+                                <button
+                                    onClick={async () => {
+                                        if (!selectedBrandForUpdate) {
+                                            alert('Lütfen bir marka seçiniz')
+                                            return
+                                        }
+                                        try {
+                                            await updateBrand({
+                                                orderId: id!,
+                                                brand: selectedBrandForUpdate
+                                            }).unwrap()
+                                            setShowBrandModal(false)
+                                            alert('Marka başarıyla güncellendi')
+                                            refetch()
+                                        } catch (error) {
+                                            console.error('Failed to update brand:', error)
+                                            alert('Güncelleme başarısız oldu')
+                                        }
+                                    }}
+                                    className="flex-1 px-4 py-2 bg-gradient-to-r from-amber-600 to-orange-600 text-white rounded-lg hover:from-amber-700 hover:to-orange-700 transition-all font-medium"
+                                >
+                                    Kaydet
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )}
 
-            {/* Brand Update Modal */}
-            {showBrandModal && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div className="bg-white border border-amber-200 rounded-2xl shadow-2xl w-full max-w-md p-6">
-                        <h3 className="text-xl font-bold text-amber-900 mb-4">Marka Güncelle</h3>
-                        <select
-                            value={selectedBrandForUpdate}
-                            onChange={(e) => setSelectedBrandForUpdate(e.target.value)}
-                            className="w-full px-4 py-3 bg-white border border-amber-300 rounded-lg text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-500 mb-4"
-                        >
-                            <option value="">-- Marka Seçiniz --</option>
-                            {BRANDS.map(brand => (
-                                <option key={brand} value={brand}>
-                                    {brand}
-                                </option>
-                            ))}
-                        </select>
-                        <div className="flex gap-3">
-                            <button
-                                onClick={() => setShowBrandModal(false)}
-                                className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-medium"
-                            >
-                                İptal
-                            </button>
-                            <button
-                                onClick={async () => {
-                                    if (!selectedBrandForUpdate) {
-                                        alert('Lütfen bir marka seçiniz')
-                                        return
-                                    }
-                                    try {
-                                        await updateBrand({
-                                            orderId: id!,
-                                            brand: selectedBrandForUpdate
-                                        }).unwrap()
-                                        setShowBrandModal(false)
-                                        alert('Marka başarıyla güncellendi')
-                                        refetch()
-                                    } catch (error) {
-                                        console.error('Failed to update brand:', error)
-                                        alert('Güncelleme başarısız oldu')
-                                    }
-                                }}
-                                className="flex-1 px-4 py-2 bg-gradient-to-r from-amber-600 to-orange-600 text-white rounded-lg hover:from-amber-700 hover:to-orange-700 transition-all font-medium"
-                            >
-                                Kaydet
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Customer Modal */}
-            {order?.customer && (
-                <CustomerModal
-                    isOpen={showCustomerModal}
-                    onClose={() => {
-                        setShowCustomerModal(false)
-                        refetch()
-                    }}
-                    customer={order.customer}
-                />
-            )}
+                {/* Customer Modal */}
+                {order?.customer && (
+                    <CustomerModal
+                        isOpen={showCustomerModal}
+                        onClose={() => {
+                            setShowCustomerModal(false)
+                            refetch()
+                        }}
+                        customer={order.customer}
+                    />
+                )}
+            </div>
         </div>
     )
 }

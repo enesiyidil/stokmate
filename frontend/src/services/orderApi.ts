@@ -327,8 +327,45 @@ export const orderApi = api.injectEndpoints({
         getOrderEvents: builder.query<OrderEventResponse[], string>({
             query: (orderId) => `/orders/${orderId}/events`,
         }),
+
+        // Get order notes
+        getOrderNotes: builder.query<OrderNoteResponse[], string>({
+            query: (orderId) => `/orders/${orderId}/notes`,
+            providesTags: ['Orders'],
+        }),
+
+        // Add note to order
+        addOrderNote: builder.mutation<OrderNoteResponse, { orderId: string; content: string }>({
+            query: ({ orderId, content }) => ({
+                url: `/orders/${orderId}/notes`,
+                method: 'POST',
+                body: { content },
+            }),
+            invalidatesTags: ['Orders'],
+        }),
+
+        // Strike through note
+        strikeOrderNote: builder.mutation<OrderNoteResponse, { orderId: string; noteId: string }>({
+            query: ({ orderId, noteId }) => ({
+                url: `/orders/${orderId}/notes/${noteId}/strike`,
+                method: 'PUT',
+            }),
+            invalidatesTags: ['Orders'],
+        }),
     }),
 })
+
+export interface OrderNoteResponse {
+    id: string
+    content: string
+    strikethrough: boolean
+    createdByName: string
+    createdByEmail: string
+    createdAt: string
+    strikethroughByName?: string
+    strikethroughAt?: string
+}
+
 export const {
     useListOrdersQuery,
     useGetOrderQuery,
@@ -346,4 +383,7 @@ export const {
     useUpdateSalesConsultantMutation,
     useUpdateBrandMutation,
     useGetOrderEventsQuery,
+    useGetOrderNotesQuery,
+    useAddOrderNoteMutation,
+    useStrikeOrderNoteMutation,
 } = orderApi

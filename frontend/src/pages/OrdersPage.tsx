@@ -24,10 +24,7 @@ export default function OrdersPage() {
 
     // Get sales consultants (users with role STORE_EMPLOYEE)
     const salesConsultants = useMemo(() => {
-        const consultants = users.filter((user: any) => user.role === 'STORE_EMPLOYEE')
-        console.log('Users:', users)
-        console.log('Sales Consultants:', consultants)
-        return consultants
+        return users.filter((user: any) => user.role === 'STORE_EMPLOYEE')
     }, [users])
 
     // Filter orders based on all criteria
@@ -35,8 +32,21 @@ export default function OrdersPage() {
         return allOrders.filter(order => {
             // Status filter
             if (statusFilter !== 'ALL') {
-                const matchesStatus = order.status === statusFilter
-                if (!matchesStatus) return false
+                if (statusFilter === 'DEVAM_EDIYOR') {
+                    // Include all in-progress statuses
+                    const inProgressStatuses = [
+                        'DEVAM_EDIYOR', 'IN_PROGRESS', 'CREATED', 'PENDING_ACCEPTANCE',
+                        'PARTIALLY_ACCEPTED', 'ACCEPTED', 'PENDING_SHIPMENT_APPROVAL',
+                        'SHIPMENT_APPROVED', 'IN_SHIPMENT', 'PARTIALLY_SHIPPED'
+                    ]
+                    if (!inProgressStatuses.includes(order.status)) return false
+                } else if (statusFilter === 'TAMAMLANDI') {
+                    const completedStatuses = ['TAMAMLANDI', 'COMPLETED', 'DELIVERED']
+                    if (!completedStatuses.includes(order.status)) return false
+                } else if (statusFilter === 'IPTAL_EDILDI') {
+                    const cancelledStatuses = ['IPTAL_EDILDI', 'CANCELLED']
+                    if (!cancelledStatuses.includes(order.status)) return false
+                }
             }
 
             // Type filter
@@ -315,14 +325,6 @@ export default function OrdersPage() {
                                         const statusBadge = getStatusBadge(order.status)
                                         const StatusIcon = statusBadge.icon
 
-                                        // Debug: Log order data to console
-                                        if (order.orderNo) {
-                                            console.log(`Order ${order.orderNo}:`, {
-                                                orderType: order.orderType,
-                                                salesConsultant: order.salesConsultant,
-                                                hasSalesConsultant: !!order.salesConsultant
-                                            })
-                                        }
 
                                         return (
                                             <tr

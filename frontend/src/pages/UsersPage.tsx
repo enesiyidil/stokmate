@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Users, Plus, Trash2, Mail, User, AlertCircle, Power, Shield } from 'lucide-react'
-import { useGetAllUsersQuery, useDeleteUserMutation, useToggleUserActiveMutation } from '../services/userApi'
+import { Users, Plus, Trash2, Mail, User, AlertCircle, Power, Shield, Lock } from 'lucide-react'
+import { useGetAllUsersQuery, useDeleteUserMutation, useToggleUserActiveMutation, useToggle2FAMutation } from '../services/userApi'
 import AddUserModal from '../components/users/AddUserModal'
 import EditUserRoleModal from '../components/users/EditUserRoleModal'
 import DeleteUserModal from '../components/users/DeleteUserModal'
@@ -18,6 +18,16 @@ export default function UsersPage() {
     const { data: users = [], isLoading } = useGetAllUsersQuery()
     const [deleteUser] = useDeleteUserMutation()
     const [toggleUserActive] = useToggleUserActiveMutation()
+    const [toggle2FA] = useToggle2FAMutation()
+
+    const handle2FAToggle = async (user: any) => {
+        try {
+            await toggle2FA({ id: user.id, enabled: !user.totpEnabled }).unwrap()
+        } catch (error) {
+            console.error('Failed to toggle 2FA:', error)
+            alert('2FA durumu değiştirilirken bir hata oluştu')
+        }
+    }
 
     // Set topbar content
     useEffect(() => {
@@ -144,11 +154,12 @@ export default function UsersPage() {
                                     <th className="px-6 py-4 text-left text-sm font-semibold text-amber-900">Email</th>
                                     <th className="px-6 py-4 text-left text-sm font-semibold text-amber-900">Rol</th>
                                     <th className="px-6 py-4 text-left text-sm font-semibold text-amber-900">Durum</th>
+                                    <th className="px-6 py-4 text-left text-sm font-semibold text-amber-900">2FA</th>
                                     <th className="px-6 py-4 text-left text-sm font-semibold text-amber-900">İşlemler</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {users.map((user) => (
+                                {users.filter(u => u.email !== 'admin@stokmate.local').map((user) => (
                                     <tr
                                         key={user.id}
                                         className="border-b border-amber-100 hover:bg-amber-50 transition-colors"
@@ -193,6 +204,23 @@ export default function UsersPage() {
                                                 }`}>
                                                 {user.active ? 'Aktif' : 'Pasif'}
                                             </span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {user.email !== 'admin@stokmate.local' ? (
+                                                <button
+                                                    onClick={() => handle2FAToggle(user)}
+                                                    disabled={user.deleted}
+                                                    className={`flex items-center gap-1 px-3 py-1 rounded-lg text-sm font-medium border transition-colors ${user.totpEnabled
+                                                        ? 'bg-green-100 text-green-800 border-green-400 hover:bg-green-200'
+                                                        : 'bg-gray-100 text-gray-600 border-gray-300 hover:bg-gray-200'
+                                                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                                                >
+                                                    <Lock className="w-3 h-3" />
+                                                    {user.totpEnabled ? 'Açık' : 'Kapalı'}
+                                                </button>
+                                            ) : (
+                                                <span className="text-xs text-amber-500">-</span>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="flex items-center justify-end gap-2">
