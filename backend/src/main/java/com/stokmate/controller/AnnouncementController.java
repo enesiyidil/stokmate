@@ -1,6 +1,5 @@
 package com.stokmate.controller;
 
-import com.stokmate.domain.User;
 import com.stokmate.dto.announcement.AnnouncementRequest;
 import com.stokmate.dto.announcement.AnnouncementResponse;
 import com.stokmate.service.AnnouncementService;
