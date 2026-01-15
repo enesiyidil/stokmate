@@ -44,7 +44,7 @@ public class OrderController {
         private final PendingActionService pendingActionService;
 
         // Create/Extract: STORE_MANAGER, DIRECTOR, MANAGER, ADMIN
-        @PreAuthorize("hasAnyRole('ADMIN','MANAGER','DIRECTOR','STORE_MANAGER')")
+        @PreAuthorize("hasAnyRole('ADMIN','MANAGER','DIRECTOR','STORE_MANAGER', 'OPERATIONS_MANAGER')")
         @PostMapping(value = "/extract-excel", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
         @Operation(summary = "Extract order data from Excel file", description = "Extracts order and product data from Excel file with Turkish column headers")
         public ExcelExtractionResponse extractFromExcel(
@@ -52,7 +52,7 @@ public class OrderController {
                 return orderService.extractFromExcel(file);
         }
 
-        @PreAuthorize("hasAnyRole('ADMIN','MANAGER','DIRECTOR','STORE_MANAGER')")
+        @PreAuthorize("hasAnyRole('ADMIN','MANAGER','DIRECTOR','STORE_MANAGER', 'OPERATIONS_MANAGER')")
         @PostMapping
         @Operation(summary = "Create order with products", description = "Creates a new order with associated products")
         public OrderResponse createOrder(@Valid @RequestBody OrderCreateRequest request) {
