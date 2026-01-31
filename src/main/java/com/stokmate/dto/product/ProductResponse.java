@@ -26,6 +26,7 @@ public class ProductResponse {
     private BigDecimal unitPrice;
     private BigDecimal internetSalesPrice;
     private BigDecimal minStockLevel;
+    private BigDecimal cancelledStockQuantity;
     private Set<String> keywords;
     private Instant createdAt;
     private Instant updatedAt;

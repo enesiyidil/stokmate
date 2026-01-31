@@ -69,6 +69,7 @@ public class OrderService {
     private final com.stokmate.repository.OrderProductRepository orderProductRepository;
     private final ProductAllocationService productAllocationService;
     private final ShipmentRepository shipmentRepository;
+    private final com.stokmate.repository.ProductStockHistoryRepository productStockHistoryRepository;
 
     private static final DateTimeFormatter EXCEL_DATE_FORMATTER = DateTimeFormatter.ofPattern("d.M.yyyy",
             Locale.forLanguageTag("tr"));
@@ -317,9 +318,13 @@ public class OrderService {
         savedOrder.getProducts().forEach(
                 p -> log.info("Saved OrderProduct brand: {} for product: {}", p.getBrand(), p.getProductName()));
 
-        // Log activity
-        orderActivityService.logActivity(savedOrder, ActivityType.CREATED,
-                savedOrder.getProducts().size() + " ürün ile sipariş oluşturuldu");
+        // Log activity (wrapped in try-catch to prevent transaction issues)
+        try {
+            orderActivityService.logActivity(savedOrder, ActivityType.CREATED,
+                    savedOrder.getProducts().size() + " ürün ile sipariş oluşturuldu");
+        } catch (Exception e) {
+            log.error("Activity logging failed for order {}: {}", savedOrder.getOrderNo(), e.getMessage());
+        }
 
         return orderMapper.toResponse(savedOrder);
     }
@@ -393,17 +398,177 @@ public class OrderService {
     }
 
     /**
-     * Cancel an order
+     * Cancel an order - Converts customer order to stock order
+     * Cancels pending shipments and adds accepted products to cancelled stock
      */
     @Transactional
     public OrderResponse cancelOrder(UUID orderId) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new NotFoundException("Order not found"));
+
+        // If order is already completed or cancelled, cannot cancel
+        if (order.getStatus() == OrderStatus.COMPLETED || order.getStatus() == OrderStatus.TAMAMLANDI ||
+                order.getStatus() == OrderStatus.CANCELLED || order.getStatus() == OrderStatus.IPTAL_EDILDI) {
+            throw new BadRequestException("Cannot cancel completed or already cancelled order");
+        }
+
+        boolean wasCustomerSpecific = order.getOrderType() == com.stokmate.domain.OrderType.CUSTOMER_SPECIFIC;
+
+        // Convert customer specific order to stock order (iptal stoğu)
+        // IMPORTANT: Status remains IN_PROGRESS so products can still be accepted
+        if (wasCustomerSpecific) {
+            order.setOrderType(com.stokmate.domain.OrderType.STOCK);
+            order.setConvertedFromCustomer(true); // Mark as converted for UI labeling
+
+            // Cancel pending shipments for this order
+            cancelPendingShipmentsForOrder(order);
+
+            // Add accepted products to cancelled stock
+            addProductsToCancelledStock(order);
+        } else {
+            // For non-customer orders, set status to cancelled
+            order.setStatus(OrderStatus.IPTAL_EDILDI);
+        }
+
+        Order saved = orderRepository.save(order);
+
+        // Force flush to catch any DB errors immediately
+        orderRepository.flush();
+
+        // Log activity
+        try {
+            String message = wasCustomerSpecific
+                    ? "Müşteri siparişi iptal edildi ve stoklu siparişe dönüştürüldü"
+                    : "Sipariş iptal edildi";
+            orderActivityService.logActivity(saved, ActivityType.CANCELLED, message);
+        } catch (Exception e) {
+            log.error("Activity logging failed for order {}: {}", saved.getOrderNo(), e.getMessage());
+        }
+
+        return orderMapper.toResponse(saved);
+    }
+
+    /**
+     * Cancel all pending (not finalized) shipments for an order
+     */
+    private void cancelPendingShipmentsForOrder(Order order) {
+        try {
+            List<com.stokmate.domain.Shipment> pendingShipments = shipmentRepository.findByOrderIdAndStatusIn(
+                    order.getId(),
+                    java.util.Arrays.asList(
+                            com.stokmate.domain.ShipmentStatus.PENDING,
+                            com.stokmate.domain.ShipmentStatus.APPROVED,
+                            com.stokmate.domain.ShipmentStatus.PLANNED));
+
+            for (com.stokmate.domain.Shipment shipment : pendingShipments) {
+                // Remove shipment items - they won't be shipped anymore
+                shipment.getItems().clear();
+                shipmentRepository.delete(shipment);
+                log.info("Cancelled pending shipment {} for order {}", shipment.getId(), order.getOrderNo());
+            }
+        } catch (Exception e) {
+            log.error("Failed to cancel pending shipments for order {}: {}", order.getOrderNo(), e.getMessage());
+        }
+    }
+
+    /**
+     * Add accepted products from cancelled order to cancelled stock
+     */
+    private void addProductsToCancelledStock(Order order) {
+        for (OrderProduct op : order.getProducts()) {
+            BigDecimal acceptedQty = op.getAcceptedQuantity();
+            if (acceptedQty == null || acceptedQty.compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+
+            Product product = productRepository.findByCode(op.getProductCode()).orElse(null);
+            if (product != null) {
+                BigDecimal oldQty = product.getCancelledStockQuantity();
+                BigDecimal newQty = oldQty.add(acceptedQty);
+
+                product.setCancelledStockQuantity(newQty);
+                productRepository.save(product);
+
+                // Log to stock history
+                try {
+                    com.stokmate.domain.ProductStockHistory history = new com.stokmate.domain.ProductStockHistory();
+                    history.setProduct(product);
+                    history.setOldQuantity(oldQty);
+                    history.setNewQuantity(newQty);
+                    history.setChangeAmount(acceptedQty);
+                    history.setReason("Müşteri Siparişi İptali: " + order.getOrderNo());
+                    history.setType(com.stokmate.domain.ProductStockHistory.StockChangeType.CANCELLED);
+                    history.setUserEmail(com.stokmate.security.SecurityUtils.getCurrentUserLogin());
+                    productStockHistoryRepository.save(history);
+                } catch (Exception e) {
+                    log.error("Stock history logging failed for product {}: {}", op.getProductCode(), e.getMessage());
+                }
+
+                log.info("Added {} units of {} to cancelled stock", acceptedQty, op.getProductCode());
+            }
+        }
+    }
+
+    /**
+     * Approve cancellation
+     */
+    @Transactional
+    public OrderResponse approveCancellation(UUID orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new NotFoundException("Order not found"));
+
+        if (order.getStatus() != OrderStatus.CANCELLATION_PENDING_APPROVAL) {
+            // Allow force cancel capability if needed, but primarily strictly follow flow
+            // For now, allow force cancel from any active status if user has role (checked
+            // by controller)
+            // But to be safe, let's enforce pending status OR allow direct cancel if admin.
+            // Let's stick to the requested flow: "cancel -> pending -> approve".
+            if (order.getStatus().getSimplifiedStatus() == OrderStatus.CANCELLED) {
+                throw new BadRequestException("Order is already cancelled");
+            }
+        }
+
         order.setStatus(OrderStatus.IPTAL_EDILDI);
         Order saved = orderRepository.save(order);
 
+        // Handle Stock Logic
+        // "müşteri özel siparişler iptal edilir ve ardından onay verilirse stoklu
+        // siparişe dönüşür ...
+        // ama normal stoğa değil müşteri iptal stoğu gibi birşey olur"
+
+        if (order.getOrderType() != com.stokmate.domain.OrderType.STOCK) {
+            // This is a Customer Order (Private/Special) - ürünleri iptal stoğuna ekle
+            for (OrderProduct op : order.getProducts()) {
+                Product product = productRepository.findByCode(op.getProductCode()).orElse(null);
+                if (product != null) {
+                    BigDecimal oldQty = product.getCancelledStockQuantity();
+                    BigDecimal change = op.getQuantity();
+                    BigDecimal newQty = oldQty.add(change);
+
+                    product.setCancelledStockQuantity(newQty);
+                    productRepository.save(product);
+
+                    // Log to stock history
+                    try {
+                        com.stokmate.domain.ProductStockHistory history = new com.stokmate.domain.ProductStockHistory();
+                        history.setProduct(product);
+                        history.setOldQuantity(oldQty);
+                        history.setNewQuantity(newQty);
+                        history.setChangeAmount(change);
+                        history.setReason("Sipariş İptali: " + order.getOrderNo());
+                        history.setType(com.stokmate.domain.ProductStockHistory.StockChangeType.CANCELLED);
+                        history.setUserEmail(com.stokmate.security.SecurityUtils.getCurrentUserLogin());
+                        productStockHistoryRepository.save(history);
+                    } catch (Exception e) {
+                        log.error("Stock history logging failed: {}", e.getMessage());
+                    }
+                }
+            }
+        }
+
         // Log activity
-        orderActivityService.logActivity(saved, ActivityType.CANCELLED, "Sipariş iptal edildi");
+        orderActivityService.logActivity(saved, ActivityType.CANCELLED,
+                "Sipariş iptali onaylandı, ürünler iptal stoğuna aktarıldı");
 
         return orderMapper.toResponse(saved);
     }
@@ -411,10 +576,24 @@ public class OrderService {
     /**
      * List orders pending product acceptance
      * Returns orders with status TAMAMLANDI and productsAccepted = false
+     * Also includes cancelled stock orders (converted from customer orders) with
+     * unaccepted products
      */
     public List<OrderResponse> listPendingAcceptanceOrders() {
         List<Order> orders = orderRepository.findByStatusAndProductsAccepted(
                 OrderStatus.TAMAMLANDI, false);
+
+        // Also include cancelled stock orders (converted from customer to stock)
+        List<Order> cancelledStockOrders = orderRepository.findByStatusAndProductsAccepted(
+                OrderStatus.IPTAL_EDILDI, false);
+
+        // Filter to only include STOCK type orders (these are converted customer
+        // orders)
+        for (Order o : cancelledStockOrders) {
+            if (o.getOrderType() == com.stokmate.domain.OrderType.STOCK && !orders.contains(o)) {
+                orders.add(o);
+            }
+        }
 
         List<OrderResponse> responses = new ArrayList<>();
         for (Order o : orders) {

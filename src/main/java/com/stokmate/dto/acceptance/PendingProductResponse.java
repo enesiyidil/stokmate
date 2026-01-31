@@ -22,4 +22,5 @@ public class PendingProductResponse {
     private BigDecimal acceptedQuantity;
     private BigDecimal remainingQuantity;
     private LocalDate orderDate;
+    private boolean convertedFromCustomer; // İptal stoğu siparişi mi?
 }

@@ -24,6 +24,7 @@ public class ProductAllocationService {
     private final OrderProductAllocationRepository orderProductAllocationRepository;
     private final com.stokmate.repository.SaleProductAllocationRepository saleProductAllocationRepository;
     private final com.stokmate.repository.ProductEventRepository productEventRepository;
+    private final ProductService productService;
 
     /**
      * Allocate stock for an order product using FIFO (First-In First-Out) strategy.
@@ -47,6 +48,9 @@ public class ProductAllocationService {
         product.setStockQuantity(product.getStockQuantity().subtract(quantityToAllocate));
         productRepository.save(product);
         log.info("Decremented main stock for product {}. New stock: {}", product.getCode(), product.getStockQuantity());
+
+        // Check if stock fell below minimum level and notify
+        productService.checkAndNotifyLowStock(product);
 
         // 4. FIFO Allocation from Price History (reservation only, events created at
         // finalization)
@@ -147,6 +151,9 @@ public class ProductAllocationService {
         productRepository.save(product);
         log.info("Decremented main stock for sale product {}. New stock: {}", product.getCode(),
                 product.getStockQuantity());
+
+        // Check if stock fell below minimum level and notify
+        productService.checkAndNotifyLowStock(product);
 
         // 4. FIFO Allocation from Price History
         List<ProductPriceHistory> historyRecords = productPriceHistoryRepository

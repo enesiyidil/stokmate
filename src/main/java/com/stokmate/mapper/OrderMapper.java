@@ -43,7 +43,13 @@ public abstract class OrderMapper {
         }
 
         // Get pending shipments for this order
-        Map<UUID, BigDecimal> pendingQuantities = calculatePendingQuantities(order.getId());
+        Map<UUID, BigDecimal> pendingQuantities;
+        try {
+            pendingQuantities = calculatePendingQuantities(order.getId());
+        } catch (Exception e) {
+            System.out.println("[WARN] calculatePendingQuantities failed: " + e.getMessage());
+            pendingQuantities = new HashMap<>();
+        }
 
         java.util.List<OrderProductResponse> responses = new ArrayList<>();
         for (OrderProduct product : order.getProducts()) {
@@ -146,10 +152,11 @@ public abstract class OrderMapper {
      * Map child SSH orders created from problematic shipments of this order
      */
     public java.util.List<OrderResponse.SshOrderSummary> mapChildSshOrders(Order order) {
-        try {
-            if (order.getId() == null)
-                return new ArrayList<>();
+        if (order == null || order.getId() == null) {
+            return new ArrayList<>();
+        }
 
+        try {
             List<Order> childOrders = orderRepository.findByParentOrderId(order.getId());
             if (childOrders == null || childOrders.isEmpty())
                 return new ArrayList<>();
@@ -178,6 +185,7 @@ public abstract class OrderMapper {
                     })
                     .collect(java.util.stream.Collectors.toList());
         } catch (Exception e) {
+            System.out.println("[WARN] mapChildSshOrders failed: " + e.getMessage());
             return new ArrayList<>();
         }
     }

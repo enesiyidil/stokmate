@@ -175,4 +175,15 @@ public class TwoFactorAuthService {
 
         return response;
     }
+
+    /**
+     * Verify TOTP code for a User entity directly
+     * Used for client-side gating of sensitive actions
+     */
+    public boolean verifyCode(User user, int code) {
+        if (!user.isTotpEnabled() || user.getTotpSecret() == null) {
+            throw new RuntimeException("2FA is not enabled for this user");
+        }
+        return googleAuthenticator.authorize(user.getTotpSecret(), code);
+    }
 }

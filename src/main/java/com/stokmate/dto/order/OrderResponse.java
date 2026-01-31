@@ -83,6 +83,10 @@ public class OrderResponse {
     private List<SshOrderSummary> childSshOrders; // SSH orders created from this order's problematic shipments
     private List<ProblemShipmentSummary> problemShipments; // Completed shipments with problems (no SSH yet)
 
+    // Flag to indicate this order was converted from a customer-specific order
+    // (iptal stoğu)
+    private boolean convertedFromCustomer;
+
     @Data
     @NoArgsConstructor
     @AllArgsConstructor

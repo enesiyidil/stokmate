@@ -108,12 +108,31 @@ public class ProductAcceptanceService {
                     productRepository.save(product);
                 }
 
+                // Check if this is a converted order (iptal stoğu)
+                boolean isCancelledStock = order.isConvertedFromCustomer();
+
                 // Create ProductEvent for stock increase
                 com.stokmate.domain.ProductEvent productEvent = new com.stokmate.domain.ProductEvent();
                 productEvent.setProduct(product);
-                productEvent.setEventType("STOCK_ACCEPTANCE");
-                productEvent.setQuantityChange(request.getAcceptedQuantity());
-                productEvent.setDescription(String.format("Ürün kabul edildi - Sipariş: %s", order.getOrderNo()));
+
+                if (isCancelledStock) {
+                    // İptal stoğu - add to cancelledStockQuantity
+                    BigDecimal oldCancelledQty = product.getCancelledStockQuantity();
+                    BigDecimal newCancelledQty = oldCancelledQty.add(request.getAcceptedQuantity());
+                    product.setCancelledStockQuantity(newCancelledQty);
+                    productRepository.save(product);
+
+                    productEvent.setEventType("CANCELLED_STOCK_ACCEPTANCE");
+                    productEvent.setQuantityChange(request.getAcceptedQuantity());
+                    productEvent.setDescription(String
+                            .format("İptal Stoğu Kabulü - Sipariş: %s (Müşteriden iptal edilen)", order.getOrderNo()));
+                } else {
+                    // Normal stok
+                    productEvent.setEventType("STOCK_ACCEPTANCE");
+                    productEvent.setQuantityChange(request.getAcceptedQuantity());
+                    productEvent.setDescription(String.format("Ürün kabul edildi - Sipariş: %s", order.getOrderNo()));
+                }
+
                 productEvent.setCreatedBy(user);
                 productEvent.setCreatedAt(LocalDateTime.now());
                 productEventRepository.save(productEvent);
@@ -171,6 +190,9 @@ public class ProductAcceptanceService {
         // SSH orders)
         List<Order> pendingAcceptanceOrders = orderRepository.findByStatus(OrderStatus.PENDING_ACCEPTANCE);
         List<Order> inProgressOrders = orderRepository.findByStatus(OrderStatus.IN_PROGRESS);
+        // Include cancelled STOCK orders (converted from customer orders) that still
+        // have unaccepted products
+        List<Order> cancelledStockOrders = orderRepository.findByStatus(OrderStatus.IPTAL_EDILDI);
 
         List<PendingProductResponse> pendingProducts = new ArrayList<>();
 
@@ -188,6 +210,7 @@ public class ProductAcceptanceService {
                             .acceptedQuantity(op.getAcceptedQuantity())
                             .remainingQuantity(op.getRemainingQuantity())
                             .orderDate(order.getOrderDate())
+                            .convertedFromCustomer(order.isConvertedFromCustomer())
                             .build();
                     pendingProducts.add(response);
                 }
@@ -208,6 +231,32 @@ public class ProductAcceptanceService {
                             .acceptedQuantity(op.getAcceptedQuantity())
                             .remainingQuantity(op.getRemainingQuantity())
                             .orderDate(order.getOrderDate())
+                            .convertedFromCustomer(order.isConvertedFromCustomer())
+                            .build();
+                    pendingProducts.add(response);
+                }
+            }
+        }
+
+        // Process cancelled STOCK orders (converted from customer orders)
+        for (Order order : cancelledStockOrders) {
+            // Only include STOCK type orders (these are converted customer orders)
+            if (order.getOrderType() != OrderType.STOCK) {
+                continue;
+            }
+            for (OrderProduct op : order.getProducts()) {
+                if (op.getRemainingQuantity().compareTo(BigDecimal.ZERO) > 0) {
+                    PendingProductResponse response = PendingProductResponse.builder()
+                            .orderProductId(op.getId().toString())
+                            .orderId(order.getId().toString())
+                            .orderNumber(order.getOrderNo())
+                            .productName(op.getProductName())
+                            .productCode(op.getProductCode())
+                            .totalQuantity(op.getQuantity())
+                            .acceptedQuantity(op.getAcceptedQuantity())
+                            .remainingQuantity(op.getRemainingQuantity())
+                            .orderDate(order.getOrderDate())
+                            .convertedFromCustomer(true)
                             .build();
                     pendingProducts.add(response);
                 }

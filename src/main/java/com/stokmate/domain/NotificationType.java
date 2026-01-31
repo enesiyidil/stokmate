@@ -6,5 +6,6 @@ public enum NotificationType {
     SUPPORT_REQUEST_CREATED,
     SUPPORT_REQUEST_RESOLVED,
     ORDER_STATUS_CHANGED,
-    REMINDER
+    REMINDER,
+    LOW_STOCK
 }

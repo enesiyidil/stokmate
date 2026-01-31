@@ -352,7 +352,24 @@ public class OrderReceiptService {
                         // Update product's current arrival price and stock
                         product.setArrivalPrice(arrival.getArrivalPrice());
                         product.setVatRate(arrival.getVatRate());
-                        product.setStockQuantity(product.getStockQuantity().add(receipt.getReceivedQuantity()));
+
+                        // Check if this is a converted order (iptal stoğu)
+                        boolean isCancelledStock = order.isConvertedFromCustomer();
+
+                        if (isCancelledStock) {
+                                // İptal stoğu - add to cancelledStockQuantity
+                                BigDecimal newCancelledQty = product.getCancelledStockQuantity()
+                                                .add(receipt.getReceivedQuantity());
+                                product.setCancelledStockQuantity(newCancelledQty);
+                                log.info("Updated product {} cancelled stock by {} via receipt. New cancelled stock: {}",
+                                                product.getCode(), receipt.getReceivedQuantity(), newCancelledQty);
+                        } else {
+                                // Normal stok - add to stockQuantity
+                                product.setStockQuantity(product.getStockQuantity().add(receipt.getReceivedQuantity()));
+                                log.info("Updated existing product {} stock by {} via receipt. New stock: {}",
+                                                product.getCode(), receipt.getReceivedQuantity(),
+                                                product.getStockQuantity());
+                        }
 
                         // Update brand if missing
                         if (product.getBrand() == null && orderProduct.getBrand() != null) {
@@ -361,16 +378,23 @@ public class OrderReceiptService {
 
                         productRepository.save(product);
 
-                        log.info("Updated existing product {} stock by {} via receipt. New stock: {}",
-                                        product.getCode(), receipt.getReceivedQuantity(), product.getStockQuantity());
-
                         // Create ProductEvent for stock increase
                         com.stokmate.domain.ProductEvent productEvent = new com.stokmate.domain.ProductEvent();
                         productEvent.setProduct(product);
-                        productEvent.setEventType("STOCK_ACCEPTANCE");
-                        productEvent.setQuantityChange(receipt.getReceivedQuantity());
-                        productEvent.setDescription(
-                                        String.format("Ürün kabul edildi - Sipariş: %s", order.getOrderNo()));
+
+                        if (isCancelledStock) {
+                                productEvent.setEventType("CANCELLED_STOCK_ACCEPTANCE");
+                                productEvent.setQuantityChange(receipt.getReceivedQuantity());
+                                productEvent.setDescription(
+                                                String.format("İptal Stoğu Kabulü - Sipariş: %s (Müşteriden iptal edilen)",
+                                                                order.getOrderNo()));
+                        } else {
+                                productEvent.setEventType("STOCK_ACCEPTANCE");
+                                productEvent.setQuantityChange(receipt.getReceivedQuantity());
+                                productEvent.setDescription(
+                                                String.format("Ürün kabul edildi - Sipariş: %s", order.getOrderNo()));
+                        }
+
                         productEvent.setCreatedBy(receipt.getReceivedBy());
                         productEvent.setCreatedAt(java.time.LocalDateTime.now());
                         productEventRepository.save(productEvent);
