@@ -12,6 +12,7 @@ import { useToast } from '../../context/ToastContext'
 import BrandBadge from '../../components/common/BrandBadge'
 import FilterSearchBar from '../../components/common/FilterSearchBar'
 import ConfirmModal from '../../components/common/ConfirmModal'
+import OtpVerificationModal from '../../components/common/OtpVerificationModal'
 
 export default function ProductsPage() {
     const navigate = useNavigate()
@@ -22,6 +23,19 @@ export default function ProductsPage() {
     const [searchQuery, setSearchQuery] = useState('')
     const [page, setPage] = useState(0)
     const { success, error } = useToast()
+
+    // 2FA Gate State
+    const [showOtpModal, setShowOtpModal] = useState(false)
+    const [pendingAction, setPendingAction] = useState<(() => void) | null>(null)
+
+    const verifyGate = (action: () => void) => {
+        if (user?.totpEnabled) {
+            setPendingAction(() => action)
+            setShowOtpModal(true)
+        } else {
+            action()
+        }
+    }
 
     // Confrim Modal State
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -58,7 +72,7 @@ export default function ProductsPage() {
             actions: (
                 !['STORE_MANAGER', 'STORE_EMPLOYEE', 'LOGISTICS_MANAGER'].includes(user?.role || '') ? (
                     <button
-                        onClick={() => setShowAddModal(true)}
+                        onClick={() => verifyGate(() => setShowAddModal(true))}
                         className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-amber-700 to-orange-700 text-white rounded-xl hover:from-amber-800 hover:to-orange-800 transition-all duration-300 shadow-lg hover:shadow-xl"
                     >
                         <Plus className="w-5 h-5" />
@@ -281,9 +295,22 @@ export default function ProductsPage() {
                                             <BrandBadge brand={product.brand as Brand} />
                                         </td>
                                         <td className="p-4">
-                                            <span className={`font-medium ${product.stockQuantity > 0 ? 'text-green-300' : 'text-red-300'}`}>
-                                                {product.stockQuantity}
-                                            </span>
+                                            <div className="flex flex-col gap-0.5">
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className={`font-medium ${product.stockQuantity > 0 ? 'text-green-600' : 'text-amber-500'}`}>
+                                                        {product.stockQuantity}
+                                                    </span>
+                                                    <span className="text-xs text-amber-400">adet</span>
+                                                </div>
+                                                {Number(product.cancelledStockQuantity) >= 1 && (
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className="text-red-500 font-medium">
+                                                            {product.cancelledStockQuantity}
+                                                        </span>
+                                                        <span className="text-xs text-red-400">iptal</span>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </td>
 
                                         <td className="p-4">
@@ -302,21 +329,21 @@ export default function ProductsPage() {
                                                 <div className="flex items-center justify-end gap-2">
                                                     {/* Eye Icon for Details - Admin/Manager only */}
                                                     <button
-                                                        onClick={() => navigate(`/products/${product.id}`)}
+                                                        onClick={() => verifyGate(() => navigate(`/products/${product.id}`))}
                                                         className="p-2 hover:bg-blue-100 rounded-lg transition-colors group"
                                                         title="Detayları Gör"
                                                     >
                                                         <Eye className="w-4 h-4 text-blue-600 group-hover:text-blue-700" />
                                                     </button>
                                                     <button
-                                                        onClick={() => setEditingProduct(product)}
+                                                        onClick={() => verifyGate(() => setEditingProduct(product))}
                                                         className="p-2 hover:bg-amber-100 rounded-lg transition-colors group"
                                                         title="Düzenle"
                                                     >
                                                         <Edit2 className="w-4 h-4 text-amber-700 group-hover:text-amber-900" />
                                                     </button>
                                                     <button
-                                                        onClick={() => handleDeleteClick(product.id)}
+                                                        onClick={() => verifyGate(() => handleDeleteClick(product.id))}
                                                         className="p-2 hover:bg-red-100 rounded-lg transition-colors group"
                                                         title="Sil"
                                                     >
@@ -432,6 +459,22 @@ export default function ProductsPage() {
                 confirmText="Sil"
                 cancelText="İptal"
                 type="danger"
+            />
+
+            {/* OTP Modal */}
+            <OtpVerificationModal
+                isOpen={showOtpModal}
+                onClose={() => {
+                    setShowOtpModal(false)
+                    setPendingAction(null)
+                }}
+                onVerify={() => {
+                    setShowOtpModal(false)
+                    if (pendingAction) {
+                        pendingAction()
+                        setPendingAction(null)
+                    }
+                }}
             />
         </div>
     )

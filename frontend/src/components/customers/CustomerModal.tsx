@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { X, Save, Users } from 'lucide-react'
 import { useCreateCustomerMutation, useUpdateCustomerMutation } from '../../services/customerApi'
 import type { CustomerRequest, CustomerResponse } from '../../services/customerApi'
+import { useToast } from '../../context/ToastContext'
 
 interface CustomerModalProps {
     isOpen: boolean
@@ -12,6 +13,7 @@ interface CustomerModalProps {
 export default function CustomerModal({ isOpen, onClose, customer }: CustomerModalProps) {
     const [createCustomer, { isLoading: isCreating }] = useCreateCustomerMutation()
     const [updateCustomer, { isLoading: isUpdating }] = useUpdateCustomerMutation()
+    const { success, error } = useToast()
 
     const [formData, setFormData] = useState<CustomerRequest>({
         firstName: '',
@@ -59,14 +61,14 @@ export default function CustomerModal({ isOpen, onClose, customer }: CustomerMod
         try {
             if (customer) {
                 await updateCustomer({ id: customer.id, data: formData }).unwrap()
-                alert('Müşteri başarıyla güncellendi')
+                success('Müşteri başarıyla güncellendi')
             } else {
                 await createCustomer(formData).unwrap()
-                alert('Müşteri başarıyla oluşturuldu')
+                success('Müşteri başarıyla oluşturuldu')
             }
             onClose()
-        } catch (error: any) {
-            alert(error.data?.message || 'Bir hata oluştu')
+        } catch (err: any) {
+            error(err.data?.message || 'Bir hata oluştu')
         }
     }
 

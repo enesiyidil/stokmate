@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { X, AlertTriangle } from 'lucide-react'
 import { useSoftDeleteUserMutation } from '../../services/userApi'
+import { useToast } from '../../context/ToastContext'
 
 interface DeleteUserModalProps {
     onClose: () => void
@@ -14,32 +15,32 @@ interface DeleteUserModalProps {
 export default function DeleteUserModal({ onClose, user }: DeleteUserModalProps) {
     const [alias, setAlias] = useState('')
     const [softDeleteUser, { isLoading }] = useSoftDeleteUserMutation()
+    const { success, error } = useToast()
 
     const handleSubmit = async () => {
         if (!alias.trim()) {
-            alert('Lütfen bir mahlas girin.')
+            error('Lütfen bir mahlas girin.')
             return
         }
 
         if (alias.trim().length < 3 || alias.trim().length > 50) {
-            alert('Mahlas 3-50 karakter arasında olmalıdır.')
+            error('Mahlas 3-50 karakter arasında olmalıdır.')
             return
         }
 
-        if (!confirm(`"${user.displayName || user.email}" kullanıcısını silmek istediğinizden emin misiniz?\n\nMahlas: ${alias}`)) {
-            return
-        }
+        // Removed the native confirm() here because the modal itself is the confirmation interface.
+        // The user has to type an alias, which is deliberate enough.
 
         try {
             await softDeleteUser({ id: user.id, alias: alias.trim() }).unwrap()
-            alert('Kullanıcı başarıyla silindi!')
+            success('Kullanıcı başarıyla silindi!')
             onClose()
-        } catch (error: any) {
-            console.error('Failed to delete user:', error)
-            if (error?.data?.message?.includes('Alias already exists')) {
-                alert('Bu mahlas zaten kullanılıyor, lütfen farklı bir mahlas girin.')
+        } catch (err: any) {
+            console.error('Failed to delete user:', err)
+            if (err?.data?.message?.includes('Alias already exists')) {
+                error('Bu mahlas zaten kullanılıyor, lütfen farklı bir mahlas girin.')
             } else {
-                alert('Kullanıcı silinirken bir hata oluştu')
+                error('Kullanıcı silinirken bir hata oluştu')
             }
         }
     }

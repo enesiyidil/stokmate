@@ -25,6 +25,20 @@ interface ProductDetailsResponse {
     createdBy: string
     recentEvents: ProductEventResponse[]
     priceHistory: ProductPriceHistoryResponse[]
+    cancelledStockQuantity?: number
+    stockHistory?: ProductStockHistoryResponse[]
+}
+
+interface ProductStockHistoryResponse {
+    id: string
+    productCode: string
+    oldQuantity: number
+    newQuantity: number
+    changeAmount: number
+    reason: string
+    type: 'REGULAR' | 'CANCELLED'
+    userEmail: string
+    createdAt: string
 }
 
 interface ProductEventResponse {
@@ -175,6 +189,12 @@ export default function ProductDetailsPage() {
                                     <p className="text-xs text-purple-600 mb-1">Geliş Fiyatı</p>
                                     <p className="font-semibold text-purple-900">{product.arrivalPrice.toFixed(2)} TL</p>
                                 </div>
+                                {product.cancelledStockQuantity !== undefined && product.cancelledStockQuantity > 0 && (
+                                    <div className="bg-red-50 rounded-lg p-3">
+                                        <p className="text-xs text-red-600 mb-1">İptal Stoğu</p>
+                                        <p className="font-semibold text-red-900">{product.cancelledStockQuantity}</p>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -220,6 +240,61 @@ export default function ProductDetailsPage() {
                     ) : (
                         <div className="p-6 text-center text-amber-700">
                             <p>Bu ürün için fiyat geçmişi bulunmamaktadır.</p>
+                        </div>
+                    )}
+                </div>
+
+                {/* Stock History */}
+                <div className="backdrop-blur-sm bg-white/95 border border-amber-200 rounded-2xl overflow-hidden shadow-lg">
+                    <div className="bg-gradient-to-r from-amber-50 to-orange-50 px-6 py-4 border-b border-amber-200">
+                        <h3 className="text-lg font-semibold text-amber-900 flex items-center gap-2">
+                            <Clock className="w-5 h-5" />
+                            Stok Geçmişi
+                        </h3>
+                    </div>
+                    {product.stockHistory && product.stockHistory.length > 0 ? (
+                        <div className="overflow-x-auto">
+                            <table className="w-full">
+                                <thead>
+                                    <tr className="border-b border-amber-200/50 bg-amber-50/50">
+                                        <th className="text-left p-4 text-amber-900 font-semibold text-sm">Tarih</th>
+                                        <th className="text-left p-4 text-amber-900 font-semibold text-sm">İşlem</th>
+                                        <th className="text-left p-4 text-amber-900 font-semibold text-sm">Eski Miktar</th>
+                                        <th className="text-left p-4 text-amber-900 font-semibold text-sm">Değişim</th>
+                                        <th className="text-left p-4 text-amber-900 font-semibold text-sm">Yeni Miktar</th>
+                                        <th className="text-left p-4 text-amber-900 font-semibold text-sm">Sebep</th>
+                                        <th className="text-left p-4 text-amber-900 font-semibold text-sm">Kullanıcı</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {product.stockHistory.map((history) => (
+                                        <tr key={history.id} className="border-b border-amber-100 hover:bg-amber-50 transition-colors">
+                                            <td className="p-4 text-amber-700 text-sm">
+                                                {new Date(history.createdAt).toLocaleString('tr-TR')}
+                                            </td>
+                                            <td className="p-4 text-amber-900 font-medium">
+                                                <span className={`px-2 py-1 rounded text-xs ${history.type === 'CANCELLED' ? 'bg-red-100 text-red-800' :
+                                                    history.type === 'REGULAR' ? 'bg-blue-100 text-blue-800' :
+                                                        'bg-gray-100 text-gray-800'
+                                                    }`}>
+                                                    {history.type === 'CANCELLED' ? 'İptal' : 'Normal'}
+                                                </span>
+                                            </td>
+                                            <td className="p-4 text-amber-700">{history.oldQuantity}</td>
+                                            <td className={`p-4 font-bold ${history.changeAmount > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                {history.changeAmount > 0 ? '+' : ''}{history.changeAmount}
+                                            </td>
+                                            <td className="p-4 text-amber-900 font-bold">{history.newQuantity}</td>
+                                            <td className="p-4 text-amber-700 text-sm">{history.reason}</td>
+                                            <td className="p-4 text-amber-700 text-sm">{history.userEmail}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : (
+                        <div className="p-6 text-center text-amber-700">
+                            <p>Bu ürün için stok geçmişi bulunmamaktadır.</p>
                         </div>
                     )}
                 </div>

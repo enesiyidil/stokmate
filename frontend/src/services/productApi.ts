@@ -22,6 +22,7 @@ export interface ProductResponse {
     imageUrl?: string
     activeForSale: boolean
     stockQuantity: number
+    cancelledStockQuantity?: number
     vatRate: number
     unitPrice: number
     internetSalesPrice?: number

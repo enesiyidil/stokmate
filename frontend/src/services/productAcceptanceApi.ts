@@ -33,6 +33,7 @@ export interface PendingProductResponse {
     totalQuantity: number
     acceptedQuantity: number
     remainingQuantity: number
+    convertedFromCustomer?: boolean // İptal stoğu siparişi mi?
 }
 
 export const productAcceptanceApi = baseApi.injectEndpoints({

@@ -7,8 +7,10 @@ import { useTopbar } from '../context/TopbarContext'
 import BrandBadge from '../components/common/BrandBadge'
 import AddOrderModal from '../components/orders/AddOrderModal'
 import BulkUploadModal from '../components/orders/BulkUploadModal'
+import OtpVerificationModal from '../components/common/OtpVerificationModal'
 import FilterSearchBar from '../components/common/FilterSearchBar'
 import type { Brand } from '../constants/brandConstants'
+import { useAppSelector } from '../hooks/useAuth'
 
 export default function OrdersPage() {
     const navigate = useNavigate()
@@ -21,6 +23,18 @@ export default function OrdersPage() {
     const [showAddMenu, setShowAddMenu] = useState(false)
     const [showManualModal, setShowManualModal] = useState(false)
     const [showBulkModal, setShowBulkModal] = useState(false)
+    const [showOtpModal, setShowOtpModal] = useState(false)
+    const [pendingAction, setPendingAction] = useState<(() => void) | null>(null)
+    const user = useAppSelector(state => state.auth.user)
+
+    const verifyGate = (action: () => void) => {
+        if (user?.totpEnabled) {
+            setPendingAction(() => action)
+            setShowOtpModal(true)
+        } else {
+            action()
+        }
+    }
 
     const { data: allOrders = [], isLoading } = useListOrdersQuery({ includeHidden: true })
     const { data: users = [] } = useGetUserSummariesQuery()
@@ -141,8 +155,8 @@ export default function OrdersPage() {
                             <div className="p-2">
                                 <button
                                     onClick={() => {
-                                        setShowManualModal(true)
                                         setShowAddMenu(false)
+                                        verifyGate(() => setShowManualModal(true))
                                     }}
                                     className="w-full flex items-center gap-3 px-4 py-3 text-left text-amber-900 hover:bg-amber-50 hover:text-amber-900 rounded-lg transition-colors"
                                 >
@@ -156,8 +170,8 @@ export default function OrdersPage() {
                                 </button>
                                 <button
                                     onClick={() => {
-                                        setShowBulkModal(true)
                                         setShowAddMenu(false)
+                                        verifyGate(() => setShowBulkModal(true))
                                     }}
                                     className="w-full flex items-center gap-3 px-4 py-3 text-left text-amber-900 hover:bg-amber-50 hover:text-amber-900 rounded-lg transition-colors"
                                 >
@@ -327,6 +341,12 @@ export default function OrdersPage() {
                                                             }`}>
                                                             {order.orderType === 'STOCK' ? 'STOK' : order.orderType === 'CUSTOMER_SPECIFIC' ? 'MÜŞTERİ' : order.orderType === 'AFTER_SALES_SERVICE' ? 'SSH' : order.orderType}
                                                         </span>
+                                                        {/* İptal Stoğu etiketi - müşteriden stoğa dönüştürülen siparişler için */}
+                                                        {order.convertedFromCustomer && (
+                                                            <span className="px-1.5 py-0.5 bg-red-100 text-red-700 border border-red-300 rounded text-xs font-bold">
+                                                                İPTAL STOĞU
+                                                            </span>
+                                                        )}
                                                         {order.childSshOrders && order.childSshOrders.length > 0 && (
                                                             <span className="px-1.5 py-0.5 bg-red-100 text-red-700 border border-red-300 rounded text-xs font-bold">
                                                                 +{order.childSshOrders.length} SSH
@@ -412,6 +432,21 @@ export default function OrdersPage() {
                     onSuccess={() => setShowBulkModal(false)}
                 />
             )}
+
+            <OtpVerificationModal
+                isOpen={showOtpModal}
+                onClose={() => {
+                    setShowOtpModal(false)
+                    setPendingAction(null)
+                }}
+                onVerify={() => {
+                    setShowOtpModal(false)
+                    if (pendingAction) {
+                        pendingAction()
+                        setPendingAction(null)
+                    }
+                }}
+            />
         </div>
     )
 }

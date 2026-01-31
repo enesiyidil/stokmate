@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { X, Building2, Save } from 'lucide-react'
 import { useCreateStoreMutation } from '../../services/storeApi'
+import { useToast } from '../../context/ToastContext'
 
 interface AddStoreModalProps {
     onClose: () => void
@@ -15,18 +16,18 @@ export default function AddStoreModal({ onClose, onSuccess }: AddStoreModalProps
         phone: '',
         email: '',
     })
-    const [error, setError] = useState('')
     const [createStore, { isLoading }] = useCreateStoreMutation()
+    const { success, error } = useToast()
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
-        setError('')
 
         try {
             await createStore(formData).unwrap()
+            success('Mağaza başarıyla oluşturuldu')
             onSuccess()
         } catch (err: any) {
-            setError(err?.data?.message || 'Mağaza oluşturulurken bir hata oluştu')
+            error(err?.data?.message || 'Mağaza oluşturulurken bir hata oluştu')
         }
     }
 
@@ -121,13 +122,6 @@ export default function AddStoreModal({ onClose, onSuccess }: AddStoreModalProps
                                 placeholder="magaza@email.com"
                             />
                         </div>
-
-                        {/* Error Message */}
-                        {error && (
-                            <div className="p-4 bg-red-100 border border-red-300 rounded-lg text-red-800 text-sm">
-                                {error}
-                            </div>
-                        )}
                     </form>
                 </div>
 

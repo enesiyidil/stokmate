@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useLoginMutation, useLoginWithOtpMutation, useForgotPasswordMutation, useVerify2FAMutation } from '../../api/auth.api'
+import { useLoginMutation, useLoginWithOtpMutation, useForgotPasswordMutation, useVerifyLogin2FAMutation } from '../../api/auth.api'
 import { useAppDispatch } from '../../hooks/useAuth'
 import { setCredentials } from '../../store/authSlice'
 import { Lock, Mail, ArrowRight, Key, CheckCircle, Shield } from 'lucide-react'
@@ -20,7 +20,7 @@ export default function LoginPage() {
     const [login, { isLoading: isLoginLoading }] = useLoginMutation()
     const [loginWithOtp, { isLoading: isOtpLoading }] = useLoginWithOtpMutation()
     const [forgotPassword, { isLoading: isForgotLoading }] = useForgotPasswordMutation()
-    const [verify2FA, { isLoading: is2FALoading }] = useVerify2FAMutation()
+    const [verify2FA, { isLoading: is2FALoading }] = useVerifyLogin2FAMutation()
 
     const [view, setView] = useState<'login' | 'forgot-password' | 'otp-input' | '2fa-input'>('login')
     const [email, setEmail] = useState('')

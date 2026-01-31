@@ -10,6 +10,8 @@ interface User {
     lastName: string | null
     role: UserRole
     active: boolean
+    totpEnabled?: boolean
+    deleted?: boolean
 }
 
 interface AuthState {

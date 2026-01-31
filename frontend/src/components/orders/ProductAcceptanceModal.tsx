@@ -118,7 +118,14 @@ export default function ProductAcceptanceModal({ onClose, onSuccess }: ProductAc
                                                 <div>
                                                     <p className="text-amber-900 font-medium">{product.productName}</p>
                                                     <p className="text-sm text-amber-700">Kod: {product.productCode}</p>
-                                                    <p className="text-sm text-amber-700">Sipariş: {product.orderNumber}</p>
+                                                    <div className="flex items-center gap-2">
+                                                        <p className="text-sm text-amber-700">Sipariş: {product.orderNumber}</p>
+                                                        {product.convertedFromCustomer && (
+                                                            <span className="px-1.5 py-0.5 bg-red-100 text-red-700 border border-red-300 rounded text-xs font-bold">
+                                                                İPTAL STOĞU
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </div>
                                                 <div className="text-right">
                                                     <p className="text-amber-900">Toplam: {product.totalQuantity}</p>

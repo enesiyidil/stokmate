@@ -9,10 +9,26 @@ import { useGetUserSummariesQuery } from '../../services/userApi';
 import AddSaleModal from './AddSaleModal';
 import { useTopbar } from '../../context/TopbarContext';
 import FilterSearchBar from '../../components/common/FilterSearchBar';
+import OtpVerificationModal from '../../components/common/OtpVerificationModal';
+import { useAppSelector } from '../../hooks/useAuth';
 
 const SalesPage: React.FC = () => {
     const navigate = useNavigate();
     const { setTopbarContent } = useTopbar();
+    const { user } = useAppSelector(state => state.auth);
+
+    // 2FA Gate State
+    const [showOtpModal, setShowOtpModal] = useState(false);
+    const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
+
+    const verifyGate = (action: () => void) => {
+        if (user?.totpEnabled) {
+            setPendingAction(() => action);
+            setShowOtpModal(true);
+        } else {
+            action();
+        }
+    };
 
     // State
     const [statusFilter, setStatusFilter] = useState<SaleStatus | 'ALL'>('ALL');
@@ -73,7 +89,7 @@ const SalesPage: React.FC = () => {
             icon: <FileText className="w-8 h-8" />,
             actions: (
                 <button
-                    onClick={() => setIsAddModalOpen(true)}
+                    onClick={() => verifyGate(() => setIsAddModalOpen(true))}
                     className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-amber-600 to-amber-700 text-white rounded-xl hover:from-amber-700 hover:to-amber-800 transition-all duration-300 shadow-lg hover:shadow-xl"
                 >
                     <Plus className="w-5 h-5" />
@@ -233,6 +249,22 @@ const SalesPage: React.FC = () => {
 
             {/* Modal */}
             <AddSaleModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} />
+
+            {/* OTP Modal */}
+            <OtpVerificationModal
+                isOpen={showOtpModal}
+                onClose={() => {
+                    setShowOtpModal(false);
+                    setPendingAction(null);
+                }}
+                onVerify={() => {
+                    setShowOtpModal(false);
+                    if (pendingAction) {
+                        pendingAction();
+                        setPendingAction(null);
+                    }
+                }}
+            />
         </div>
     );
 };

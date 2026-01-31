@@ -5,6 +5,10 @@ import { useListStoresQuery, useDeleteStoreMutation, type StoreResponse } from '
 import { useTopbar } from '../context/TopbarContext'
 import AddStoreModal from '../components/stores/AddStoreModal'
 import EditStoreModal from '../components/stores/EditStoreModal'
+import OtpVerificationModal from '../components/common/OtpVerificationModal'
+import ConfirmModal from '../components/common/ConfirmModal'
+import { useAppSelector } from '../hooks/useAuth'
+import { useToast } from '../context/ToastContext'
 
 export default function StoresPage() {
     const navigate = useNavigate()
@@ -14,6 +18,28 @@ export default function StoresPage() {
 
     const { data: stores = [], isLoading, refetch } = useListStoresQuery({ activeOnly: false })
     const [deleteStore] = useDeleteStoreMutation()
+    const { user } = useAppSelector((state) => state.auth)
+    const { success, error } = useToast()
+
+    // 2FA State
+    const [showOtpModal, setShowOtpModal] = useState(false)
+    const [pendingOtpAction, setPendingOtpAction] = useState<(() => void) | null>(null)
+
+    // Confirm Modal State
+    const [confirmModalState, setConfirmModalState] = useState<{
+        isOpen: boolean
+        storeId: string | null
+        storeName: string | null
+    }>({ isOpen: false, storeId: null, storeName: null })
+
+    const verifyGate = (action: () => void) => {
+        if (user?.totpEnabled) {
+            setPendingOtpAction(() => action)
+            setShowOtpModal(true)
+        } else {
+            action()
+        }
+    }
 
     useEffect(() => {
         setTopbarContent({
@@ -22,7 +48,9 @@ export default function StoresPage() {
             icon: <Store className="w-8 h-8" />,
             actions: (
                 <button
-                    onClick={() => setShowAddModal(true)}
+                    onClick={() => {
+                        verifyGate(() => setShowAddModal(true))
+                    }}
                     className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-amber-700 to-orange-700 text-white rounded-xl hover:from-amber-800 hover:to-orange-800 transition-all duration-300 shadow-lg hover:shadow-xl"
                 >
                     <Plus className="w-5 h-5" />
@@ -30,18 +58,33 @@ export default function StoresPage() {
                 </button>
             ),
         })
-    }, [setTopbarContent])
 
-    const handleDelete = async (id: string, name: string) => {
-        if (!confirm(`"${name}" mağazasını silmek istediğinizden emin misiniz?`)) return
+        return () => setTopbarContent(null)
+    }, [setTopbarContent, user?.totpEnabled])
 
-        try {
-            await deleteStore(id).unwrap()
-            refetch()
-        } catch (error) {
-            console.error('Failed to delete store:', error)
-            alert('Mağaza silinirken bir hata oluştu')
-        }
+    const handleDeleteClick = (id: string, name: string) => {
+        setConfirmModalState({ isOpen: true, storeId: id, storeName: name })
+    }
+
+    const handleConfirmDelete = async () => {
+        const { storeId } = confirmModalState
+        if (!storeId) return
+
+        verifyGate(async () => {
+            try {
+                await deleteStore(storeId).unwrap()
+                success('Mağaza başarıyla silindi')
+                refetch()
+                setConfirmModalState({ isOpen: false, storeId: null, storeName: null })
+            } catch (err: any) {
+                console.error('Failed to delete store:', err)
+                error('Mağaza silinirken bir hata oluştu')
+            }
+        })
+    }
+
+    const handleEditClick = (store: StoreResponse) => {
+        verifyGate(() => setEditingStore(store))
     }
 
     return (
@@ -56,7 +99,7 @@ export default function StoresPage() {
                         <h3 className="text-xl font-semibold text-amber-900 mb-2">Henüz Mağaza Eklenmemiş</h3>
                         <p className="text-amber-700 mb-6">Hemen bir mağaza ekleyin!</p>
                         <button
-                            onClick={() => setShowAddModal(true)}
+                            onClick={() => verifyGate(() => setShowAddModal(true))}
                             className="px-6 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all"
                         >
                             <Plus className="w-4 h-4 inline mr-2" />
@@ -124,14 +167,14 @@ export default function StoresPage() {
                                                     <Eye className="w-4 h-4" />
                                                 </button>
                                                 <button
-                                                    onClick={() => setEditingStore(store)}
+                                                    onClick={() => handleEditClick(store)}
                                                     className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                                                     title="Düzenle"
                                                 >
                                                     <Edit className="w-4 h-4" />
                                                 </button>
                                                 <button
-                                                    onClick={() => handleDelete(store.id, store.name)}
+                                                    onClick={() => handleDeleteClick(store.id, store.name)}
                                                     className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                                                     title="Sil"
                                                 >
@@ -168,6 +211,33 @@ export default function StoresPage() {
                     }}
                 />
             )}
+
+            <OtpVerificationModal
+                isOpen={showOtpModal}
+                onClose={() => {
+                    setShowOtpModal(false)
+                    setPendingOtpAction(null)
+                }}
+                onVerify={() => {
+                    setShowOtpModal(false)
+                    if (pendingOtpAction) {
+                        pendingOtpAction()
+                        setPendingOtpAction(null)
+                    }
+                }}
+            />
+
+            <ConfirmModal
+                isOpen={confirmModalState.isOpen}
+                onClose={() => setConfirmModalState({ ...confirmModalState, isOpen: false })}
+                onCancel={() => setConfirmModalState({ ...confirmModalState, isOpen: false })}
+                onConfirm={handleConfirmDelete}
+                title="Mağaza Silme"
+                message={`"${confirmModalState.storeName}" mağazasını silmek istediğinizden emin misiniz?`}
+                confirmText="Sil"
+                cancelText="İptal"
+                type="danger"
+            />
         </div>
     )
 }

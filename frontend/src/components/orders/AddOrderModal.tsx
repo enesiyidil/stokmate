@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import { X, Plus, Trash2, Save, User } from 'lucide-react'
+import { useSelector } from 'react-redux'
 import { useCreateOrderMutation, type OrderProductCreateRequest, useGetOrdersByCustomerQuery } from '../../services/orderApi'
 import { useListCustomersQuery, type CustomerRequest } from '../../services/customerApi'
 import { useGetSalesConsultantsQuery } from '../../services/userApi'
 import SearchableSelect from '../common/SearchableSelect'
-import { cities, districts, neighborhoods } from '../../data/turkeyLocations'
+import { cities, districts } from '../../data/turkeyLocations'
 import { BRANDS, getBrandLabel, getBrandColor, type Brand } from '../../constants/brandConstants'
 
 interface PrefillData {
@@ -133,8 +134,10 @@ export default function AddOrderModal({ onClose, onSuccess, isOpen = true, prefi
         setSelectedParentOrderId(orderId)
     }
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault()
+    // const user = useSelector((state: RootState) => state.auth.user) // Removed 2FA check
+
+    const handleCreateOrder = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault()
 
         const orderData: any = {
             orderNo: formData.orderNo,
@@ -215,6 +218,9 @@ export default function AddOrderModal({ onClose, onSuccess, isOpen = true, prefi
             alert(errorMessage)
         }
     }
+
+    // Simplified submit handler
+    const handleSubmit = handleCreateOrder
 
     return (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -797,6 +803,8 @@ export default function AddOrderModal({ onClose, onSuccess, isOpen = true, prefi
                     </div>
                 </form>
             </div>
+            {/* OTP Verification Modal */}
+
         </div>
     )
 }

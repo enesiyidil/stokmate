@@ -5,6 +5,7 @@ import { useCreateSaleMutation, type SaleRequest, type SaleProductRequest } from
 import { useListCustomersQuery } from '../../services/customerApi';
 import { useGetSalesConsultantsQuery } from '../../services/userApi';
 
+import OtpVerificationModal from '../../components/common/OtpVerificationModal';
 import ProductSearchModal from './ProductSearchModal';
 import type { ProductResponse } from '../../services/productApi';
 import { useAppSelector } from '../../hooks/useAuth';
@@ -71,6 +72,8 @@ const AddSaleModal: React.FC<AddSaleModalProps> = ({ isOpen, onClose }) => {
         }));
     };
 
+    const [showOtpModal, setShowOtpModal] = useState(false);
+
     const calculateTotal = () => {
         return formData.products?.reduce((sum, item) => {
             const subtotal = item.quantity * item.unitPriceExcludingVat;
@@ -79,11 +82,8 @@ const AddSaleModal: React.FC<AddSaleModalProps> = ({ isOpen, onClose }) => {
         }, 0) || 0;
     };
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleCreateSale = async () => {
         try {
-            if (!formData.customerId || !formData.products?.length) return;
-
             // Remove UI only properties before sending
             const productsToSend = formData.products.map(({ _displayName, ...rest }) => rest);
             const requestData = { ...formData, products: productsToSend } as SaleRequest;
@@ -93,6 +93,17 @@ const AddSaleModal: React.FC<AddSaleModalProps> = ({ isOpen, onClose }) => {
             // Reset form could be here
         } catch (error) {
             console.error('Failed to create sale', error);
+        }
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!formData.customerId || !formData.products?.length) return;
+
+        if (currentUser?.totpEnabled) {
+            setShowOtpModal(true);
+        } else {
+            handleCreateSale();
         }
     };
 
@@ -355,6 +366,15 @@ const AddSaleModal: React.FC<AddSaleModalProps> = ({ isOpen, onClose }) => {
                 isOpen={isProductSearchOpen}
                 onClose={() => setIsProductSearchOpen(false)}
                 onSelect={handleAddProduct}
+            />
+
+            <OtpVerificationModal
+                isOpen={showOtpModal}
+                onClose={() => setShowOtpModal(false)}
+                onVerify={() => {
+                    setShowOtpModal(false);
+                    handleCreateSale();
+                }}
             />
         </div>
     );

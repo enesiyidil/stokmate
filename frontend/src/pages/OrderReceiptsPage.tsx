@@ -10,6 +10,8 @@ import { useGetProductQuery } from '../services/productApi'
 import FilterSearchBar from '../components/common/FilterSearchBar'
 import { useGetUserSummariesQuery } from '../services/userApi'
 import OrderReceiptDetailModal from '../components/orders/OrderReceiptDetailModal'
+import OtpVerificationModal from '../components/common/OtpVerificationModal'
+import ConfirmModal from '../components/common/ConfirmModal'
 
 export default function OrderReceiptsPage() {
     const [searchParams] = useSearchParams()
@@ -27,7 +29,31 @@ export default function OrderReceiptsPage() {
     const [enrichProductId, setEnrichProductId] = useState<string | null>(null)
     const { data: productToEnrich } = useGetProductQuery(enrichProductId!, { skip: !enrichProductId })
 
+    // 2FA Gate State
+    const [showOtpModal, setShowOtpModal] = useState(false)
+    const [pendingAction, setPendingAction] = useState<(() => void) | null>(null)
+
+    // Modal States
+    const [confirmModalState, setConfirmModalState] = useState<{ isOpen: boolean; receiptId: string | null }>({
+        isOpen: false,
+        receiptId: null
+    })
+    const [rejectModalState, setRejectModalState] = useState<{ isOpen: boolean; receiptId: string | null }>({
+        isOpen: false,
+        receiptId: null
+    })
+    const [rejectionNote, setRejectionNote] = useState('')
+
     const currentUser = useAppSelector((state) => state.auth.user)
+
+    const verifyGate = (action: () => void) => {
+        if (currentUser?.totpEnabled) {
+            setPendingAction(() => action)
+            setShowOtpModal(true)
+        } else {
+            action()
+        }
+    }
     const canApprove = currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER' || currentUser?.role === 'DIRECTOR'
     const { setTopbarContent } = useTopbar()
 
@@ -85,7 +111,7 @@ export default function OrderReceiptsPage() {
             icon: <ClipboardCheck className="w-8 h-8" />,
             actions: (
                 <button
-                    onClick={() => setIsAddModalOpen(true)}
+                    onClick={() => verifyGate(() => setIsAddModalOpen(true))}
                     className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-700 hover:from-green-700 hover:to-emerald-800 text-white rounded-xl font-medium transition-all shadow-lg hover:shadow-xl"
                 >
                     <Plus className="w-5 h-5" />
@@ -97,11 +123,17 @@ export default function OrderReceiptsPage() {
 
     const handleApprove = async (id: string, e: React.MouseEvent) => {
         e.stopPropagation()
-        if (!confirm('Bu kabulü onaylamak istediğinizden emin misiniz?')) return
+        verifyGate(() => {
+            setConfirmModalState({ isOpen: true, receiptId: id })
+        })
+    }
 
+    const performApprove = async () => {
+        if (!confirmModalState.receiptId) return
         try {
-            await approveReceipt({ id }).unwrap()
+            await approveReceipt({ id: confirmModalState.receiptId }).unwrap()
             refetch()
+            setConfirmModalState({ isOpen: false, receiptId: null })
         } catch (error) {
             console.error('Failed to approve receipt:', error)
             alert('Onaylama sırasında bir hata oluştu')
@@ -110,14 +142,21 @@ export default function OrderReceiptsPage() {
 
     const handleReject = async (id: string, e: React.MouseEvent) => {
         e.stopPropagation()
-        const notes = prompt('Ret nedeni (isteğe bağlı):')
+        verifyGate(() => {
+            setRejectionNote('')
+            setRejectModalState({ isOpen: true, receiptId: id })
+        })
+    }
 
+    const performReject = async () => {
+        if (!rejectModalState.receiptId) return
         try {
             await rejectReceipt({
-                id,
-                request: notes ? { approvalNotes: notes } : undefined
+                id: rejectModalState.receiptId,
+                request: rejectionNote ? { approvalNotes: rejectionNote } : undefined
             }).unwrap()
             refetch()
+            setRejectModalState({ isOpen: false, receiptId: null })
         } catch (error) {
             console.error('Failed to reject receipt:', error)
             alert('Reddetme sırasında bir hata oluştu')
@@ -344,6 +383,82 @@ export default function OrderReceiptsPage() {
                     </table>
                 </div>
             </div>
+
+            {/* OTP Modal */}
+            <OtpVerificationModal
+                isOpen={showOtpModal}
+                onClose={() => {
+                    setShowOtpModal(false)
+                    setPendingAction(null)
+                }}
+                onVerify={() => {
+                    setShowOtpModal(false)
+                    if (pendingAction) {
+                        pendingAction()
+                        setPendingAction(null)
+                    }
+                }}
+            />
+
+            {/* Confirm Approve Modal */}
+            <ConfirmModal
+                isOpen={confirmModalState.isOpen}
+                onClose={() => setConfirmModalState({ isOpen: false, receiptId: null })}
+                onCancel={() => setConfirmModalState({ isOpen: false, receiptId: null })}
+                onConfirm={performApprove}
+                title="Ürün Kabul Onayı"
+                message="Bu ürün kabul işlemini onaylamak istediğinizden emin misiniz?"
+                confirmText="Onayla"
+                type="success"
+            />
+
+            {/* Reject Modal */}
+            {rejectModalState.isOpen && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-white border border-red-200 rounded-2xl shadow-2xl w-full max-w-md">
+                        <div className="p-6 border-b border-red-100 flex justify-between items-center">
+                            <h3 className="text-xl font-bold text-red-900 flex items-center gap-2">
+                                <XCircle className="w-6 h-6" />
+                                Kabulü Reddet
+                            </h3>
+                            <button
+                                onClick={() => setRejectModalState({ isOpen: false, receiptId: null })}
+                                className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                            >
+                                <XCircle className="w-5 h-5 text-red-300" />
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <p className="text-red-800">Bu kabul işlemini reddetmek üzeresiniz.</p>
+                            <div>
+                                <label className="block text-sm font-medium text-red-900 mb-1">
+                                    Ret Nedeni (İsteğe bağlı)
+                                </label>
+                                <textarea
+                                    value={rejectionNote}
+                                    onChange={(e) => setRejectionNote(e.target.value)}
+                                    className="w-full px-4 py-2 border border-red-200 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none h-32 resize-none"
+                                    placeholder="Neden reddedildiğini açıklayın..."
+                                />
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-end gap-3 p-6 border-t border-red-100 bg-red-50/30">
+                            <button
+                                onClick={() => setRejectModalState({ isOpen: false, receiptId: null })}
+                                className="px-4 py-2 text-red-700 hover:bg-red-100 rounded-lg transition-colors"
+                            >
+                                İptal
+                            </button>
+                            <button
+                                onClick={performReject}
+                                className="px-6 py-2 bg-gradient-to-r from-red-600 to-pink-600 text-white rounded-lg hover:from-red-700 hover:to-pink-700 shadow-lg transition-all"
+                            >
+                                Reddet
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

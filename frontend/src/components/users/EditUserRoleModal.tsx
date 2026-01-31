@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { X, UserCheck } from 'lucide-react'
 import { useUpdateUserRoleMutation } from '../../services/userApi'
+import { useToast } from '../../context/ToastContext'
 
 interface EditUserRoleModalProps {
     onClose: () => void
@@ -25,20 +26,21 @@ const ROLES = [
 export default function EditUserRoleModal({ onClose, user }: EditUserRoleModalProps) {
     const [selectedRole, setSelectedRole] = useState(user.role)
     const [updateUserRole, { isLoading }] = useUpdateUserRoleMutation()
+    const { success, error } = useToast()
 
     const handleSubmit = async () => {
         if (selectedRole === user.role) {
-            alert('Aynı rol seçildi, değişiklik yapılmadı.')
+            error('Aynı rol seçildi, değişiklik yapılmadı.')
             return
         }
 
         try {
             await updateUserRole({ id: user.id, role: selectedRole }).unwrap()
-            alert('Kullanıcı rolü başarıyla güncellendi!')
+            success('Kullanıcı rolü başarıyla güncellendi!')
             onClose()
-        } catch (error) {
-            console.error('Failed to update role:', error)
-            alert('Rol güncellenirken bir hata oluştu')
+        } catch (err) {
+            console.error('Failed to update role:', err)
+            error('Rol güncellenirken bir hata oluştu')
         }
     }
 

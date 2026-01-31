@@ -6,6 +6,9 @@ import { useGetStoreEmployeesQuery, useRemoveEmployeeMutation } from '../service
 import { useTopbar } from '../context/TopbarContext'
 import AddEmployeeModal from '../components/stores/AddEmployeeModal'
 import ConfirmModal from '../components/common/ConfirmModal'
+import OtpVerificationModal from '../components/common/OtpVerificationModal'
+import { useAppSelector } from '../hooks/useAuth'
+import { useToast } from '../context/ToastContext'
 
 export default function StoreDetailsPage() {
     const { id } = useParams<{ id: string }>()
@@ -17,6 +20,23 @@ export default function StoreDetailsPage() {
     const { data: store, isLoading: storeLoading } = useGetStoreByIdQuery(id!)
     const { data: employees = [], refetch: refetchEmployees } = useGetStoreEmployeesQuery(id!)
     const [removeEmployee, { isLoading: isRemoving }] = useRemoveEmployeeMutation()
+
+    // Auth & Toast
+    const { user } = useAppSelector((state) => state.auth)
+    const { success, error } = useToast()
+
+    // 2FA State
+    const [showOtpModal, setShowOtpModal] = useState(false)
+    const [pendingOtpAction, setPendingOtpAction] = useState<(() => void) | null>(null)
+
+    const verifyGate = (action: () => void) => {
+        if (user?.totpEnabled) {
+            setPendingOtpAction(() => action)
+            setShowOtpModal(true)
+        } else {
+            action()
+        }
+    }
 
     useEffect(() => {
         if (store) {
@@ -42,13 +62,16 @@ export default function StoreDetailsPage() {
     const handleConfirmRemove = async () => {
         if (!employeeToRemove) return
 
-        try {
-            await removeEmployee({ storeId: id!, userId: employeeToRemove.userId }).unwrap()
-            refetchEmployees()
-            setEmployeeToRemove(null)
-        } catch (error) {
-            alert('Çalışan çıkarılırken bir hata oluştu')
-        }
+        verifyGate(async () => {
+            try {
+                await removeEmployee({ storeId: id!, userId: employeeToRemove.userId }).unwrap()
+                refetchEmployees()
+                setEmployeeToRemove(null)
+                success('Çalışan başarıyla çıkarıldı')
+            } catch (err) {
+                error('Çalışan çıkarılırken bir hata oluştu')
+            }
+        })
     }
 
     if (storeLoading) {
@@ -99,7 +122,7 @@ export default function StoreDetailsPage() {
                 <div className="p-6 border-b border-amber-200 flex items-center justify-between">
                     <h2 className="text-xl font-bold text-amber-900">Çalışanlar ({employees.length})</h2>
                     <button
-                        onClick={() => setShowAddModal(true)}
+                        onClick={() => verifyGate(() => setShowAddModal(true))}
                         className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-700 to-orange-700 text-white rounded-xl hover:from-amber-800 hover:to-orange-800 transition-all shadow-md"
                     >
                         <Plus className="w-4 h-4" />
@@ -188,6 +211,21 @@ export default function StoreDetailsPage() {
                     isLoading={isRemoving}
                 />
             )}
+
+            <OtpVerificationModal
+                isOpen={showOtpModal}
+                onClose={() => {
+                    setShowOtpModal(false)
+                    setPendingOtpAction(null)
+                }}
+                onVerify={() => {
+                    setShowOtpModal(false)
+                    if (pendingOtpAction) {
+                        pendingOtpAction()
+                        setPendingOtpAction(null)
+                    }
+                }}
+            />
         </div>
     )
 }

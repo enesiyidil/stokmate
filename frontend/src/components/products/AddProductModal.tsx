@@ -43,7 +43,7 @@ export default function AddProductModal({ product, onClose, onSuccess }: Props) 
                 brand: product.brand || '',
                 activeForSale: product.activeForSale,
                 stockQuantity: Number(product.stockQuantity),
-                vatRate: Number(product.vatRate),
+                vatRate: Number(product.vatRate) * 100, // Convert decimal to percentage for display
                 unitPrice: Number(product.unitPrice),
                 minStockLevel: product.minStockLevel ? Number(product.minStockLevel) : 0,
                 keywords: product.keywords ? Array.from(product.keywords) : []
@@ -57,9 +57,9 @@ export default function AddProductModal({ product, onClose, onSuccess }: Props) 
 
         try {
             if (product) {
-                await updateProduct({ id: product.id, data: formData }).unwrap()
+                await updateProduct({ id: product.id, data: { ...formData, vatRate: formData.vatRate / 100 } }).unwrap() // Convert percentage to decimal
             } else {
-                await createProduct(formData).unwrap()
+                await createProduct({ ...formData, vatRate: formData.vatRate / 100 }).unwrap() // Convert percentage to decimal
             }
             onSuccess()
         } catch (error) {

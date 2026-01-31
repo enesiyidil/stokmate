@@ -13,6 +13,7 @@ import { useAppSelector } from '../../hooks/useAuth'
 import { useToast } from '../../context/ToastContext'
 import ConfirmModal from '../../components/common/ConfirmModal'
 import ImageGalleryModal from '../../components/common/ImageGalleryModal'
+import OtpVerificationModal from '../../components/common/OtpVerificationModal'
 
 export default function ShipmentDetailsPage() {
     const { orderId } = useParams<{ orderId: string }>()
@@ -62,6 +63,17 @@ export default function ShipmentDetailsPage() {
     const [showCompleteModal, setShowCompleteModal] = useState(false)
     const [showDocumentModal, setShowDocumentModal] = useState(false)
     const [showGallery, setShowGallery] = useState(false)
+    const [showOtpModal, setShowOtpModal] = useState(false)
+    const [pendingOtpAction, setPendingOtpAction] = useState<(() => void) | null>(null)
+
+    const verifyGate = (action: () => void) => {
+        if (user?.totpEnabled) {
+            setPendingOtpAction(() => action)
+            setShowOtpModal(true)
+        } else {
+            action()
+        }
+    }
     const [galleryStartIndex, setGalleryStartIndex] = useState(0)
     const [documentUrl, setDocumentUrl] = useState<string | null>(null)
     const [documentType, setDocumentType] = useState<'pdf' | 'image' | null>(null)
@@ -159,24 +171,26 @@ export default function ShipmentDetailsPage() {
 
     const handlePlanShipment = async () => {
         if (!plannedDate || !selectedVehicleId) {
-            alert('Lütfen tarih ve araç seçiniz')
+            error('Lütfen tarih ve araç seçiniz')
             return
         }
 
-        try {
-            await planShipmentMutation({
-                orderId: orderId!,
-                data: {
-                    plannedDate: new Date(plannedDate).toISOString(),
-                    vehicleId: selectedVehicleId,
-                    driverId: selectedDriverIdForPlanning || undefined
-                }
-            }).unwrap()
-            success('Sevk başarıyla planlandı!')
-            setShowPlanningModal(false)
-        } catch (err: any) {
-            error('Hata: ' + (err.data?.message || err.message || 'Bir hata oluştu'))
-        }
+        verifyGate(async () => {
+            try {
+                await planShipmentMutation({
+                    orderId: orderId!,
+                    data: {
+                        plannedDate: new Date(plannedDate).toISOString(),
+                        vehicleId: selectedVehicleId,
+                        driverId: selectedDriverIdForPlanning || undefined
+                    }
+                }).unwrap()
+                success('Sevk başarıyla planlandı!')
+                setShowPlanningModal(false)
+            } catch (err: any) {
+                error('Hata: ' + (err.data?.message || err.message || 'Bir hata oluştu'))
+            }
+        })
     }
 
     const handleCompleteShipment = async (data: {
@@ -213,10 +227,20 @@ export default function ShipmentDetailsPage() {
                 formData.append('signedDocument', data.signedDocument)
             }
 
-            await completeShipmentMutation(formData).unwrap()
-            success('Sevk başarıyla tamamlandı! Onay bekliyor.')
-            setShowCompleteModal(false)
-            refetch() // Refresh page data
+            if (data.signedDocument) {
+                formData.append('signedDocument', data.signedDocument)
+            }
+
+            verifyGate(async () => {
+                try {
+                    await completeShipmentMutation(formData).unwrap()
+                    success('Sevk başarıyla tamamlandı! Onay bekliyor.')
+                    setShowCompleteModal(false)
+                    refetch() // Refresh page data
+                } catch (err: any) {
+                    error('Hata: ' + (err.data?.message || err.message || 'Bir hata oluştu'))
+                }
+            })
         } catch (err: any) {
             error('Hata: ' + (err.data?.message || err.message || 'Bir hata oluştu'))
         }
@@ -225,14 +249,16 @@ export default function ShipmentDetailsPage() {
     const handleConfirmApprove = async () => {
         if (!shipmentDetails?.shipmentId) return
 
-        try {
-            await finalizeShipmentMutation(shipmentDetails.shipmentId).unwrap()
-            success('Sevk başarıyla onaylandı!')
-            setShowApproveConfirm(false)
-            refetch()
-        } catch (err: any) {
-            error('Hata: ' + (err.data?.message || err.message || 'Bir hata oluştu'))
-        }
+        verifyGate(async () => {
+            try {
+                await finalizeShipmentMutation(shipmentDetails.shipmentId).unwrap()
+                success('Sevk başarıyla onaylandı!')
+                setShowApproveConfirm(false)
+                refetch()
+            } catch (err: any) {
+                error('Hata: ' + (err.data?.message || err.message || 'Bir hata oluştu'))
+            }
+        })
     }
 
     const handleDownloadReport = async () => {
@@ -254,7 +280,7 @@ export default function ShipmentDetailsPage() {
                 // Fallback if popup blocked - download instead
                 const link = document.createElement('a')
                 link.href = url
-                link.download = `sevk-raporu-${shipmentDetails?.orderNo}.pdf`
+                link.download = `sevk-raporu-${shipmentDetails?.orderNo || 'belge'}.pdf`
                 document.body.appendChild(link)
                 link.click()
                 document.body.removeChild(link)
@@ -303,7 +329,7 @@ export default function ShipmentDetailsPage() {
         if (!shipmentDetails?.customer?.address) missingFields.push('Adres bilgisi')
 
         if (missingFields.length === 0) {
-            alert('Tüm müşteri bilgileri mevcut.')
+            success('Tüm müşteri bilgileri mevcut.')
             return
         }
 
@@ -589,6 +615,21 @@ export default function ShipmentDetailsPage() {
                 confirmText="Onayla"
                 cancelText="İptal"
                 type="success"
+            />
+
+            <OtpVerificationModal
+                isOpen={showOtpModal}
+                onClose={() => {
+                    setShowOtpModal(false)
+                    setPendingOtpAction(null)
+                }}
+                onVerify={() => {
+                    setShowOtpModal(false)
+                    if (pendingOtpAction) {
+                        pendingOtpAction()
+                        setPendingOtpAction(null)
+                    }
+                }}
             />
         </div>
     )

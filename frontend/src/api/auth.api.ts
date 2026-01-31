@@ -61,11 +61,14 @@ export const authApi = api.injectEndpoints({
                 body: credentials,
             }),
         }),
-        verify2FA: builder.mutation<AuthResponse, { email: string; code: string }>({
-            query: (body) => ({
+        verifyLogin2FA: builder.mutation<AuthResponse, { email: string; code: string }>({
+            query: ({ email, code }) => ({
                 url: '/auth/verify-2fa',
                 method: 'POST',
-                body,
+                body: { email, code },
+                headers: {
+                    'Content-Type': 'application/json',
+                },
             }),
         }),
         forgotPassword: builder.mutation<boolean, { email: string }>({
@@ -98,7 +101,7 @@ export const authApi = api.injectEndpoints({
 export const {
     useLoginMutation,
     useLoginWithOtpMutation,
-    useVerify2FAMutation,
+    useVerifyLogin2FAMutation,
     useGetMeQuery,
     useLogoutMutation,
     useForgotPasswordMutation,

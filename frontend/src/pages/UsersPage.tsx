@@ -5,8 +5,10 @@ import AddUserModal from '../components/users/AddUserModal'
 import EditUserRoleModal from '../components/users/EditUserRoleModal'
 import DeleteUserModal from '../components/users/DeleteUserModal'
 import ConfirmToggleActiveModal from '../components/users/ConfirmToggleActiveModal'
+import OtpVerificationModal from '../components/common/OtpVerificationModal'
 import { useTopbar } from '../context/TopbarContext'
 import { useAppSelector } from '../hooks/useAuth'
+import { useToast } from '../context/ToastContext'
 
 export default function UsersPage() {
     const [showAddModal, setShowAddModal] = useState(false)
@@ -20,18 +22,35 @@ export default function UsersPage() {
     const [deleteUser] = useDeleteUserMutation()
     const [toggleUserActive] = useToggleUserActiveMutation()
     const [toggle2FA] = useToggle2FAMutation()
+    const { success, error } = useToast()
 
     // Get current user role
-    const currentUser = useAppSelector(state => state.auth.user)
-    const isDirector = currentUser?.role === 'DIRECTOR'
+    const { user: currentUser } = useAppSelector(state => state.auth)
+    const isDirector = currentUser?.role === 'DIRECTOR' || currentUser?.role === 'ADMIN'
+
+    // 2FA State
+    const [showOtpModal, setShowOtpModal] = useState(false)
+    const [pendingOtpAction, setPendingOtpAction] = useState<(() => void) | null>(null)
+
+    const verifyGate = (action: () => void) => {
+        if (currentUser?.totpEnabled) {
+            setPendingOtpAction(() => action)
+            setShowOtpModal(true)
+        } else {
+            action()
+        }
+    }
 
     const handle2FAToggle = async (user: any) => {
-        try {
-            await toggle2FA({ id: user.id, enabled: !user.totpEnabled }).unwrap()
-        } catch (error) {
-            console.error('Failed to toggle 2FA:', error)
-            alert('2FA durumu değiştirilirken bir hata oluştu')
-        }
+        verifyGate(async () => {
+            try {
+                await toggle2FA({ id: user.id, enabled: !user.totpEnabled }).unwrap()
+                success('2FA durumu başarıyla değiştirildi')
+            } catch (err: any) {
+                console.error('Failed to toggle 2FA:', err)
+                error('2FA durumu değiştirilirken bir hata oluştu')
+            }
+        })
     }
 
     // Set topbar content
@@ -42,7 +61,9 @@ export default function UsersPage() {
             icon: <Users className="w-8 h-8" />,
             actions: (
                 <button
-                    onClick={() => setShowAddModal(true)}
+                    onClick={() => {
+                        verifyGate(() => setShowAddModal(true))
+                    }}
                     className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-amber-700 to-orange-700 text-white rounded-xl hover:from-amber-800 hover:to-orange-800 transition-all duration-300 shadow-lg hover:shadow-xl"
                 >
                     <Plus className="w-5 h-5" />
@@ -50,22 +71,29 @@ export default function UsersPage() {
                 </button>
             )
         })
-    }, [setTopbarContent])
+        return () => setTopbarContent(null)
+    }, [setTopbarContent, currentUser?.totpEnabled])
 
     const handleDeleteUser = async (id: string) => {
+        // Legacy delete, seemingly unused or for hard delete. Keeping it but safe.
         if (!confirm('Bu kullanıcıyı silmek istediğinizden emin misiniz?')) return
 
-        try {
-            await deleteUser(id).unwrap()
-        } catch (error) {
-            console.error('Failed to delete user:', error)
-            alert('Kullanıcı silinirken bir hata oluştu')
-        }
+        verifyGate(async () => {
+            try {
+                await deleteUser(id).unwrap()
+                success('Kullanıcı başarıyla silindi')
+            } catch (err) {
+                console.error('Failed to delete user:', err)
+                error('Kullanıcı silinirken bir hata oluştu')
+            }
+        })
     }
 
     const handleToggleActive = (user: any) => {
-        setSelectedUser(user)
-        setShowToggleActiveModal(true)
+        verifyGate(() => {
+            setSelectedUser(user)
+            setShowToggleActiveModal(true)
+        })
     }
 
     const handleConfirmToggleActive = async () => {
@@ -73,60 +101,52 @@ export default function UsersPage() {
 
         try {
             await toggleUserActive({ id: selectedUser.id, active: !selectedUser.active }).unwrap()
+            success('Kullanıcı durumu başarıyla güncellendi')
             setShowToggleActiveModal(false)
             setSelectedUser(null)
-        } catch (error) {
-            console.error('Failed to toggle user active:', error)
-            alert('Kullanıcı durumu değiştirilirken bir hata oluştu')
+        } catch (err) {
+            console.error('Failed to toggle user active:', err)
+            error('Kullanıcı durumu değiştirilirken bir hata oluştu')
         }
     }
 
     const handleEditRole = (user: any) => {
-        setSelectedUser(user)
-        setShowEditRoleModal(true)
+        verifyGate(() => {
+            setSelectedUser(user)
+            setShowEditRoleModal(true)
+        })
     }
 
     const handleSoftDelete = (user: any) => {
-        setSelectedUser(user)
-        setShowDeleteModal(true)
+        verifyGate(() => {
+            setSelectedUser(user)
+            setShowDeleteModal(true)
+        })
     }
 
     const getRoleLabel = (role: string) => {
         switch (role) {
-            case 'ADMIN':
-                return 'Admin'
-            case 'MANAGER':
-                return 'Craft (Yönetici)'
-            case 'DIRECTOR':
-                return 'Direktör'
-            case 'OPERATIONS_MANAGER':
-                return 'Operasyon Yöneticisi'
-            case 'LOGISTICS_MANAGER':
-                return 'Lojistik Yöneticisi'
-            case 'STORE_MANAGER':
-                return 'Mağaza Sorumlusu'
-            case 'STORE_EMPLOYEE':
-                return 'Mağaza Çalışanı'
-            default:
-                return role
+            case 'ADMIN': return 'Admin'
+            case 'MANAGER': return 'Craft (Yönetici)'
+            case 'DIRECTOR': return 'Direktör'
+            case 'OPERATIONS_MANAGER': return 'Operasyon Yöneticisi'
+            case 'LOGISTICS_MANAGER': return 'Lojistik Yöneticisi'
+            case 'STORE_MANAGER': return 'Mağaza Sorumlusu'
+            case 'STORE_EMPLOYEE': return 'Mağaza Çalışanı'
+            default: return role
         }
     }
 
     const getRoleBadgeClass = (role: string) => {
         switch (role) {
-            case 'ADMIN':
-                return 'bg-purple-100 text-purple-800 border-purple-400'
+            case 'ADMIN': return 'bg-purple-100 text-purple-800 border-purple-400'
             case 'MANAGER':
-            case 'DIRECTOR':
-                return 'bg-indigo-100 text-indigo-800 border-indigo-400'
+            case 'DIRECTOR': return 'bg-indigo-100 text-indigo-800 border-indigo-400'
             case 'OPERATIONS_MANAGER':
-            case 'LOGISTICS_MANAGER':
-                return 'bg-blue-100 text-blue-800 border-blue-400'
+            case 'LOGISTICS_MANAGER': return 'bg-blue-100 text-blue-800 border-blue-400'
             case 'STORE_MANAGER':
-            case 'STORE_EMPLOYEE':
-                return 'bg-green-100 text-green-800 border-green-400'
-            default:
-                return 'bg-gray-100 text-gray-800 border-gray-400'
+            case 'STORE_EMPLOYEE': return 'bg-green-100 text-green-800 border-green-400'
+            default: return 'bg-gray-100 text-gray-800 border-gray-400'
         }
     }
 
@@ -143,7 +163,7 @@ export default function UsersPage() {
                         <h3 className="text-xl font-semibold text-amber-900 mb-2">Kullanıcı Bulunamadı</h3>
                         <p className="text-amber-700 mb-6">Henüz eklenmiş kullanıcı yok. Hemen bir kullanıcı ekleyin!</p>
                         <button
-                            onClick={() => setShowAddModal(true)}
+                            onClick={() => verifyGate(() => setShowAddModal(true))}
                             className="px-6 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all"
                         >
                             <Plus className="w-4 h-4 inline mr-2" />
@@ -272,6 +292,7 @@ export default function UsersPage() {
                     onClose={() => setShowAddModal(false)}
                     onSuccess={() => {
                         setShowAddModal(false)
+                        success('Kullanıcı başarıyla eklendi')
                     }}
                 />
             )}
@@ -309,6 +330,21 @@ export default function UsersPage() {
                     onConfirm={handleConfirmToggleActive}
                 />
             )}
+
+            <OtpVerificationModal
+                isOpen={showOtpModal}
+                onClose={() => {
+                    setShowOtpModal(false)
+                    setPendingOtpAction(null)
+                }}
+                onVerify={() => {
+                    setShowOtpModal(false)
+                    if (pendingOtpAction) {
+                        pendingOtpAction()
+                        setPendingOtpAction(null)
+                    }
+                }}
+            />
         </div>
     )
 }

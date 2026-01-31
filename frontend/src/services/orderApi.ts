@@ -14,6 +14,7 @@ export type OrderStatus =
     | 'PROBLEMATIC_DELIVERY'
     | 'SSH_ORDER_CREATED'
     | 'COMPLETED'
+    | 'CANCELLATION_PENDING_APPROVAL'
     | 'CANCELLED'
     | 'DEVAM_EDIYOR'  // Legacy
     | 'TAMAMLANDI'    // Legacy
@@ -35,6 +36,24 @@ export interface OrderProductResponse {
     brand?: string
     createdAt: string
     updatedAt: string
+    // Price fields
+    grossPrice?: number
+    netPrice?: number
+    fixedDiscount?: number
+    cashDiscount?: number
+    displayDiscount?: number
+    discount1?: number
+    discount2?: number
+    discount3?: number
+    discount4?: number
+    discount5?: number
+    vat?: number
+    paymentCondition?: string
+    paymentConditionDefinition?: string
+    specName?: string
+    productGroupDefinition?: string
+    warehouseLocation?: string
+    productionLocationName?: string
 }
 
 export interface UserBasicResponse {
@@ -116,6 +135,8 @@ export interface OrderResponse {
     linkedShipmentId?: string
     childSshOrders?: SshOrderSummary[]
     problemShipments?: ProblemShipmentSummary[]
+    // Flag to indicate this order was converted from a customer-specific order (iptal stoğu)
+    convertedFromCustomer?: boolean
 }
 
 export interface SshOrderSummary {
@@ -291,6 +312,15 @@ export const orderApi = api.injectEndpoints({
         cancelOrder: builder.mutation<OrderResponse, string>({
             query: (id) => ({
                 url: `/orders/${id}/cancel`,
+                method: 'POST',
+            }),
+            invalidatesTags: ['Orders'],
+        }),
+
+        // Approve order cancellation
+        approveCancellation: builder.mutation<OrderResponse, string>({
+            query: (id) => ({
+                url: `/orders/${id}/approve-cancellation`,
                 method: 'POST',
             }),
             invalidatesTags: ['Orders'],
@@ -478,6 +508,7 @@ export const {
     useCreateOrderMutation,
     useCompleteOrderMutation,
     useCancelOrderMutation,
+    useApproveCancellationMutation,
     useAcceptProductsMutation,
     useUploadInvoiceMutation,
     useGetInvoiceUrlQuery,

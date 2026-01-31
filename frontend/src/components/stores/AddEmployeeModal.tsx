@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { X, UserPlus } from 'lucide-react'
 import { useAssignEmployeeMutation, useGetStoreEmployeesQuery } from '../../services/storeEmployeeApi'
 import { useGetUserSummariesQuery } from '../../services/userApi'
+import { useToast } from '../../context/ToastContext'
 
 interface AddEmployeeModalProps {
     storeId: string
@@ -14,11 +15,12 @@ export default function AddEmployeeModal({ storeId, onClose, onSuccess }: AddEmp
         userId: '',
         joinDate: new Date().toISOString().split('T')[0],
     })
-    const [error, setError] = useState('')
+    const [errorText, setErrorText] = useState('') // renamed to prevent conflict with toast error
 
     const { data: users = [] } = useGetUserSummariesQuery()
     const { data: currentEmployees = [] } = useGetStoreEmployeesQuery(storeId)
     const [assignEmployee, { isLoading }] = useAssignEmployeeMutation()
+    const { success, error } = useToast()
 
     // Get IDs of users already assigned to this store
     const assignedUserIds = new Set(currentEmployees.map(emp => emp.user.id))
@@ -32,18 +34,19 @@ export default function AddEmployeeModal({ storeId, onClose, onSuccess }: AddEmp
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
-        setError('')
+        setErrorText('')
 
         if (!formData.userId) {
-            setError('Lütfen bir çalışan seçin')
+            setErrorText('Lütfen bir çalışan seçin')
             return
         }
 
         try {
             await assignEmployee({ storeId, data: formData }).unwrap()
+            success('Çalışan başarıyla atandı')
             onSuccess()
         } catch (err: any) {
-            setError(err?.data?.message || 'Çalışan atanırken bir hata oluştu')
+            error(err?.data?.message || 'Çalışan atanırken bir hata oluştu')
         }
     }
 
@@ -103,9 +106,9 @@ export default function AddEmployeeModal({ storeId, onClose, onSuccess }: AddEmp
                         />
                     </div>
 
-                    {error && (
+                    {errorText && (
                         <div className="p-4 bg-red-100 border border-red-300 rounded-xl text-red-800 text-sm">
-                            {error}
+                            {errorText}
                         </div>
                     )}
 

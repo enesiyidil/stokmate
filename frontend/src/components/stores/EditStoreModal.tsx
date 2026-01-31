@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { X, Building2, Save } from 'lucide-react'
 import { useUpdateStoreMutation, type StoreResponse } from '../../services/storeApi'
+import { useToast } from '../../context/ToastContext'
 
 interface EditStoreModalProps {
     store: StoreResponse
@@ -16,18 +17,18 @@ export default function EditStoreModal({ store, onClose, onSuccess }: EditStoreM
         email: store.email || '',
         active: store.active,
     })
-    const [error, setError] = useState('')
     const [updateStore, { isLoading }] = useUpdateStoreMutation()
+    const { success, error } = useToast()
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
-        setError('')
 
         try {
             await updateStore({ id: store.id, data: formData }).unwrap()
+            success('Mağaza başarıyla güncellendi')
             onSuccess()
         } catch (err: any) {
-            setError(err?.data?.message || 'Mağaza güncellenirken bir hata oluştu')
+            error(err?.data?.message || 'Mağaza güncellenirken bir hata oluştu')
         }
     }
 
@@ -134,13 +135,6 @@ export default function EditStoreModal({ store, onClose, onSuccess }: EditStoreM
                                 <span className="absolute cursor-pointer inset-0 bg-gray-300 rounded-full transition-all peer-checked:bg-amber-600 before:absolute before:h-5 before:w-5 before:left-1 before:bottom-1 before:bg-white before:rounded-full before:transition-all peer-checked:before:translate-x-7"></span>
                             </label>
                         </div>
-
-                        {/* Error Message */}
-                        {error && (
-                            <div className="p-4 bg-red-100 border border-red-300 rounded-lg text-red-800 text-sm">
-                                {error}
-                            </div>
-                        )}
                     </form>
                 </div>
 

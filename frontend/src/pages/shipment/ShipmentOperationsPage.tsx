@@ -5,8 +5,11 @@ import { useListReadyShipmentsQuery, useListPendingShipmentsQuery, useListAwaiti
 import { useTopbar } from '../../context/TopbarContext'
 import CompleteShipmentModal from '../../components/shipment/CompleteShipmentModal'
 import PlanShipmentModal from '../../components/shipment/PlanShipmentModal'
+import OtpVerificationModal from '../../components/common/OtpVerificationModal'
 import FilterSearchBar from '../../components/common/FilterSearchBar'
+import ConfirmModal from '../../components/common/ConfirmModal'
 import { useAppSelector } from '../../hooks/useAuth'
+import { useToast } from '../../context/ToastContext'
 
 type TabKey = 'all' | 'pending' | 'awaiting' | 'ready' | 'completed'
 
@@ -26,6 +29,27 @@ const ShipmentOperationsPage: React.FC = () => {
     const [selectedShipmentId, setSelectedShipmentId] = useState<string | null>(null)
     const [showPlanModal, setShowPlanModal] = useState(false)
     const [showCompleteModal, setShowCompleteModal] = useState(false)
+
+    const [showOtpModal, setShowOtpModal] = useState(false)
+    const [pendingOtpAction, setPendingOtpAction] = useState<(() => void) | null>(null)
+
+    // Confirmation Modal State
+    const [confirmModalState, setConfirmModalState] = useState<{
+        isOpen: boolean
+        type: 'APPROVE' | 'FINALIZE' | null
+        shipmentId: string | null
+    }>({ isOpen: false, type: null, shipmentId: null })
+
+    const { success, error } = useToast()
+
+    const verifyGate = (action: () => void) => {
+        if (user?.totpEnabled) {
+            setPendingOtpAction(() => action)
+            setShowOtpModal(true)
+        } else {
+            action()
+        }
+    }
 
     // Filter states
     const [searchQuery, setSearchQuery] = useState('')
@@ -123,50 +147,59 @@ const ShipmentOperationsPage: React.FC = () => {
                     : (loadingCompleted || loadingFinalized)
 
     // First approval: PENDING -> APPROVED
-    const handleApproveInitial = async (shipmentId: string) => {
-        if (!confirm('Bu sevkiyatı onaylamak istediğinizden emin misiniz?')) return
-        try {
-            await approveInitialMutation(shipmentId).unwrap()
-            // alert('Sevkiyat başarıyla onaylandı!') // Removed alerts for smoother UX
-            refetchPending()
-            refetchAwaiting()
-        } catch (error: any) {
-            alert('Hata: ' + (error.data?.message || 'Onaylama başarısız'))
-        }
+    const handleApproveClick = (shipmentId: string) => {
+        setConfirmModalState({ isOpen: true, type: 'APPROVE', shipmentId })
     }
 
     // Final approval: COMPLETED -> FINALIZED
-    const handleFinalizeShipment = async (shipmentId: string) => {
-        if (!confirm('Bu sevkiyatı onaylamak istediğinizden emin misiniz?')) return
-        try {
-            await finalizeShipmentMutation(shipmentId).unwrap()
-            // alert('Sevkiyat başarıyla onaylandı!')
-            refetchCompleted()
-            refetchFinalized()
-        } catch (error: any) {
-            alert('Hata: ' + (error.data?.message || 'Onaylama başarısız'))
-        }
+    const handleFinalizeClick = (shipmentId: string) => {
+        setConfirmModalState({ isOpen: true, type: 'FINALIZE', shipmentId })
+    }
+
+    const handleConfirmAction = async () => {
+        const { type, shipmentId } = confirmModalState
+        if (!shipmentId || !type) return
+
+        verifyGate(async () => {
+            try {
+                if (type === 'APPROVE') {
+                    await approveInitialMutation(shipmentId).unwrap()
+                    success('Sevkiyat başarıyla onaylandı')
+                    refetchPending()
+                    refetchAwaiting()
+                } else if (type === 'FINALIZE') {
+                    await finalizeShipmentMutation(shipmentId).unwrap()
+                    success('Sevkiyat final onayı verildi')
+                    refetchCompleted()
+                    refetchFinalized()
+                }
+                setConfirmModalState({ isOpen: false, type: null, shipmentId: null })
+            } catch (err: any) {
+                error('Hata: ' + (err.data?.message || 'İşlem başarısız'))
+            }
+        })
     }
 
     // Plan shipment handler
     const handlePlanShipment = async (data: { plannedDate: string; vehicleId: string; driverId?: string }) => {
         if (!selectedShipmentId) return
-        try {
-            await planShipmentMutation({
-                orderId: selectedShipmentId,
-                data: {
-                    plannedDate: data.plannedDate,
-                    vehicleId: data.vehicleId,
-                    driverId: data.driverId
-                }
-            }).unwrap()
-            // alert('Sevkiyat başarıyla planlandı!')
-            setShowPlanModal(false)
-            setSelectedShipmentId(null)
-            refetchAwaiting()
-        } catch (error: any) {
-            alert('Hata: ' + (error.data?.message || 'Planlama başarısız'))
-        }
+        verifyGate(async () => {
+            try {
+                await planShipmentMutation({
+                    orderId: selectedShipmentId,
+                    data: {
+                        plannedDate: data.plannedDate,
+                        vehicleId: data.vehicleId,
+                        driverId: data.driverId
+                    }
+                }).unwrap()
+                setSelectedShipmentId(null)
+                refetchAwaiting()
+                success('Sevkiyat başarıyla planlandı')
+            } catch (err: any) {
+                error('Hata: ' + (err.data?.message || 'Planlama başarısız'))
+            }
+        })
     }
 
     // Complete shipment handler
@@ -187,13 +220,21 @@ const ShipmentOperationsPage: React.FC = () => {
             data.deliveryPhotos.forEach(photo => formData.append('deliveryPhotos', photo))
             if (data.signedDocument) formData.append('signedDocument', data.signedDocument)
 
-            await completeShipmentMutation(formData).unwrap()
-            // alert('Sevkiyat başarıyla tamamlandı!')
-            setShowCompleteModal(false)
-            setSelectedShipmentId(null)
-            refetchCompleted()
-        } catch (error: any) {
-            alert('Hata: ' + (error.data?.message || 'Tamamlama başarısız'))
+            if (data.signedDocument) formData.append('signedDocument', data.signedDocument)
+
+            verifyGate(async () => {
+                try {
+                    await completeShipmentMutation(formData).unwrap()
+                    setShowCompleteModal(false)
+                    setSelectedShipmentId(null)
+                    refetchCompleted()
+                    success('Sevkiyat başarıyla tamamlandı')
+                } catch (err: any) {
+                    error('Hata: ' + (err.data?.message || 'Tamamlama başarısız'))
+                }
+            })
+        } catch (err: any) {
+            error('Hata: ' + (err.data?.message || 'İşlem hatası'))
         }
     }
 
@@ -206,9 +247,120 @@ const ShipmentOperationsPage: React.FC = () => {
         return () => setTopbarContent(null)
     }, [setTopbarContent])
 
+    // Mobile list render
+    const renderMobileList = (data: any[]) => (
+        <div className="md:hidden space-y-4 p-4">
+            {data.map((shipment: any) => (
+                <div key={shipment.id} className="bg-white border border-amber-100 rounded-xl p-4 shadow-sm flex flex-col gap-3">
+                    <div className="flex justify-between items-start">
+                        <div className="flex flex-col gap-1">
+                            <span className="text-xs font-mono text-orange-600 bg-orange-50 px-2 py-1 rounded border border-orange-200 w-fit">#{shipment.id?.substring(0, 8)}</span>
+                            <div className="flex items-center gap-2">
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded border ${shipment.shipmentType === 'SALE'
+                                    ? 'bg-purple-100 text-purple-700 border-purple-200'
+                                    : 'bg-blue-100 text-blue-700 border-blue-200'
+                                    }`}>
+                                    {shipment.shipmentType === 'SALE' ? 'SATIŞ' : 'SİPARİŞ'}
+                                </span>
+                                <span className="text-amber-900 font-medium text-sm">{shipment.orderNo || shipment.saleNo}</span>
+                            </div>
+                        </div>
+                        <span className={`px-2 py-1 rounded text-xs font-medium border whitespace-nowrap ${shipment.status === 'FINALIZED'
+                            ? 'bg-green-100 text-green-800 border-green-200'
+                            : shipment.status === 'COMPLETED'
+                                ? 'bg-blue-100 text-blue-800 border-blue-200'
+                                : shipment.status === 'APPROVED' || shipment.status === 'PLANNED'
+                                    ? 'bg-yellow-100 text-yellow-800 border-yellow-200'
+                                    : 'bg-amber-100 text-amber-800 border-amber-200'
+                            }`}>
+                            {shipment.status === 'FINALIZED' ? 'Onaylandı'
+                                : shipment.status === 'COMPLETED' ? 'Onay Bekliyor'
+                                    : shipment.status === 'APPROVED' ? 'Planlanıyor'
+                                        : shipment.status === 'PLANNED' ? 'Sevke Hazır'
+                                            : shipment.status === 'PENDING' ? 'Onay Bekliyor'
+                                                : shipment.status}
+                        </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div className="flex flex-col">
+                            <span className="text-xs text-amber-500">Müşteri</span>
+                            <span className="text-amber-900 font-medium">{shipment.customerName || '-'}</span>
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-xs text-amber-500">Tarih</span>
+                            <span className="text-amber-900 font-medium">{shipment.orderDate ? new Date(shipment.orderDate).toLocaleDateString('tr-TR') : '-'}</span>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-amber-50 mt-2">
+                        {/* Onayla button - for PENDING status */}
+                        {shipment.status === 'PENDING' && canApprove && (
+                            <button
+                                onClick={() => handleApproveClick(shipment.id)}
+                                title="Onayla"
+                                className="flex-1 p-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-all shadow-sm flex items-center justify-center gap-2"
+                            >
+                                <CheckCircle className="w-4 h-4" />
+                                <span className="text-xs font-medium">Onayla</span>
+                            </button>
+                        )}
+                        {/* Planla button - for APPROVED status */}
+                        {shipment.status === 'APPROVED' && canPlan && (
+                            <button
+                                onClick={() => {
+                                    setSelectedShipmentId(shipment.id)
+                                    setShowPlanModal(true)
+                                }}
+                                title="Planla"
+                                className="flex-1 p-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-all shadow-sm flex items-center justify-center gap-2"
+                            >
+                                <Calendar className="w-4 h-4" />
+                                <span className="text-xs font-medium">Planla</span>
+                            </button>
+                        )}
+                        {/* Tamamla button - for PLANNED status */}
+                        {shipment.status === 'PLANNED' && canComplete && (
+                            <button
+                                onClick={() => {
+                                    setSelectedShipmentId(shipment.id)
+                                    setShowCompleteModal(true)
+                                }}
+                                title="Tamamla"
+                                className="flex-1 p-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-all shadow-sm flex items-center justify-center gap-2"
+                            >
+                                <Truck className="w-4 h-4" />
+                                <span className="text-xs font-medium">Tamamla</span>
+                            </button>
+                        )}
+                        {/* Final Onayla button - for COMPLETED status */}
+                        {shipment.status === 'COMPLETED' && canFinalize && (
+                            <button
+                                onClick={() => handleFinalizeClick(shipment.id)}
+                                title="Onayla"
+                                className="flex-1 p-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-all shadow-sm flex items-center justify-center gap-2"
+                            >
+                                <CheckCircle className="w-4 h-4" />
+                                <span className="text-xs font-medium">Son Onay</span>
+                            </button>
+                        )}
+                        {/* Detay button - always visible */}
+                        <button
+                            onClick={() => navigate(`/shipment/${shipment.id}?type=SHIPMENT`)}
+                            title="Detay"
+                            className="p-2 bg-amber-50 text-amber-600 hover:bg-amber-100 border border-amber-200 rounded-lg transition-all shadow-sm"
+                        >
+                            <Eye className="w-4 h-4" />
+                        </button>
+                    </div>
+                </div>
+            ))}
+        </div>
+    )
+
     // Render table
     const renderTable = (data: any[]) => (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto hidden md:block">
             <table className="w-full">
                 <thead>
                     <tr className="border-b border-amber-200/50 bg-amber-50/50">
@@ -283,7 +435,7 @@ const ShipmentOperationsPage: React.FC = () => {
                                     {/* Onayla button - for PENDING status */}
                                     {shipment.status === 'PENDING' && canApprove && (
                                         <button
-                                            onClick={() => handleApproveInitial(shipment.id)}
+                                            onClick={() => handleApproveClick(shipment.id)}
                                             title="Onayla"
                                             className="p-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-all shadow-sm"
                                         >
@@ -319,7 +471,7 @@ const ShipmentOperationsPage: React.FC = () => {
                                     {/* Final Onayla button - for COMPLETED status */}
                                     {shipment.status === 'COMPLETED' && canFinalize && (
                                         <button
-                                            onClick={() => handleFinalizeShipment(shipment.id)}
+                                            onClick={() => handleFinalizeClick(shipment.id)}
                                             title="Onayla"
                                             className="p-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-all shadow-sm"
                                         >
@@ -404,7 +556,10 @@ const ShipmentOperationsPage: React.FC = () => {
                         <p className="text-amber-800 font-medium text-lg">Bu kategoride sevkiyat bulunmuyor</p>
                     </div>
                 ) : (
-                    renderTable(activeData)
+                    <>
+                        {renderTable(activeData)}
+                        {renderMobileList(activeData)}
+                    </>
                 )}
             </div>
 
@@ -429,8 +584,39 @@ const ShipmentOperationsPage: React.FC = () => {
                 onComplete={handleCompleteShipment}
                 isLoading={isCompletingShipment}
             />
+
+            <OtpVerificationModal
+                isOpen={showOtpModal}
+                onClose={() => {
+                    setShowOtpModal(false)
+                    setPendingOtpAction(null)
+                }}
+                onVerify={() => {
+                    setShowOtpModal(false)
+                    if (pendingOtpAction) {
+                        pendingOtpAction()
+                        setPendingOtpAction(null)
+                    }
+                }}
+            />
+
+            <ConfirmModal
+                isOpen={confirmModalState.isOpen}
+                onClose={() => setConfirmModalState({ ...confirmModalState, isOpen: false })}
+                onCancel={() => setConfirmModalState({ ...confirmModalState, isOpen: false })}
+                onConfirm={handleConfirmAction}
+                title={confirmModalState.type === 'APPROVE' ? 'Sevkiyat Onayı' : 'Final Onayı'}
+                message={confirmModalState.type === 'APPROVE'
+                    ? 'Bu sevkiyatı onaylamak istediğinizden emin misiniz? İşlem geri alınamaz.'
+                    : 'Bu sevkiyatı tamamen onaylayıp kapatmak istediğinizden emin misiniz? Stoklar kalıcı olarak düşülecektir.'
+                }
+                confirmText="Onayla"
+                cancelText="İptal"
+                type="success"
+            />
         </div>
     )
 }
 
 export default ShipmentOperationsPage
+

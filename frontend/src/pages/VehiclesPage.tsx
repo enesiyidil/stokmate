@@ -9,6 +9,9 @@ import {
     useDeleteVehicleMutation
 } from '../services/vehicleApi'
 import type { VehicleResponse, VehicleRequest } from '../services/vehicleApi'
+import OtpVerificationModal from '../components/common/OtpVerificationModal'
+import ConfirmModal from '../components/common/ConfirmModal'
+import { useToast } from '../context/ToastContext'
 
 export default function VehiclesPage() {
     const { setTopbarContent } = useTopbar()
@@ -17,11 +20,32 @@ export default function VehiclesPage() {
     const [createVehicle] = useCreateVehicleMutation()
     const [updateVehicle] = useUpdateVehicleMutation()
     const [deleteVehicle] = useDeleteVehicleMutation()
+    const { success, error } = useToast()
 
     const [searchQuery, setSearchQuery] = useState('')
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [editingVehicle, setEditingVehicle] = useState<VehicleResponse | null>(null)
     const [formData, setFormData] = useState<VehicleRequest>({ licensePlate: '', vehicleType: '' })
+
+    // 2FA State
+    const [showOtpModal, setShowOtpModal] = useState(false)
+    const [pendingOtpAction, setPendingOtpAction] = useState<(() => void) | null>(null)
+
+    // Confirm Modal State
+    const [confirmModalState, setConfirmModalState] = useState<{
+        isOpen: boolean
+        id: string | null
+        plate: string | null
+    }>({ isOpen: false, id: null, plate: null })
+
+    const verifyGate = (action: () => void) => {
+        if (user?.totpEnabled) {
+            setPendingOtpAction(() => action)
+            setShowOtpModal(true)
+        } else {
+            action()
+        }
+    }
 
     useEffect(() => {
         setTopbarContent({
@@ -31,9 +55,11 @@ export default function VehiclesPage() {
             actions: !['LOGISTICS_MANAGER'].includes(user?.role || '') ? (
                 <button
                     onClick={() => {
-                        setEditingVehicle(null)
-                        setFormData({ licensePlate: '', vehicleType: '' })
-                        setIsModalOpen(true)
+                        verifyGate(() => {
+                            setEditingVehicle(null)
+                            setFormData({ licensePlate: '', vehicleType: '' })
+                            setIsModalOpen(true)
+                        })
                     }}
                     className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-amber-700 to-orange-700 text-white rounded-xl hover:from-amber-800 hover:to-orange-800 transition-all duration-300 shadow-lg hover:shadow-xl"
                 >
@@ -44,23 +70,34 @@ export default function VehiclesPage() {
         })
 
         return () => setTopbarContent(null)
-    }, [setTopbarContent])
+    }, [setTopbarContent, user?.totpEnabled, user?.role]) // Added dependencies
 
     const handleEdit = (vehicle: VehicleResponse) => {
-        setEditingVehicle(vehicle)
-        setFormData({ licensePlate: vehicle.licensePlate, vehicleType: vehicle.vehicleType })
-        setIsModalOpen(true)
+        verifyGate(() => {
+            setEditingVehicle(vehicle)
+            setFormData({ licensePlate: vehicle.licensePlate, vehicleType: vehicle.vehicleType })
+            setIsModalOpen(true)
+        })
     }
 
-    const handleDelete = async (id: string, plate: string) => {
-        if (window.confirm(`"${plate}" plakalı aracı silmek istediğinizden emin misiniz?`)) {
+    const handleDeleteClick = (id: string, plate: string) => {
+        setConfirmModalState({ isOpen: true, id, plate })
+    }
+
+    const handleConfirmDelete = async () => {
+        const { id } = confirmModalState
+        if (!id) return
+
+        verifyGate(async () => {
             try {
                 await deleteVehicle(id).unwrap()
-                alert('Araç başarıyla silindi')
-            } catch (error) {
-                alert('Araç silinirken hata oluştu')
+                success('Araç başarıyla silindi')
+                setConfirmModalState({ isOpen: false, id: null, plate: null })
+            } catch (err: any) {
+                console.error('Failed to delete vehicle:', err)
+                error('Araç silinirken hata oluştu')
             }
-        }
+        })
     }
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -68,16 +105,16 @@ export default function VehiclesPage() {
         try {
             if (editingVehicle) {
                 await updateVehicle({ id: editingVehicle.id, data: formData }).unwrap()
-                alert('Araç başarıyla güncellendi')
+                success('Araç başarıyla güncellendi')
             } else {
                 await createVehicle(formData).unwrap()
-                alert('Araç başarıyla eklendi')
+                success('Araç başarıyla eklendi')
             }
             setIsModalOpen(false)
             setEditingVehicle(null)
             setFormData({ licensePlate: '', vehicleType: '' })
-        } catch (error: any) {
-            alert(error?.data?.message || 'İşlem başarısız')
+        } catch (err: any) {
+            error(err?.data?.message || 'İşlem başarısız')
         }
     }
 
@@ -120,9 +157,11 @@ export default function VehiclesPage() {
                         {!searchQuery && !['LOGISTICS_MANAGER'].includes(user?.role || '') && (
                             <button
                                 onClick={() => {
-                                    setEditingVehicle(null)
-                                    setFormData({ licensePlate: '', vehicleType: '' })
-                                    setIsModalOpen(true)
+                                    verifyGate(() => {
+                                        setEditingVehicle(null)
+                                        setFormData({ licensePlate: '', vehicleType: '' })
+                                        setIsModalOpen(true)
+                                    })
                                 }}
                                 className="px-6 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all"
                             >
@@ -166,7 +205,7 @@ export default function VehiclesPage() {
                                                         <Edit className="w-4 h-4 text-blue-600 group-hover:text-blue-700" />
                                                     </button>
                                                     <button
-                                                        onClick={() => handleDelete(vehicle.id, vehicle.licensePlate)}
+                                                        onClick={() => handleDeleteClick(vehicle.id, vehicle.licensePlate)}
                                                         className="p-2 hover:bg-red-50 rounded-lg transition-colors group"
                                                         title="Sil"
                                                     >
@@ -236,6 +275,33 @@ export default function VehiclesPage() {
                     </div>
                 </div>
             )}
+
+            <OtpVerificationModal
+                isOpen={showOtpModal}
+                onClose={() => {
+                    setShowOtpModal(false)
+                    setPendingOtpAction(null)
+                }}
+                onVerify={() => {
+                    setShowOtpModal(false)
+                    if (pendingOtpAction) {
+                        pendingOtpAction()
+                        setPendingOtpAction(null)
+                    }
+                }}
+            />
+
+            <ConfirmModal
+                isOpen={confirmModalState.isOpen}
+                onClose={() => setConfirmModalState({ ...confirmModalState, isOpen: false })}
+                onCancel={() => setConfirmModalState({ ...confirmModalState, isOpen: false })}
+                onConfirm={handleConfirmDelete}
+                title="Araç Silme"
+                message={`"${confirmModalState.plate}" plakalı aracı silmek istediğinizden emin misiniz?`}
+                confirmText="Sil"
+                cancelText="İptal"
+                type="danger"
+            />
         </div>
     )
 }

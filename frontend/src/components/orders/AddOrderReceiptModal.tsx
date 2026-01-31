@@ -175,8 +175,11 @@ export default function AddOrderReceiptModal({ isOpen, onClose, onSuccess }: Add
                                                         <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-800 rounded-lg border border-purple-400">
                                                             {order.products.length} Ürün
                                                         </span>
-                                                        <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-800 rounded-lg border border-blue-300">
-                                                            {order.orderType === 'STOCK' ? '📦 Stok' :
+                                                        <span className={`text-xs px-2 py-0.5 rounded-lg border ${order.orderType === 'STOCK' && order.convertedFromCustomer
+                                                                ? 'bg-red-100 text-red-800 border-red-300'
+                                                                : 'bg-blue-100 text-blue-800 border-blue-300'
+                                                            }`}>
+                                                            {order.orderType === 'STOCK' ? (order.convertedFromCustomer ? '📦 İptal Stoğu' : '📦 Stok') :
                                                                 order.orderType === 'CUSTOMER_SPECIFIC' ? '👤 Müşteriye Özel' :
                                                                     order.orderType === 'AFTER_SALES_SERVICE' ? '🔧 Satış Sonrası' : order.orderType}
                                                         </span>

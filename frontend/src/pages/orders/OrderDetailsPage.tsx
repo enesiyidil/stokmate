@@ -1,6 +1,6 @@
-import { ArrowLeft, Package, User, FileText, CheckCircle, XCircle, Clock, Upload, Download, Activity, Edit, Eye, Pencil, StickyNote, Plus, Strikethrough, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Package, User, FileText, CheckCircle, XCircle, Clock, Upload, Download, Activity, Edit, Eye, Pencil, StickyNote, Plus, Strikethrough, AlertTriangle, Check } from 'lucide-react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
-import { useCancelOrderMutation, useUploadInvoiceMutation, useGetInvoiceUrlQuery, useGetOrderQuery, useUpdateSalesConsultantMutation, useUpdateBrandMutation, useGetOrderNotesQuery, useAddOrderNoteMutation, useStrikeOrderNoteMutation } from '../../services/orderApi'
+import { useCancelOrderMutation, useApproveCancellationMutation, useUploadInvoiceMutation, useGetInvoiceUrlQuery, useGetOrderQuery, useUpdateSalesConsultantMutation, useUpdateBrandMutation, useGetOrderNotesQuery, useAddOrderNoteMutation, useStrikeOrderNoteMutation } from '../../services/orderApi'
 import { useCreatePartialShipmentMutation } from '../../services/shipmentApi'
 import { useGetOrderActivitiesQuery } from '../../services/orderActivityApi'
 import { useListOrderReceiptsQuery } from '../../services/orderReceiptApi'
@@ -16,6 +16,7 @@ import { BRANDS } from '../../constants/brandConstants'
 import AddOrderModal from '../../components/orders/AddOrderModal'
 import { useToast } from '../../context/ToastContext'
 import ConfirmModal from '../../components/common/ConfirmModal'
+import OtpVerificationModal from '../../components/common/OtpVerificationModal'
 import type { ProblemShipmentSummary } from '../../services/orderApi'
 
 export default function OrderDetailsPage() {
@@ -34,12 +35,27 @@ export default function OrderDetailsPage() {
     const [updateSalesConsultant] = useUpdateSalesConsultantMutation()
     const [updateBrand] = useUpdateBrandMutation()
     const { data: salesConsultants = [] } = useGetSalesConsultantsQuery()
+    const [approveCancellation, { isLoading: isApprovingCancellation }] = useApproveCancellationMutation()
 
 
     const user = useAppSelector(state => state.auth.user)
 
+
     const [showSalesConsultantModal, setShowSalesConsultantModal] = useState(false)
     const [selectedConsultantId, setSelectedConsultantId] = useState<string>('')
+
+    // 2FA Gate State
+    const [showOtpModal, setShowOtpModal] = useState(false)
+    const [pendingAction, setPendingAction] = useState<(() => void) | null>(null)
+
+    const verifyGate = (action: () => void) => {
+        if (user?.totpEnabled) {
+            setPendingAction(() => action)
+            setShowOtpModal(true)
+        } else {
+            action()
+        }
+    }
 
     // Shipment modal state
     const [showShipmentModal, setShowShipmentModal] = useState(false)
@@ -119,14 +135,14 @@ export default function OrderDetailsPage() {
     }
 
     const handleCancelOrder = () => {
-        setShowCancelConfirm(true)
+        verifyGate(() => setShowCancelConfirm(true))
     }
 
     const handleConfirmCancel = async () => {
         if (!order) return
         try {
             await cancelOrder(order.id).unwrap()
-            success('Sipariş başarıyla iptal edildi')
+            success('Sipariş iptal onayı için gönderildi')
             setShowCancelConfirm(false)
         } catch (err) {
             error('Sipariş iptal edilirken bir hata oluştu')
@@ -181,8 +197,10 @@ export default function OrderDetailsPage() {
     }
 
     const handleOpenSalesConsultantModal = () => {
-        setSelectedConsultantId(order?.salesConsultant?.id || '')
-        setShowSalesConsultantModal(true)
+        verifyGate(() => {
+            setSelectedConsultantId(order?.salesConsultant?.id || '')
+            setShowSalesConsultantModal(true)
+        })
     }
 
     const handleSaveSalesConsultant = async () => {
@@ -282,7 +300,27 @@ export default function OrderDetailsPage() {
                                 </span>
                             </button>
                         ))}
-                        {order.status !== 'IPTAL_EDILDI' && order.status !== 'CANCELLED' && order.status !== 'TAMAMLANDI' && order.status !== 'COMPLETED' && (
+
+                        {/* Cancel Approve Button - Admin/Manager/Director */}
+                        {order.status === 'CANCELLATION_PENDING_APPROVAL' && (user?.role === 'ADMIN' || user?.role === 'MANAGER' || user?.role === 'DIRECTOR') && (
+                            <button
+                                onClick={() => verifyGate(async () => {
+                                    try {
+                                        await approveCancellation(order.id).unwrap()
+                                        success('İptal talebi onaylandı')
+                                    } catch (err) {
+                                        error('Onaylama işlemi başarısız')
+                                    }
+                                })}
+                                disabled={isApprovingCancellation}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:from-green-600 hover:to-emerald-700 transition-all disabled:opacity-50"
+                            >
+                                <Check className="w-4 h-4" />
+                                <span className="hidden lg:inline">İptali Onayla</span>
+                            </button>
+                        )}
+
+                        {order.status !== 'IPTAL_EDILDI' && order.status !== 'CANCELLED' && order.status !== 'TAMAMLANDI' && order.status !== 'COMPLETED' && order.status !== 'CANCELLATION_PENDING_APPROVAL' && (
                             <button onClick={handleCancelOrder} disabled={isCanceling} className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-red-500 to-pink-600 text-white rounded-lg hover:from-red-600 hover:to-pink-700 transition-all disabled:opacity-50">
                                 <XCircle className="w-4 h-4" />
                                 <span className="hidden lg:inline">İptal Et</span>
@@ -341,6 +379,9 @@ export default function OrderDetailsPage() {
         if (['TAMAMLANDI', 'COMPLETED', 'DELIVERED', 'ACCEPTED'].includes(status)) {
             return { label: 'Tamamlandı', icon: CheckCircle, className: 'bg-green-500/30 to-emerald-500/30 text- border-green-400/30' }
         }
+        if (status === 'CANCELLATION_PENDING_APPROVAL') {
+            return { label: 'İptal Onayı Bekliyor', icon: AlertTriangle, className: 'bg-red-500/30 to-orange-500/30 text- border-red-400/30 animate-pulse' }
+        }
         if (['IPTAL_EDILDI', 'CANCELLED'].includes(status)) {
             return { label: 'İptal Edildi', icon: XCircle, className: 'bg-red-500/30 to-pink-500/30 text- border-red-400/30' }
         }
@@ -389,6 +430,12 @@ export default function OrderDetailsPage() {
                                     order.orderType === 'CUSTOMER_SPECIFIC' ? '👤 Müşteriye Özel' :
                                         order.orderType === 'AFTER_SALES_SERVICE' ? '🔧 Satış Sonrası Hizmet' : order.orderType}
                             </p>
+                            {/* Müşteriden stoğa dönüştürülen sipariş için açıklama */}
+                            {order.convertedFromCustomer && (
+                                <p className="text-xs text-red-600 mt-1 font-medium">
+                                    ⚠️ Müşteriden iptal edilen, stoğa çevrilen sipariş
+                                </p>
+                            )}
                         </div>
                         <div>
                             <p className="text-xs text-amber-700 mb-1">Marka</p>
@@ -488,7 +535,7 @@ export default function OrderDetailsPage() {
                                         Müşteri Bilgileri
                                     </h3>
                                     <button
-                                        onClick={() => setShowCustomerModal(true)}
+                                        onClick={() => verifyGate(() => setShowCustomerModal(true))}
                                         className="p-1.5 hover:bg-amber-100 text-amber-600 rounded-lg transition-colors"
                                         title="Müşteri Bilgilerini Düzenle"
                                     >
@@ -1117,6 +1164,21 @@ export default function OrderDetailsPage() {
                     type="danger"
                 />
             </div>
+            {/* OTP Verification Modal */}
+            <OtpVerificationModal
+                isOpen={showOtpModal}
+                onClose={() => {
+                    setShowOtpModal(false)
+                    setPendingAction(null)
+                }}
+                onVerify={() => {
+                    setShowOtpModal(false)
+                    if (pendingAction) {
+                        pendingAction()
+                        setPendingAction(null)
+                    }
+                }}
+            />
         </div>
     )
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
@@ -22,7 +22,8 @@ import {
     Info
 } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '../../hooks/useAuth'
-import { logout } from '../../store/authSlice'
+import { logout, setUser } from '../../store/authSlice'
+import { useGetUserProfileQuery } from '../../services/userApi'
 import { TopbarProvider, useTopbar } from '../../context/TopbarContext'
 import { useUi } from '../../context/UiContext'
 import { getRoleDisplayName } from '../../constants/roles'
@@ -112,6 +113,25 @@ function SidebarLayoutContent({ children }: SidebarLayoutProps) {
     const dispatch = useAppDispatch()
     const user = useAppSelector(state => state.auth.user)
     const { title, description, icon, actions, filters, showFiltersInTopbar } = useTopbar()
+
+    // Sync user profile to ensure 2FA status is up to date
+    const { data: userProfile } = useGetUserProfileQuery(undefined, {
+        pollingInterval: 60000, // Refresh every minute
+        refetchOnMountOrArgChange: true
+    })
+
+    useEffect(() => {
+        if (userProfile && JSON.stringify(userProfile) !== JSON.stringify(user)) {
+            // Map backend response (undefined) to Redux state (null) requirements
+            const mappedUser = {
+                ...userProfile,
+                firstName: userProfile.firstName || null,
+                lastName: userProfile.lastName || null,
+                role: userProfile.role as any, // Cast role string to UserRole enum
+            }
+            dispatch(setUser(mappedUser))
+        }
+    }, [userProfile, user, dispatch])
 
     const handleLogout = () => {
         dispatch(logout())
@@ -262,7 +282,7 @@ function SidebarLayoutContent({ children }: SidebarLayoutProps) {
                     {/* Version Tag - Below User Section */}
                     {!isCollapsed && (
                         <div className="text-center py-1">
-                            <span className="text-[10px] text-amber-500/50 font-mono">{import.meta.env.VITE_APP_VERSION}</span>
+                            <span className="text-[10px] text-amber-500/50 font-mono">v1.9.8.5</span>
                         </div>
                     )}
 

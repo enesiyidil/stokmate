@@ -50,6 +50,10 @@ export interface DeleteUserWithAliasRequest {
 
 export const userApi = api.injectEndpoints({
     endpoints: (builder) => ({
+        getUserProfile: builder.query<UserResponse, void>({
+            query: () => '/users/me',
+            providesTags: ['Auth'],
+        }),
         getAllUsers: builder.query<UserResponse[], void>({
             query: () => '/users',
             providesTags: ['Users'],
@@ -109,18 +113,38 @@ export const userApi = api.injectEndpoints({
             query: () => '/users/sales-consultants',
             providesTags: ['Users'],
         }),
-        toggle2FA: builder.mutation<UserResponse, { id: string; enabled: boolean }>({
-            query: ({ id, enabled }) => ({
-                url: `/users/${id}/toggle-2fa`,
-                method: 'PUT',
-                body: { enabled },
+        toggle2FA: builder.mutation<{ enabled: boolean; secret?: string; qrCodeUrl?: string }, void>({
+            query: () => ({
+                url: '/2fa/toggle',
+                method: 'POST',
             }),
             invalidatesTags: ['Users'],
+        }),
+        // New verification endpoint for client-side gating
+        verifyGate2FA: builder.mutation<boolean, string>({
+            query: (code) => ({
+                url: '/2fa/verify-code',
+                method: 'POST',
+                body: { code },
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            }),
+        }),
+        // Change password mutation
+        changePassword: builder.mutation<boolean, { oldPassword: string; newPassword: string; totpCode?: string }>({
+            query: (data) => ({
+                url: '/auth/me/password',
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['Auth'],
         }),
     }),
 })
 
 export const {
+    useGetUserProfileQuery,
     useGetAllUsersQuery,
     useGetUserSummariesQuery,
     useCreateUserMutation,
@@ -131,4 +155,6 @@ export const {
     useSoftDeleteUserMutation,
     useGetSalesConsultantsQuery,
     useToggle2FAMutation,
+    useVerifyGate2FAMutation,
+    useChangePasswordMutation,
 } = userApi

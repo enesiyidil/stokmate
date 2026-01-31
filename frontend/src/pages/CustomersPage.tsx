@@ -7,15 +7,39 @@ import {
 } from '../services/customerApi'
 import type { CustomerResponse } from '../services/customerApi'
 import CustomerModal from '../components/customers/CustomerModal'
+import OtpVerificationModal from '../components/common/OtpVerificationModal'
+import ConfirmModal from '../components/common/ConfirmModal'
+import { useAppSelector } from '../hooks/useAuth'
+import { useToast } from '../context/ToastContext'
 
 export default function CustomersPage() {
     const { setTopbarContent } = useTopbar()
     const { data: customers = [], isLoading } = useListCustomersQuery()
     const [deleteCustomer] = useDeleteCustomerMutation()
+    const { user } = useAppSelector((state) => state.auth)
+    const { success, error } = useToast()
 
     const [searchQuery, setSearchQuery] = useState('')
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [editingCustomer, setEditingCustomer] = useState<CustomerResponse | null>(null)
+
+    // 2FA & Modal States
+    const [showOtpModal, setShowOtpModal] = useState(false)
+    const [pendingOtpAction, setPendingOtpAction] = useState<(() => void) | null>(null)
+    const [confirmModalState, setConfirmModalState] = useState<{
+        isOpen: boolean
+        customerId: string | null
+        customerName: string | null
+    }>({ isOpen: false, customerId: null, customerName: null })
+
+    const verifyGate = (action: () => void) => {
+        if (user?.totpEnabled) {
+            setPendingOtpAction(() => action)
+            setShowOtpModal(true)
+        } else {
+            action()
+        }
+    }
 
     useEffect(() => {
         setTopbarContent({
@@ -25,8 +49,10 @@ export default function CustomersPage() {
             actions: (
                 <button
                     onClick={() => {
-                        setEditingCustomer(null)
-                        setIsModalOpen(true)
+                        verifyGate(() => {
+                            setEditingCustomer(null)
+                            setIsModalOpen(true)
+                        })
                     }}
                     className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-amber-700 to-orange-700 text-white rounded-xl hover:from-amber-800 hover:to-orange-800 transition-all duration-300 shadow-lg hover:shadow-xl"
                 >
@@ -37,22 +63,32 @@ export default function CustomersPage() {
         })
 
         return () => setTopbarContent(null)
-    }, [setTopbarContent])
+    }, [setTopbarContent, user?.totpEnabled])
 
     const handleEdit = (customer: CustomerResponse) => {
-        setEditingCustomer(customer)
-        setIsModalOpen(true)
+        verifyGate(() => {
+            setEditingCustomer(customer)
+            setIsModalOpen(true)
+        })
     }
 
-    const handleDelete = async (id: string, name: string) => {
-        if (window.confirm(`"${name}" müşterisini silmek istediğinizden emin misiniz? Kişisel bilgiler anonimleştirilecek.`)) {
+    const handleDeleteClick = (id: string, name: string) => {
+        setConfirmModalState({ isOpen: true, customerId: id, customerName: name })
+    }
+
+    const handleConfirmDelete = async () => {
+        const { customerId } = confirmModalState
+        if (!customerId) return
+
+        verifyGate(async () => {
             try {
-                await deleteCustomer(id).unwrap()
-                alert('Müşteri başarıyla silindi')
-            } catch (error) {
-                alert('Müşteri silinirken hata oluştu')
+                await deleteCustomer(customerId).unwrap()
+                success('Müşteri başarıyla silindi')
+                setConfirmModalState({ isOpen: false, customerId: null, customerName: null })
+            } catch (err: any) {
+                error('Müşteri silinirken hata oluştu')
             }
-        }
+        })
     }
 
     const filteredCustomers = customers.filter(customer => {
@@ -94,8 +130,10 @@ export default function CustomersPage() {
                         {!searchQuery && (
                             <button
                                 onClick={() => {
-                                    setEditingCustomer(null)
-                                    setIsModalOpen(true)
+                                    verifyGate(() => {
+                                        setEditingCustomer(null)
+                                        setIsModalOpen(true)
+                                    })
                                 }}
                                 className="px-6 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all"
                             >
@@ -143,7 +181,7 @@ export default function CustomersPage() {
                                                     <Edit className="w-4 h-4 text-blue-600 group-hover:text-blue-700" />
                                                 </button>
                                                 <button
-                                                    onClick={() => handleDelete(customer.id, `${customer.firstName} ${customer.lastName}`)}
+                                                    onClick={() => handleDeleteClick(customer.id, `${customer.firstName} ${customer.lastName}`)}
                                                     className="p-2 hover:bg-red-50 rounded-lg transition-colors group"
                                                     title="Sil"
                                                 >
@@ -170,6 +208,33 @@ export default function CustomersPage() {
                     customer={editingCustomer}
                 />
             )}
+
+            <OtpVerificationModal
+                isOpen={showOtpModal}
+                onClose={() => {
+                    setShowOtpModal(false)
+                    setPendingOtpAction(null)
+                }}
+                onVerify={() => {
+                    setShowOtpModal(false)
+                    if (pendingOtpAction) {
+                        pendingOtpAction()
+                        setPendingOtpAction(null)
+                    }
+                }}
+            />
+
+            <ConfirmModal
+                isOpen={confirmModalState.isOpen}
+                onClose={() => setConfirmModalState({ ...confirmModalState, isOpen: false })}
+                onCancel={() => setConfirmModalState({ ...confirmModalState, isOpen: false })}
+                onConfirm={handleConfirmDelete}
+                title="Müşteri Silme"
+                message={`"${confirmModalState.customerName}" isimli müşteriyi silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.`}
+                confirmText="Sil"
+                cancelText="İptal"
+                type="danger"
+            />
         </div>
     )
 }
