@@ -40,7 +40,9 @@ public class UserController {
     // Profile endpoints - all authenticated users
     @GetMapping("/me")
     public UserProfileResponse me(@AuthenticationPrincipal UserPrincipal principal) {
-        return userService.getProfile(principal.getUser());
+        // Fetch fresh user data from DB to ensure latest status (e.g. 2FA enabled)
+        com.stokmate.domain.User user = userService.getUserById(principal.getUser().getId());
+        return userService.getProfile(user);
     }
 
     @PutMapping("/me")

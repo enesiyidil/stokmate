@@ -9,7 +9,7 @@ import com.stokmate.exception.NotFoundException;
 import com.stokmate.mapper.OrderActivityMapper;
 import com.stokmate.repository.OrderActivityRepository;
 import com.stokmate.repository.UserRepository;
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -30,6 +30,7 @@ public class OrderActivityService {
 
     /**
      * Log an activity for an order with the current authenticated user
+     * Note: Using same transaction to ensure order is visible
      */
     @Transactional
     public void logActivity(Order order, ActivityType activityType, String description) {

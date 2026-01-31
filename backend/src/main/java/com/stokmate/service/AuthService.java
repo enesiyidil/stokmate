@@ -158,6 +158,24 @@ public class AuthService {
     }
 
     public boolean updatePassword(User user, PasswordUpdateRequest request) {
+        // Verify old password
+        if (!passwordEncoder.matches(request.getOldPassword(), user.getPassword())) {
+            throw new BadRequestException("Mevcut şifre hatalı");
+        }
+
+        // Verify 2FA if enabled
+        if (user.isTotpEnabled() && user.isTotpSetupCompleted()) {
+            if (request.getTotpCode() == null || request.getTotpCode().isEmpty()) {
+                throw new BadRequestException("2FA kodu gerekli");
+            }
+            int codeValue = Integer.parseInt(request.getTotpCode());
+            boolean isValid = twoFactorAuthService.verifyCode(user.getEmail(), codeValue);
+            if (!isValid) {
+                throw new BadRequestException("2FA kodu hatalı");
+            }
+        }
+
+        // Update password
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         user.setTempCodeUsed(true);
         user.setTempCodeHash(null);

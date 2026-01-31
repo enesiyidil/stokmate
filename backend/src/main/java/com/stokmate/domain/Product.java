@@ -64,9 +64,16 @@ public class Product extends AuditableEntity {
     @Column(precision = 19, scale = 2)
     private BigDecimal minStockLevel;
 
+    @Column(name = "cancelled_stock_quantity", precision = 19, scale = 2)
+    private BigDecimal cancelledStockQuantity = BigDecimal.ZERO; // İptal edilen müşteri siparişlerinden gelen stok
+
     @ElementCollection(fetch = FetchType.EAGER)
     private Set<String> keywords = new HashSet<>();
 
     @Version
     private Long version;
+
+    public BigDecimal getCancelledStockQuantity() {
+        return cancelledStockQuantity == null ? BigDecimal.ZERO : cancelledStockQuantity;
+    }
 }

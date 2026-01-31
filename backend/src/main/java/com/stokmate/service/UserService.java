@@ -30,6 +30,11 @@ public class UserService {
     private final NotificationService notificationService;
     private final com.stokmate.mapper.UserMapper userMapper;
 
+    public User getUserById(UUID id) {
+        return userRepository.findById(id)
+                .orElseThrow(() -> new BadRequestException("User not found"));
+    }
+
     public UserProfileResponse getProfile(User user) {
         return toResponse(user);
     }
@@ -61,6 +66,7 @@ public class UserService {
                 .phone(user.getPhone())
                 .address(user.getAddress())
                 .displayName(getUserDisplayName(user))
+                .totpEnabled(user.isTotpEnabled())
                 .build();
     }
 

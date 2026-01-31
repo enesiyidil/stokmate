@@ -122,6 +122,12 @@ public class Order extends AuditableEntity {
     @Column(name = "linked_shipment_id")
     private UUID linkedShipmentId;
 
+    // Flag to indicate this order was converted from a customer-specific order
+    // (iptal stoğu)
+    @Column(name = "converted_from_customer", nullable = false, columnDefinition = "boolean default false")
+    @Builder.Default
+    private boolean convertedFromCustomer = false;
+
     @Lob
     @Column(columnDefinition = "TEXT")
     private String orderNotes;

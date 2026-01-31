@@ -33,4 +33,6 @@ public class ProductDetailsResponse {
     // Additional data for details page
     private List<ProductEventResponse> recentEvents;
     private List<ProductPriceHistoryResponse> priceHistory;
+    private List<ProductStockHistoryResponse> stockHistory;
+    private BigDecimal cancelledStockQuantity;
 }
