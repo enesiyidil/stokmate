@@ -4,12 +4,10 @@ import com.stokmate.domain.ActivityType;
 import org.springframework.http.ResponseEntity;
 import com.stokmate.domain.ApprovalStatus;
 import com.stokmate.domain.Customer;
-import com.stokmate.domain.DeliveryStatus;
 import com.stokmate.domain.Order;
 import com.stokmate.domain.OrderProduct;
 import com.stokmate.domain.OrderStatus;
 import com.stokmate.domain.OrderType;
-import com.stokmate.domain.ProblemType;
 import com.stokmate.domain.Sale;
 import com.stokmate.domain.SaleProduct;
 import com.stokmate.domain.SaleStatus;
@@ -175,12 +173,14 @@ public class ShipmentService {
                         customerInfo = ShipmentDetailsResponse.CustomerInfo.builder()
                                         .name(c.getFirstName() + " " + c.getLastName())
                                         .phone(c.getPhone())
-                                        .address(c.getFullAddress())
+                                        .alternatePhone(c.getAlternatePhone())
+                                        .address(formatCustomerAddress(c))
                                         .build();
                 } else if (order.getProsapContractNameSurname() != null) {
                         customerInfo = ShipmentDetailsResponse.CustomerInfo.builder()
                                         .name(order.getProsapContractNameSurname())
                                         .phone("")
+                                        .alternatePhone("")
                                         .address("")
                                         .build();
                 }
@@ -332,12 +332,14 @@ public class ShipmentService {
                                 customerInfo = ShipmentDetailsResponse.CustomerInfo.builder()
                                                 .name(c.getFirstName() + " " + c.getLastName())
                                                 .phone(c.getPhone())
-                                                .address(c.getFullAddress())
+                                                .alternatePhone(c.getAlternatePhone())
+                                                .address(formatCustomerAddress(c))
                                                 .build();
                         } else if (order.getProsapContractNameSurname() != null) {
                                 customerInfo = ShipmentDetailsResponse.CustomerInfo.builder()
                                                 .name(order.getProsapContractNameSurname())
                                                 .phone("")
+                                                .alternatePhone("")
                                                 .address("")
                                                 .build();
                         }
@@ -360,7 +362,8 @@ public class ShipmentService {
                                 customerInfo = ShipmentDetailsResponse.CustomerInfo.builder()
                                                 .name(c.getFirstName() + " " + c.getLastName())
                                                 .phone(c.getPhone())
-                                                .address(c.getFullAddress())
+                                                .alternatePhone(c.getAlternatePhone())
+                                                .address(formatCustomerAddress(c))
                                                 .build();
                         }
                 }
@@ -534,6 +537,62 @@ public class ShipmentService {
                 orderActivityService.logActivity(order, ActivityType.SHIPMENT_CREATED,
                                 "[Sevk #" + shipment.getId().toString().substring(0, 8) + "] Şoför değiştirildi: "
                                                 + oldDriverName + " -> " + newDriverName);
+        }
+
+        /**
+         * Update shipment vehicle (ADMIN/MANAGER only)
+         */
+        @Transactional
+        public void updateShipmentVehicle(UUID shipmentId, com.stokmate.dto.shipment.UpdateVehicleRequest request) {
+                Shipment shipment = shipmentRepository.findById(shipmentId)
+                                .orElseThrow(() -> new NotFoundException("Shipment not found"));
+
+                Vehicle newVehicle = vehicleRepository.findById(request.getVehicleId())
+                                .orElseThrow(() -> new NotFoundException("Vehicle not found"));
+
+                Vehicle oldVehicle = shipment.getVehicle();
+                shipment.setVehicle(newVehicle);
+                shipmentRepository.save(shipment);
+
+                // Log activity
+                String oldPlate = oldVehicle != null ? oldVehicle.getLicensePlate() : "Atanmamış";
+                String newPlate = newVehicle.getLicensePlate();
+
+                if (shipment.getOrder() != null) {
+                        orderActivityService.logActivity(shipment.getOrder(), ActivityType.SHIPMENT_CREATED,
+                                        "[Sevk #" + shipment.getId().toString().substring(0, 8)
+                                                        + "] Araç değiştirildi: "
+                                                        + oldPlate + " -> " + newPlate);
+                }
+        }
+
+        /**
+         * Update shipment driver by Shipment ID (ADMIN/MANAGER only)
+         */
+        @Transactional
+        public void updateShipmentDriverById(UUID shipmentId, UpdateDriverRequest request) {
+                Shipment shipment = shipmentRepository.findById(shipmentId)
+                                .orElseThrow(() -> new NotFoundException("Shipment not found"));
+
+                User newDriver = userRepository.findById(request.getDriverId())
+                                .orElseThrow(() -> new NotFoundException("User not found"));
+
+                User oldDriver = shipment.getShippedBy();
+                shipment.setShippedBy(newDriver);
+                shipmentRepository.save(shipment);
+
+                // Log activity
+                String oldDriverName = oldDriver != null
+                                ? oldDriver.getFirstName() + " " + oldDriver.getLastName()
+                                : "Atanmamış";
+                String newDriverName = newDriver.getFirstName() + " " + newDriver.getLastName();
+
+                if (shipment.getOrder() != null) {
+                        orderActivityService.logActivity(shipment.getOrder(), ActivityType.SHIPMENT_CREATED,
+                                        "[Sevk #" + shipment.getId().toString().substring(0, 8)
+                                                        + "] Şoför değiştirildi: "
+                                                        + oldDriverName + " -> " + newDriverName);
+                }
         }
 
         /**
@@ -928,9 +987,9 @@ public class ShipmentService {
                 // Create shipment
                 Shipment shipment = new Shipment();
                 shipment.setSale(sale);
-                shipment.setStatus(ShipmentStatus.PLANNED);
+                shipment.setStatus(ShipmentStatus.PENDING); // Direkt onaya git, tarih planlama aşamasında girilecek
                 shipment.setDeliveryNotes(request.getNotes());
-                shipment.setPlannedShipmentDate(LocalDateTime.now());
+                // Tarih girilmez, planlama aşamasında set edilecek
 
                 for (SaleProductShipmentRequest spsr : request.getProductShipments()) {
                         SaleProduct sp = saleProductRepository.findById(spsr.getSaleProductId()).orElseThrow();
@@ -1316,5 +1375,248 @@ public class ShipmentService {
                 response.setType("SHIPMENT");
 
                 return response;
+        }
+
+        // =============== ADMIN/MANAGER SHIPMENT MANAGEMENT METHODS ===============
+
+        /**
+         * Cancel a shipment and rollback all related changes (Admin/Manager only)
+         * This cascades updates to orders and sales
+         */
+        @Transactional
+        public void cancelShipment(UUID shipmentId, UUID userId) {
+                Shipment shipment = shipmentRepository.findById(shipmentId)
+                                .orElseThrow(() -> new NotFoundException("Shipment not found"));
+
+                User user = userRepository.findById(userId)
+                                .orElseThrow(() -> new NotFoundException("User not found"));
+
+                // Permission check
+                if (!user.getRole().canModifyApprovedShipments()) {
+                        throw new BadRequestException("Bu işlem için yetkiniz yok");
+                }
+
+                // Cannot cancel already finalized shipments
+                if (shipment.getStatus() == ShipmentStatus.FINALIZED) {
+                        throw new BadRequestException("Onaylanmış sevkiyat iptal edilemez");
+                }
+
+                // Rollback shipped quantities for each item
+                for (ShipmentItem item : shipment.getItems()) {
+                        if (item.getOrderProduct() != null) {
+                                OrderProduct op = item.getOrderProduct();
+                                BigDecimal currentShipped = op.getShippedQuantity() != null
+                                                ? op.getShippedQuantity()
+                                                : BigDecimal.ZERO;
+                                BigDecimal newShipped = currentShipped
+                                                .subtract(BigDecimal.valueOf(item.getShippedQuantity()));
+                                op.setShippedQuantity(newShipped.max(BigDecimal.ZERO));
+                                orderProductRepository.save(op);
+                        } else if (item.getSaleProduct() != null) {
+                                SaleProduct sp = item.getSaleProduct();
+                                BigDecimal currentShipped = sp.getShippedQuantity() != null
+                                                ? sp.getShippedQuantity()
+                                                : BigDecimal.ZERO;
+                                BigDecimal newShipped = currentShipped
+                                                .subtract(BigDecimal.valueOf(item.getShippedQuantity()));
+                                sp.setShippedQuantity(newShipped.max(BigDecimal.ZERO));
+                                saleProductRepository.save(sp);
+                        }
+                }
+
+                // Update order status if it was in shipment phase
+                if (shipment.getOrder() != null) {
+                        Order order = shipment.getOrder();
+                        // Check if there are other active shipments
+                        List<Shipment> otherShipments = shipmentRepository.findByOrder(order).stream()
+                                        .filter(s -> !s.getId().equals(shipmentId))
+                                        .filter(s -> s.getStatus() != ShipmentStatus.FINALIZED)
+                                        .collect(Collectors.toList());
+
+                        if (otherShipments.isEmpty()) {
+                                // No other active shipments, revert order status
+                                if (order.getStatus() == OrderStatus.SHIPMENT_APPROVED ||
+                                                order.getStatus() == OrderStatus.PENDING_SHIPMENT_APPROVAL) {
+                                        order.setStatus(OrderStatus.DEVAM_EDIYOR);
+                                }
+                        }
+                        orderRepository.save(order);
+
+                        // Log activity
+                        String cancelledBy = (user.getFirstName() != null ? user.getFirstName() : "") + " "
+                                        + (user.getLastName() != null ? user.getLastName() : "");
+                        cancelledBy = cancelledBy.trim().isEmpty() ? user.getEmail() : cancelledBy.trim();
+
+                        orderActivityService.logActivity(order, ActivityType.SHIPMENT_UPDATED,
+                                        "[Sevk #" + shipment.getId().toString().substring(0, 8)
+                                                        + "] Sevkiyat iptal edildi - İptal eden: "
+                                                        + cancelledBy);
+                }
+
+                // Update sale status if applicable
+                if (shipment.getSale() != null) {
+                        Sale sale = shipment.getSale();
+                        // Check if there are other active shipments
+                        List<Shipment> otherShipments = shipmentRepository.findBySale(sale).stream()
+                                        .filter(s -> !s.getId().equals(shipmentId))
+                                        .filter(s -> s.getStatus() != ShipmentStatus.FINALIZED)
+                                        .collect(Collectors.toList());
+
+                        if (otherShipments.isEmpty()) {
+                                sale.setStatus(SaleStatus.DEVAM_EDIYOR);
+                        }
+                        saleRepository.save(sale);
+                }
+
+                // Delete the shipment
+                shipmentRepository.delete(shipment);
+
+                log.info("Shipment {} cancelled by user {}", shipmentId, userId);
+        }
+
+        /**
+         * Update the planned shipment date (Admin/Manager only)
+         * Admin/Manager can set past dates, others cannot
+         */
+        @Transactional
+        public void updatePlannedDate(UUID shipmentId, LocalDateTime newDate, UUID userId) {
+                Shipment shipment = shipmentRepository.findById(shipmentId)
+                                .orElseThrow(() -> new NotFoundException("Shipment not found"));
+
+                User user = userRepository.findById(userId)
+                                .orElseThrow(() -> new NotFoundException("User not found"));
+
+                // Permission check for modifying approved shipments
+                if (shipment.getStatus() != ShipmentStatus.PENDING &&
+                                shipment.getStatus() != ShipmentStatus.APPROVED &&
+                                !user.getRole().canModifyApprovedShipments()) {
+                        throw new BadRequestException("Bu sevkiyatı düzenlemek için yetkiniz yok");
+                }
+
+                // Date validation - only admin/manager can set past dates
+                if (newDate != null && newDate.toLocalDate().isBefore(LocalDate.now())) {
+                        if (!user.getRole().canSetPastShipmentDates()) {
+                                throw new BadRequestException("Geçmiş tarih seçemezsiniz");
+                        }
+                }
+
+                LocalDateTime oldDate = shipment.getPlannedShipmentDate();
+                shipment.setPlannedShipmentDate(newDate);
+                shipmentRepository.save(shipment);
+
+                // Log activity
+                if (shipment.getOrder() != null) {
+                        String oldDateStr = oldDate != null ? oldDate.toLocalDate().toString() : "Belirsiz";
+                        String newDateStr = newDate != null ? newDate.toLocalDate().toString() : "Belirsiz";
+                        orderActivityService.logActivity(shipment.getOrder(), ActivityType.SHIPMENT_UPDATED,
+                                        "[Sevk #" + shipment.getId().toString().substring(0, 8)
+                                                        + "] Sevk tarihi değiştirildi: " + oldDateStr + " -> "
+                                                        + newDateStr
+                                                        + " - Değiştiren: " + user.getFirstName() + " "
+                                                        + user.getLastName());
+                }
+
+                log.info("Shipment {} date updated from {} to {} by user {}", shipmentId, oldDate, newDate, userId);
+        }
+
+        /**
+         * Withdraw a shipment request (pull back before it's been planned)
+         * Admin/Manager only
+         */
+        @Transactional
+        public void withdrawShipment(UUID shipmentId, UUID userId) {
+                Shipment shipment = shipmentRepository.findById(shipmentId)
+                                .orElseThrow(() -> new NotFoundException("Shipment not found"));
+
+                User user = userRepository.findById(userId)
+                                .orElseThrow(() -> new NotFoundException("User not found"));
+
+                // Permission check
+                if (!user.getRole().canModifyApprovedShipments()) {
+                        throw new BadRequestException("Bu işlem için yetkiniz yok");
+                }
+
+                // Can only withdraw PENDING or APPROVED shipments
+                if (shipment.getStatus() != ShipmentStatus.PENDING &&
+                                shipment.getStatus() != ShipmentStatus.APPROVED) {
+                        throw new BadRequestException("Yalnızca bekleyen veya onaylanmış sevkiyatlar geri çekilebilir");
+                }
+
+                // Rollback shipped quantities for each item
+                for (ShipmentItem item : shipment.getItems()) {
+                        if (item.getOrderProduct() != null) {
+                                OrderProduct op = item.getOrderProduct();
+                                BigDecimal currentShipped = op.getShippedQuantity() != null
+                                                ? op.getShippedQuantity()
+                                                : BigDecimal.ZERO;
+                                BigDecimal newShipped = currentShipped
+                                                .subtract(BigDecimal.valueOf(item.getShippedQuantity()));
+                                op.setShippedQuantity(newShipped.max(BigDecimal.ZERO));
+                                orderProductRepository.save(op);
+                        } else if (item.getSaleProduct() != null) {
+                                SaleProduct sp = item.getSaleProduct();
+                                BigDecimal currentShipped = sp.getShippedQuantity() != null
+                                                ? sp.getShippedQuantity()
+                                                : BigDecimal.ZERO;
+                                BigDecimal newShipped = currentShipped
+                                                .subtract(BigDecimal.valueOf(item.getShippedQuantity()));
+                                sp.setShippedQuantity(newShipped.max(BigDecimal.ZERO));
+                                saleProductRepository.save(sp);
+                        }
+                }
+
+                // Update order status
+                if (shipment.getOrder() != null) {
+                        Order order = shipment.getOrder();
+                        order.setStatus(OrderStatus.DEVAM_EDIYOR);
+                        orderRepository.save(order);
+
+                        // Log activity
+                        String withdrawnBy = (user.getFirstName() != null ? user.getFirstName() : "") + " "
+                                        + (user.getLastName() != null ? user.getLastName() : "");
+                        withdrawnBy = withdrawnBy.trim().isEmpty() ? user.getEmail() : withdrawnBy.trim();
+
+                        orderActivityService.logActivity(order, ActivityType.SHIPMENT_UPDATED,
+                                        "[Sevk #" + shipment.getId().toString().substring(0, 8)
+                                                        + "] Sevk talebi geri çekildi - "
+                                                        + withdrawnBy);
+                }
+
+                // Update sale status
+                if (shipment.getSale() != null) {
+                        Sale sale = shipment.getSale();
+                        sale.setStatus(SaleStatus.DEVAM_EDIYOR);
+                        saleRepository.save(sale);
+                }
+
+                // Delete the shipment
+                shipmentRepository.delete(shipment);
+
+                log.info("Shipment {} withdrawn by user {}", shipmentId, userId);
+        }
+
+        private String formatCustomerAddress(Customer c) {
+                if (c == null)
+                        return "";
+                StringBuilder sb = new StringBuilder();
+                if (c.getFullAddress() != null && !c.getFullAddress().isEmpty()) {
+                        sb.append(c.getFullAddress());
+                }
+                if (c.getNeighborhood() != null && !c.getNeighborhood().isEmpty()) {
+                        if (sb.length() > 0)
+                                sb.append(" ");
+                        sb.append(c.getNeighborhood());
+                }
+                if (c.getDistrict() != null && !c.getDistrict().isEmpty()) {
+                        if (sb.length() > 0)
+                                sb.append(" ");
+                        sb.append(c.getDistrict());
+                }
+                if (c.getCity() != null && !c.getCity().isEmpty()) {
+                        if (sb.length() > 0)
+                                sb.append(" / ");
+                        sb.append(c.getCity());
+                }
+                return sb.toString();
         }
 }

@@ -63,6 +63,18 @@ public class ShipmentReportService {
 
         public byte[] generateShipmentReport(UUID orderId) throws IOException {
                 ShipmentDetailsResponse details = shipmentService.getShipmentDetails(orderId);
+                return generateReportFromDetails(details);
+        }
+
+        /**
+         * Generate shipment report by shipment ID (for sale shipments)
+         */
+        public byte[] generateShipmentReportByShipmentId(UUID shipmentId) throws IOException {
+                ShipmentDetailsResponse details = shipmentService.getShipmentDetailsByShipmentId(shipmentId);
+                return generateReportFromDetails(details);
+        }
+
+        private byte[] generateReportFromDetails(ShipmentDetailsResponse details) throws IOException {
 
                 try (PDDocument document = new PDDocument()) {
                         PDPage page = new PDPage(PDRectangle.A4);
@@ -122,8 +134,13 @@ public class ShipmentReportService {
 
                 // Logo box
                 drawRect(cs, x, y - h, logoW, h, 1.0f);
-                drawCenteredText(cs, normalizeText("CRAFT LOGO"), x, y - 20, logoW, PDType1Font.HELVETICA, 8);
-                drawCenteredText(cs, normalizeText("GELECEK"), x, y - 32, logoW, PDType1Font.HELVETICA, 8);
+                // drawCenteredText(cs, normalizeText("CRAFT LOGO"), x, y - 20, logoW,
+                // PDType1Font.HELVETICA, 8);
+                // drawCenteredText(cs, normalizeText("GELECEK"), x, y - 32, logoW,
+                // PDType1Font.HELVETICA, 8);
+                // New Logo Text: "Craft Co" in Navy Blue
+                drawCenteredTextColored(cs, "Craft Co", x, y - 32, logoW, PDType1Font.HELVETICA_BOLD, 14, NAVY_R,
+                                NAVY_G, NAVY_B);
 
                 // Title box
                 float titleX = x + logoW;
@@ -218,7 +235,9 @@ public class ShipmentReportService {
 
                 float boxW = 120f;
                 float boxH = 14f;
-                float boxX = x + width - boxW - 10f;
+                // Align with the inner box right edge
+                // Inner box right x = x + inset + (width - 2*inset) = x + width - inset
+                float boxX = x + width - inset - boxW;
 
                 drawRightText(cs, normalizeText("TESLIM TARIHI"), boxX - 6, labelY + 3, PDType1Font.HELVETICA_BOLD, 8);
                 drawRect(cs, boxX, labelY - (boxH - 3), boxW, boxH, 0.8f);
@@ -376,7 +395,7 @@ public class ShipmentReportService {
         private void drawFooter(PDPageContentStream cs, float x, float yTop, float width,
                         ShipmentDetailsResponse details, PDDocument document) throws IOException {
 
-                float h = 52f;
+                float h = 85f; // Increased height for more address space
 
                 float leftW = width * 0.62f;
                 float qrW = width * 0.12f;
@@ -396,19 +415,42 @@ public class ShipmentReportService {
                 fillRect(cs, x + navyLabelW, y - h, grayW, h, LGRAY_R, LGRAY_G, LGRAY_B);
                 drawRect(cs, x + navyLabelW, y - h, grayW, h, 0.9f);
 
+                float currentY = y - 18;
+
+                // Phone
                 if (details.getCustomer() != null && details.getCustomer().getPhone() != null
                                 && !details.getCustomer().getPhone().isBlank()) {
                         String phone = normalizeText(details.getCustomer().getPhone());
                         String phoneFit = fitTextToWidth(phone, PDType1Font.HELVETICA_BOLD, 8, grayW - 16);
-                        drawText(cs, phoneFit, x + navyLabelW + 10, y - 18, PDType1Font.HELVETICA_BOLD, 8);
+                        drawText(cs, phoneFit, x + navyLabelW + 10, currentY, PDType1Font.HELVETICA_BOLD, 8);
+                }
+                currentY -= 10;
+
+                // Add alternate phone if available
+                if (details.getCustomer() != null && details.getCustomer().getAlternatePhone() != null
+                                && !details.getCustomer().getAlternatePhone().isBlank()) {
+                        String altPhone = normalizeText("Alt: " + details.getCustomer().getAlternatePhone());
+                        String altPhoneFit = fitTextToWidth(altPhone, PDType1Font.HELVETICA, 7, grayW - 16);
+                        drawText(cs, altPhoneFit, x + navyLabelW + 10, currentY, PDType1Font.HELVETICA, 7);
+                        currentY -= 10;
                 }
 
-                // Add address below phone if available
+                // Add address below
                 if (details.getCustomer() != null && details.getCustomer().getAddress() != null
                                 && !details.getCustomer().getAddress().isBlank()) {
-                        String address = normalizeText(details.getCustomer().getAddress());
-                        String addressFit = fitTextToWidth(address, PDType1Font.HELVETICA, 7, grayW - 16);
-                        drawText(cs, addressFit, x + navyLabelW + 10, y - 32, PDType1Font.HELVETICA, 7);
+                        String rawAddress = normalizeText(details.getCustomer().getAddress());
+
+                        float startY = currentY;
+                        float leading = 8f; // line spacing
+                        float limitY = y - h + 2; // bottom limit
+
+                        List<String> lines = wrapText(rawAddress, PDType1Font.HELVETICA, 7, grayW - 16);
+                        for (String line : lines) {
+                                if (startY < limitY)
+                                        break;
+                                drawText(cs, line, x + navyLabelW + 10, startY, PDType1Font.HELVETICA, 7);
+                                startY -= leading;
+                        }
                 }
 
                 // QR
@@ -596,5 +638,43 @@ public class ShipmentReportService {
                 java.io.ByteArrayOutputStream pngOutputStream = new java.io.ByteArrayOutputStream();
                 com.google.zxing.client.j2se.MatrixToImageWriter.writeToStream(bitMatrix, "PNG", pngOutputStream);
                 return pngOutputStream.toByteArray();
+        }
+
+        private List<String> wrapText(String text, PDType1Font font, int fontSize, float maxWidth) throws IOException {
+                List<String> lines = new java.util.ArrayList<>();
+                if (text == null)
+                        return lines;
+
+                // Split by user-provided newlines first
+                String[] paragraphs = text.split("\\r?\\n");
+
+                for (String paragraph : paragraphs) {
+                        String[] words = paragraph.split(" ");
+                        StringBuilder currentLine = new StringBuilder();
+
+                        for (String word : words) {
+                                if (word.isEmpty())
+                                        continue;
+
+                                String potential = currentLine.length() == 0 ? word : currentLine + " " + word;
+                                float width = font.getStringWidth(potential) / 1000f * fontSize;
+
+                                if (width <= maxWidth) {
+                                        if (currentLine.length() > 0)
+                                                currentLine.append(" ");
+                                        currentLine.append(word);
+                                } else {
+                                        // Line full, push it
+                                        if (currentLine.length() > 0) {
+                                                lines.add(currentLine.toString());
+                                        }
+                                        currentLine = new StringBuilder(word);
+                                }
+                        }
+                        if (currentLine.length() > 0) {
+                                lines.add(currentLine.toString());
+                        }
+                }
+                return lines;
         }
 }

@@ -68,7 +68,7 @@ kubectl -n stokmate get pods -w
 ### API
 
 ```bash
-kubectl -n stokmate set image deployment/stokmate-api api=ghcr.io/enesiyidil/stokmate:latest
+kubectl -n stokmate set image deployment/stokmate-api api=ghcr.io/enesiyidil/stokmate-api:latest
 kubectl -n stokmate rollout restart deployment/stokmate-api
 kubectl -n stokmate rollout status deployment/stokmate-api
 ```
@@ -76,9 +76,10 @@ kubectl -n stokmate rollout status deployment/stokmate-api
 ### Frontend
 
 ```bash
-kubectl -n stokmate set image deployment/stokmate-frontend frontend=ghcr.io/enesiyidil/stokmate-ui:latest
+kubectl -n stokmate set image deployment/stokmate-frontend frontend=ghcr.io/enesiyidil/stokmate-frontend:latest
 kubectl -n stokmate rollout restart deployment/stokmate-frontend
 kubectl -n stokmate rollout status deployment/stokmate-frontend
+
 ```
 
 ---

@@ -96,4 +96,48 @@ public enum Role {
     public boolean canCancelOrders() {
         return this == DIRECTOR || this == MANAGER || this == ADMIN;
     }
+
+    /**
+     * Check if this role can modify approved shipments (date change, withdraw,
+     * cancel)
+     */
+    public boolean canModifyApprovedShipments() {
+        return this == ADMIN || this == MANAGER;
+    }
+
+    /**
+     * Check if this role can delete product acceptances
+     */
+    public boolean canDeleteProductAcceptances() {
+        return this == ADMIN || this == MANAGER;
+    }
+
+    /**
+     * Check if this role can fully edit orders (all fields)
+     */
+    public boolean canFullyEditOrders() {
+        return this == ADMIN || this == MANAGER;
+    }
+
+    /**
+     * Check if this role can delete orders
+     */
+    public boolean canDeleteOrders() {
+        return this == ADMIN || this == MANAGER;
+    }
+
+    /**
+     * Check if this role can set past dates for shipment planning
+     */
+    public boolean canSetPastShipmentDates() {
+        return this == ADMIN || this == MANAGER;
+    }
+
+    /**
+     * Check if this role can submit products for shipment (Sevke Sun)
+     */
+    public boolean canSubmitForShipment() {
+        return this == STORE_MANAGER || this == STORE_EMPLOYEE || this == OPERATIONS_MANAGER
+                || this == DIRECTOR || this == MANAGER || this == ADMIN;
+    }
 }

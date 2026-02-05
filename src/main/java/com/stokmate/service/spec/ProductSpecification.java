@@ -8,7 +8,8 @@ import org.springframework.util.StringUtils;
 
 public final class ProductSpecification {
 
-    private ProductSpecification() {}
+    private ProductSpecification() {
+    }
 
     public static Specification<Product> filter(String name, String brand, Boolean activeForSale) {
         return (root, query, cb) -> {
@@ -23,6 +24,9 @@ public final class ProductSpecification {
             if (activeForSale != null) {
                 predicates.add(cb.equal(root.get("activeForSale"), activeForSale));
             }
+            // Exclude soft-deleted items
+            predicates.add(cb.isFalse(root.get("isDeleted")));
+
             return cb.and(predicates.toArray(new Predicate[0]));
         };
     }

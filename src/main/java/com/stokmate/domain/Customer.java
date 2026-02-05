@@ -30,6 +30,7 @@ public class Customer extends AuditableEntity {
     private String lastName;
 
     private String phone;
+    private String alternatePhone; // Yedek telefon numarası
     private String email;
     private String tcNo;
     private String city;

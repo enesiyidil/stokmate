@@ -104,6 +104,14 @@ public class OrderActivityService {
     }
 
     /**
+     * Delete all activities for an order
+     */
+    @Transactional
+    public void deleteActivitiesForOrder(UUID orderId) {
+        orderActivityRepository.deleteByOrderId(orderId);
+    }
+
+    /**
      * Get all activities with pagination and filters
      */
     public org.springframework.data.domain.Page<OrderActivityResponse> getAllActivities(

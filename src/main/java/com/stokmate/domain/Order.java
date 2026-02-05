@@ -19,7 +19,7 @@ import java.util.UUID;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.PrePersist;
-import jakarta.persistence.Lob;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -128,7 +128,6 @@ public class Order extends AuditableEntity {
     @Builder.Default
     private boolean convertedFromCustomer = false;
 
-    @Lob
     @Column(columnDefinition = "TEXT")
     private String orderNotes;
 

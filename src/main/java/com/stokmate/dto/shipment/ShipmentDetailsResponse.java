@@ -48,6 +48,7 @@ public class ShipmentDetailsResponse {
     public static class CustomerInfo {
         private String name;
         private String phone;
+        private String alternatePhone;
         private String address;
     }
 
