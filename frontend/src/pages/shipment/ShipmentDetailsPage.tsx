@@ -1,6 +1,6 @@
-import { ArrowLeft, Package, User, FileText, Calendar, Truck, Activity, Clock, CheckCircle, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Package, User, FileText, Calendar, Truck, Activity, Clock, CheckCircle, AlertTriangle, XCircle, RotateCcw, Edit3 } from 'lucide-react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { useGetShipmentDetailsQuery, useGetShipmentDetailsByIdQuery, usePlanShipmentMutation, useListVehiclesQuery, useDownloadShipmentReportMutation, useCompleteShipmentMutation, useFinalizeShipmentMutation, useDownloadSignedDocumentMutation } from '../../services/shipmentApi'
+import { useGetShipmentDetailsQuery, useGetShipmentDetailsByIdQuery, usePlanShipmentMutation, useListVehiclesQuery, useDownloadShipmentReportMutation, useDownloadShipmentReportByShipmentIdMutation, useCompleteShipmentMutation, useFinalizeShipmentMutation, useDownloadSignedDocumentMutation, useCancelShipmentMutation, useWithdrawShipmentMutation, useUpdatePlannedDateMutation, useUpdateShipmentVehicleMutation, useUpdateShipmentDriverByIdMutation } from '../../services/shipmentApi'
 import { useAddOrderNoteMutation } from '../../services/orderApi'
 import { useGetUserSummariesQuery } from '../../services/userApi'
 import { useGetOrderActivitiesQuery } from '../../services/orderActivityApi'
@@ -27,6 +27,7 @@ export default function ShipmentDetailsPage() {
     const canPlan = ['ADMIN', 'MANAGER', 'DIRECTOR', 'LOGISTICS_MANAGER', 'OPERATIONS_MANAGER'].includes(user?.role || '')
     const canComplete = ['ADMIN', 'MANAGER', 'DIRECTOR', 'LOGISTICS_MANAGER', 'OPERATIONS_MANAGER'].includes(user?.role || '')
     const canFinalize = ['ADMIN', 'MANAGER', 'DIRECTOR'].includes(user?.role || '')
+    const canModifyShipment = ['ADMIN', 'MANAGER'].includes(user?.role || '') // Admin/Manager can cancel, withdraw, update date
 
     // Conditional query based on ID type
     const orderQuery = useGetShipmentDetailsQuery(orderId!, { skip: isShipmentId })
@@ -55,14 +56,31 @@ export default function ShipmentDetailsPage() {
     const { data: users = [] } = useGetUserSummariesQuery()
     const [planShipmentMutation, { isLoading: isPlanning }] = usePlanShipmentMutation()
     const [downloadReport] = useDownloadShipmentReportMutation()
+    const [downloadReportByShipmentId] = useDownloadShipmentReportByShipmentIdMutation()
     const [downloadSignedDocument, { isLoading: isDownloadingDoc }] = useDownloadSignedDocumentMutation()
     const [completeShipmentMutation, { isLoading: isCompleting }] = useCompleteShipmentMutation()
     const [finalizeShipmentMutation] = useFinalizeShipmentMutation()
+    const [cancelShipmentMutation, { isLoading: isCancelling }] = useCancelShipmentMutation()
+    const [withdrawShipmentMutation, { isLoading: isWithdrawing }] = useWithdrawShipmentMutation()
+    const [updatePlannedDateMutation, { isLoading: isUpdatingDate }] = useUpdatePlannedDateMutation()
+    const [updateVehicleMutation, { isLoading: isUpdatingVehicle }] = useUpdateShipmentVehicleMutation()
+    const [updateDriverMutation, { isLoading: isUpdatingDriver }] = useUpdateShipmentDriverByIdMutation()
 
     const [showPlanningModal, setShowPlanningModal] = useState(false)
     const [showCompleteModal, setShowCompleteModal] = useState(false)
     const [showDocumentModal, setShowDocumentModal] = useState(false)
     const [showGallery, setShowGallery] = useState(false)
+    const [showUpdateDateModal, setShowUpdateDateModal] = useState(false)
+    const [showVehicleUpdateModal, setShowVehicleUpdateModal] = useState(false)
+    const [showDriverUpdateModal, setShowDriverUpdateModal] = useState(false)
+
+    // Form states
+    const [plannedDate, setPlannedDate] = useState('')
+    const [newPlannedDate, setNewPlannedDate] = useState('')
+    const [selectedVehicleId, setSelectedVehicleId] = useState('')
+    const [updateVehicleId, setUpdateVehicleId] = useState('')
+    const [selectedDriverIdForPlanning, setSelectedDriverIdForPlanning] = useState('')
+    const [updateDriverId, setUpdateDriverId] = useState('')
     const [showOtpModal, setShowOtpModal] = useState(false)
     const [pendingOtpAction, setPendingOtpAction] = useState<(() => void) | null>(null)
 
@@ -79,10 +97,9 @@ export default function ShipmentDetailsPage() {
     const [documentType, setDocumentType] = useState<'pdf' | 'image' | null>(null)
     const { success, error } = useToast()
     const [showApproveConfirm, setShowApproveConfirm] = useState(false)
+    const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+    const [showWithdrawConfirm, setShowWithdrawConfirm] = useState(false)
 
-    const [plannedDate, setPlannedDate] = useState('')
-    const [selectedVehicleId, setSelectedVehicleId] = useState('')
-    const [selectedDriverIdForPlanning, setSelectedDriverIdForPlanning] = useState('')
     const [addOrderNote, { isLoading: isAddingNote }] = useAddOrderNoteMutation()
 
 
@@ -251,7 +268,7 @@ export default function ShipmentDetailsPage() {
 
         verifyGate(async () => {
             try {
-                await finalizeShipmentMutation(shipmentDetails.shipmentId).unwrap()
+                await finalizeShipmentMutation(shipmentDetails.shipmentId!).unwrap()
                 success('Sevk başarıyla onaylandı!')
                 setShowApproveConfirm(false)
                 refetch()
@@ -261,11 +278,110 @@ export default function ShipmentDetailsPage() {
         })
     }
 
+    // ======== ADMIN/MANAGER SHIPMENT MANAGEMENT HANDLERS ========
+
+    const handleCancelShipment = async () => {
+        if (!shipmentDetails?.shipmentId) return
+
+        verifyGate(async () => {
+            try {
+                await cancelShipmentMutation(shipmentDetails.shipmentId!).unwrap()
+                success('Sevkiyat başarıyla iptal edildi!')
+                setShowCancelConfirm(false)
+                navigate('/shipment')
+            } catch (err: any) {
+                error('Hata: ' + (err.data?.message || err.message || 'Bir hata oluştu'))
+            }
+        })
+    }
+
+    const handleWithdrawShipment = async () => {
+        if (!shipmentDetails?.shipmentId) return
+
+        verifyGate(async () => {
+            try {
+                await withdrawShipmentMutation(shipmentDetails.shipmentId!).unwrap()
+                success('Sevkiyat talebi geri çekildi!')
+                setShowWithdrawConfirm(false)
+                refetch()
+            } catch (err: any) {
+                error('Hata: ' + (err.data?.message || err.message || 'Bir hata oluştu'))
+            }
+        })
+    }
+
+    const handleUpdatePlannedDate = async () => {
+        if (!shipmentDetails?.shipmentId || !newPlannedDate) return
+
+        verifyGate(async () => {
+            try {
+                await updatePlannedDateMutation({
+                    shipmentId: shipmentDetails.shipmentId!,
+                    newDate: new Date(newPlannedDate).toISOString()
+                }).unwrap()
+                success('Planlanan tarih güncellendi!')
+                setShowUpdateDateModal(false)
+                setNewPlannedDate('')
+                refetch()
+            } catch (err: any) {
+                error('Hata: ' + (err.data?.message || err.message || 'Bir hata oluştu'))
+            }
+        })
+    }
+
+    const handleUpdateVehicle = async () => {
+        if (!shipmentDetails?.shipmentId || !updateVehicleId) return
+
+        verifyGate(async () => {
+            try {
+                await updateVehicleMutation({
+                    shipmentId: shipmentDetails.shipmentId!,
+                    vehicleId: updateVehicleId
+                }).unwrap()
+                success('Araç bilgisi güncellendi!')
+                setShowVehicleUpdateModal(false)
+                setUpdateVehicleId('')
+                refetch()
+            } catch (err: any) {
+                error('Hata: ' + (err.data?.message || err.message || 'Bir hata oluştu'))
+            }
+        })
+    }
+
+    const handleUpdateDriver = async () => {
+        if (!shipmentDetails?.shipmentId || !updateDriverId) return
+
+        verifyGate(async () => {
+            try {
+                await updateDriverMutation({
+                    shipmentId: shipmentDetails.shipmentId!,
+                    driverId: updateDriverId
+                }).unwrap()
+                success('Sürücü bilgisi güncellendi!')
+                setShowDriverUpdateModal(false)
+                setUpdateDriverId('')
+                refetch()
+            } catch (err: any) {
+                error('Hata: ' + (err.data?.message || err.message || 'Bir hata oluştu'))
+            }
+        })
+    }
+
+
+
     const handleDownloadReport = async () => {
-        // Use realOrderId to ensure we have the correct orderId even when viewing via shipmentId
-        const orderIdForReport = realOrderId || orderId!
+        // For sale shipments, use shipmentId; for order shipments, use orderId
+        const isSaleShipment = shipmentDetails?.shipmentType === 'SALE' || !realOrderId
+
         try {
-            const blob = await downloadReport(orderIdForReport).unwrap()
+            let blob: Blob
+            if (isSaleShipment && shipmentDetails?.shipmentId) {
+                blob = await downloadReportByShipmentId(shipmentDetails.shipmentId).unwrap()
+            } else {
+                const orderIdForReport = realOrderId || orderId!
+                blob = await downloadReport(orderIdForReport).unwrap()
+            }
+
             const url = window.URL.createObjectURL(blob)
 
             // Open PDF in new window and trigger print dialog
@@ -280,7 +396,7 @@ export default function ShipmentDetailsPage() {
                 // Fallback if popup blocked - download instead
                 const link = document.createElement('a')
                 link.href = url
-                link.download = `sevk-raporu-${shipmentDetails?.orderNo || 'belge'}.pdf`
+                link.download = `sevk-raporu-${shipmentDetails?.orderNo || shipmentDetails?.saleNo || 'belge'}.pdf`
                 document.body.appendChild(link)
                 link.click()
                 document.body.removeChild(link)
@@ -495,6 +611,67 @@ export default function ShipmentDetailsPage() {
                                 <p className="text-sm text-amber-700">Sevk planlandıktan sonra rapor hazırlanacak</p>
                             )}
                         </div>
+
+                        {/* Admin/Manager Shipment Management Panel */}
+                        {canModifyShipment && shipmentDetails.shipmentStatus !== 'FINALIZED' && (
+                            <div className="backdrop-blur-xl bg-white border border-red-200 rounded-2xl shadow-2xl p-6 space-y-4">
+                                <h3 className="text-lg font-semibold text-red-900 flex items-center gap-2">
+                                    <XCircle className="w-5 h-5" />
+                                    Yönetim İşlemleri
+                                </h3>
+                                <p className="text-xs text-red-700 mb-3">Bu işlemler sadece Admin ve Manager rollerine özeldir.</p>
+                                <div className="space-y-3">
+                                    {/* Update Date Button - Show if planned */}
+                                    {(shipmentDetails.shipmentStatus === 'PLANNED' || shipmentDetails.shipmentStatus === 'APPROVED') && (
+                                        <button
+                                            onClick={() => {
+                                                setNewPlannedDate(shipmentDetails.plannedShipmentDate ? new Date(shipmentDetails.plannedShipmentDate).toISOString().slice(0, 10) : '')
+                                                setShowUpdateDateModal(true)
+                                            }}
+                                            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-100 text-amber-900 rounded-lg hover:bg-amber-200 transition-colors border border-amber-400 font-medium"
+                                        >
+                                            <Edit3 className="w-4 h-4" />
+                                            Planlanan Tarihi Değiştir
+                                        </button>
+                                    )}
+
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <button onClick={() => { setUpdateVehicleId(shipmentDetails.vehicle?.id || ''); setShowVehicleUpdateModal(true) }} className="w-full px-4 py-3 bg-white border-2 border-amber-300 text-amber-800 rounded-lg hover:bg-amber-50 font-medium transition-colors flex items-center justify-center gap-2">
+                                            <Truck className="w-5 h-5" />
+                                            Araç Değiştir
+                                        </button>
+                                        <button onClick={() => { setUpdateDriverId(shipmentDetails.driver?.id || ''); setShowDriverUpdateModal(true) }} className="w-full px-4 py-3 bg-white border-2 border-amber-300 text-amber-800 rounded-lg hover:bg-amber-50 font-medium transition-colors flex items-center justify-center gap-2">
+                                            <User className="w-5 h-5" />
+                                            Şoför Değiştir
+                                        </button>
+                                    </div>
+
+                                    {/* Withdraw Button - Show for PENDING or APPROVED shipments */}
+                                    {(shipmentDetails.shipmentStatus === 'PENDING' || shipmentDetails.shipmentStatus === 'APPROVED') && (
+                                        <button
+                                            onClick={() => setShowWithdrawConfirm(true)}
+                                            disabled={isWithdrawing}
+                                            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-yellow-100 text-yellow-900 rounded-lg hover:bg-yellow-200 transition-colors border border-yellow-400 font-medium disabled:opacity-50"
+                                        >
+                                            <RotateCcw className="w-4 h-4" />
+                                            {isWithdrawing ? 'Geri Çekiliyor...' : 'Sevkiyat Talebini Geri Çek'}
+                                        </button>
+                                    )}
+
+                                    {/* Cancel Button - Show for non-finalized shipments */}
+                                    {shipmentDetails.shipmentStatus !== 'CANCELLED' && (
+                                        <button
+                                            onClick={() => setShowCancelConfirm(true)}
+                                            disabled={isCancelling}
+                                            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-red-100 text-red-900 rounded-lg hover:bg-red-200 transition-colors border border-red-400 font-medium disabled:opacity-50"
+                                        >
+                                            <XCircle className="w-4 h-4" />
+                                            {isCancelling ? 'İptal Ediliyor...' : 'Sevkiyatı İptal Et'}
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                     </div>
 
 
@@ -550,44 +727,48 @@ export default function ShipmentDetailsPage() {
             </div>
 
             {/* Document Modal */}
-            {showDocumentModal && documentUrl && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-4" onClick={closeDocumentModal}>
-                    <div className="bg-white rounded-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col relative" onClick={e => e.stopPropagation()}>
-                        <div className="p-4 border-b flex justify-between items-center bg-gray-50">
-                            <h3 className="font-semibold text-lg text-gray-800">Teslim Tutanağı</h3>
-                            <button onClick={closeDocumentModal} className="text-gray-500 hover:text-gray-700 p-2">✕</button>
-                        </div>
-                        <div className="flex-1 bg-gray-100 overflow-auto flex items-center justify-center p-4">
-                            {documentType === 'pdf' ? (
-                                <iframe src={documentUrl} className="w-full h-[70vh]" title="Document Viewer" />
-                            ) : (
-                                <img src={documentUrl} alt="Document" className="max-w-full max-h-[70vh] object-contain shadow-lg" />
-                            )}
-                        </div>
-                        <div className="p-4 border-t flex justify-end gap-3 bg-white">
-                            <a href={documentUrl} download="teslim-tutanagi" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">İndir</a>
-                            <button onClick={closeDocumentModal} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300">Kapat</button>
+            {
+                showDocumentModal && documentUrl && (
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-4" onClick={closeDocumentModal}>
+                        <div className="bg-white rounded-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col relative" onClick={e => e.stopPropagation()}>
+                            <div className="p-4 border-b flex justify-between items-center bg-gray-50">
+                                <h3 className="font-semibold text-lg text-gray-800">Teslim Tutanağı</h3>
+                                <button onClick={closeDocumentModal} className="text-gray-500 hover:text-gray-700 p-2">✕</button>
+                            </div>
+                            <div className="flex-1 bg-gray-100 overflow-auto flex items-center justify-center p-4">
+                                {documentType === 'pdf' ? (
+                                    <iframe src={documentUrl} className="w-full h-[70vh]" title="Document Viewer" />
+                                ) : (
+                                    <img src={documentUrl} alt="Document" className="max-w-full max-h-[70vh] object-contain shadow-lg" />
+                                )}
+                            </div>
+                            <div className="p-4 border-t flex justify-end gap-3 bg-white">
+                                <a href={documentUrl} download="teslim-tutanagi" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">İndir</a>
+                                <button onClick={closeDocumentModal} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300">Kapat</button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
-            {showPlanningModal && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div className="bg-white border border-green-200 rounded-2xl shadow-2xl w-full max-w-md p-6">
-                        <h3 className="text-xl font-bold text-green-900 mb-4">Sevk Planlama</h3>
-                        <div className="space-y-4">
-                            <div><label className="block text-sm font-medium text-green-900 mb-2">Planlanan Sevk Tarihi</label><input type="date" value={plannedDate} onChange={(e) => setPlannedDate(e.target.value)} className="w-full px-4 py-3 bg-white border border-green-300 rounded-lg text-green-900 focus:outline-none focus:ring-2 focus:ring-green-500" /></div>
-                            <div><label className="block text-sm font-medium text-green-900 mb-2">Araç Seçimi</label><select value={selectedVehicleId} onChange={(e) => setSelectedVehicleId(e.target.value)} className="w-full px-4 py-3 bg-white border border-green-300 rounded-lg text-green-900 focus:outline-none focus:ring-2 focus:ring-green-500"><option value="">Araç Seçiniz</option>{vehicles.map((vehicle) => (<option key={vehicle.id} value={vehicle.id}>{vehicle.licensePlate} - {vehicle.vehicleType}</option>))}</select></div>
-                            <div><label className="block text-sm font-medium text-green-900 mb-2">Şoför Seçimi</label><select value={selectedDriverIdForPlanning} onChange={(e) => setSelectedDriverIdForPlanning(e.target.value)} className="w-full px-4 py-3 bg-white border border-green-300 rounded-lg text-green-900 focus:outline-none focus:ring-2 focus:ring-green-500"><option value="">Otomatik Ata (Giriş Yapan Kullanıcı)</option>{users.map((user: any) => (<option key={user.id} value={user.id}>{user.firstName} {user.lastName}</option>))}</select></div>
-                        </div>
-                        <div className="flex gap-3 mt-6">
-                            <button onClick={() => setShowPlanningModal(false)} disabled={isPlanning} className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-medium disabled:opacity-50">İptal</button>
-                            <button onClick={handlePlanShipment} disabled={isPlanning || !plannedDate || !selectedVehicleId} className="flex-1 px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-700 text-white rounded-lg hover:from-green-700 hover:to-emerald-800 transition-all font-medium disabled:opacity-50">{isPlanning ? 'Planlanıyor...' : 'Planla'}</button>
+            {
+                showPlanningModal && (
+                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                        <div className="bg-white border border-green-200 rounded-2xl shadow-2xl w-full max-w-md p-6">
+                            <h3 className="text-xl font-bold text-green-900 mb-4">Sevk Planlama</h3>
+                            <div className="space-y-4">
+                                <div><label className="block text-sm font-medium text-green-900 mb-2">Planlanan Sevk Tarihi</label><input type="date" value={plannedDate} onChange={(e) => setPlannedDate(e.target.value)} className="w-full px-4 py-3 bg-white border border-green-300 rounded-lg text-green-900 focus:outline-none focus:ring-2 focus:ring-green-500" /></div>
+                                <div><label className="block text-sm font-medium text-green-900 mb-2">Araç Seçimi</label><select value={selectedVehicleId} onChange={(e) => setSelectedVehicleId(e.target.value)} className="w-full px-4 py-3 bg-white border border-green-300 rounded-lg text-green-900 focus:outline-none focus:ring-2 focus:ring-green-500"><option value="">Araç Seçiniz</option>{vehicles.map((vehicle) => (<option key={vehicle.id} value={vehicle.id}>{vehicle.licensePlate} - {vehicle.vehicleType}</option>))}</select></div>
+                                <div><label className="block text-sm font-medium text-green-900 mb-2">Şoför Seçimi</label><select value={selectedDriverIdForPlanning} onChange={(e) => setSelectedDriverIdForPlanning(e.target.value)} className="w-full px-4 py-3 bg-white border border-green-300 rounded-lg text-green-900 focus:outline-none focus:ring-2 focus:ring-green-500"><option value="">Otomatik Ata (Giriş Yapan Kullanıcı)</option>{users.map((user: any) => (<option key={user.id} value={user.id}>{user.firstName} {user.lastName}</option>))}</select></div>
+                            </div>
+                            <div className="flex gap-3 mt-6">
+                                <button onClick={() => setShowPlanningModal(false)} disabled={isPlanning} className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-medium disabled:opacity-50">İptal</button>
+                                <button onClick={handlePlanShipment} disabled={isPlanning || !plannedDate || !selectedVehicleId} className="flex-1 px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-700 text-white rounded-lg hover:from-green-700 hover:to-emerald-800 transition-all font-medium disabled:opacity-50">{isPlanning ? 'Planlanıyor...' : 'Planla'}</button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             <ImageGalleryModal
                 isOpen={showGallery}
@@ -617,6 +798,128 @@ export default function ShipmentDetailsPage() {
                 type="success"
             />
 
+            {/* Cancel Shipment Confirm Modal */}
+            <ConfirmModal
+                isOpen={showCancelConfirm}
+                onClose={() => setShowCancelConfirm(false)}
+                onCancel={() => setShowCancelConfirm(false)}
+                onConfirm={handleCancelShipment}
+                title="Sevkiyatı İptal Et"
+                message="Bu sevkiyatı iptal etmek istediğinizden emin misiniz? Sevk edilen miktarlar geri alınacak ve sipariş/satış durumu güncellenecektir."
+                confirmText={isCancelling ? 'İptal Ediliyor...' : 'İptal Et'}
+                cancelText="Vazgeç"
+                type="danger"
+            />
+
+            {/* Withdraw Shipment Confirm Modal */}
+            <ConfirmModal
+                isOpen={showWithdrawConfirm}
+                onClose={() => setShowWithdrawConfirm(false)}
+                onCancel={() => setShowWithdrawConfirm(false)}
+                onConfirm={handleWithdrawShipment}
+                title="Sevkiyat Talebini Geri Çek"
+                message="Bu sevkiyat talebini geri çekmek istediğinizden emin misiniz? Sevkiyat bekleyen listeden kaldırılacaktır."
+                confirmText={isWithdrawing ? 'Geri Çekiliyor...' : 'Geri Çek'}
+                cancelText="Vazgeç"
+                type="warning"
+            />
+
+            {/* Update Planned Date Modal */}
+            {
+                showUpdateDateModal && (
+                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                        <div className="bg-white border border-amber-200 rounded-2xl shadow-2xl w-full max-w-md p-6">
+                            <h3 className="text-xl font-bold text-amber-900 mb-4 flex items-center gap-2">
+                                <Edit3 className="w-5 h-5" />
+                                Planlanan Tarihi Değiştir
+                            </h3>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-amber-900 mb-2">Mevcut Tarih</label>
+                                    <p className="text-amber-700">{shipmentDetails?.plannedShipmentDate ? formatDate(shipmentDetails.plannedShipmentDate) : 'Henüz planlanmadı'}</p>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-amber-900 mb-2">Yeni Tarih</label>
+                                    <input
+                                        type="date"
+                                        value={newPlannedDate}
+                                        onChange={(e) => setNewPlannedDate(e.target.value)}
+                                        className="w-full px-4 py-3 bg-white border border-amber-300 rounded-lg text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                                    />
+                                </div>
+                                <p className="text-xs text-amber-600">Not: Admin/Manager geçmiş tarih de seçebilir.</p>
+                            </div>
+                            <div className="flex gap-3 mt-6">
+                                <button
+                                    onClick={() => setShowUpdateDateModal(false)}
+                                    disabled={isUpdatingDate}
+                                    className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-medium disabled:opacity-50"
+                                >
+                                    İptal
+                                </button>
+                                <button
+                                    onClick={handleUpdatePlannedDate}
+                                    disabled={isUpdatingDate || !newPlannedDate}
+                                    className="flex-1 px-4 py-2 bg-gradient-to-r from-amber-600 to-orange-600 text-white rounded-lg hover:from-amber-700 hover:to-orange-700 transition-all font-medium disabled:opacity-50"
+                                >
+                                    {isUpdatingDate ? 'Güncelleniyor...' : 'Güncelle'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+
+            {
+                showVehicleUpdateModal && (
+                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                        <div className="bg-white border border-amber-200 rounded-2xl shadow-2xl w-full max-w-md p-6">
+                            <h3 className="text-xl font-bold text-amber-900 mb-4">Araç Değiştir</h3>
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-amber-900 mb-2">Yeni Araç Seçimi</label>
+                                <select value={updateVehicleId} onChange={(e) => setUpdateVehicleId(e.target.value)} className="w-full px-4 py-3 bg-white border border-amber-300 rounded-lg text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-500">
+                                    <option value="">Araç Seçiniz</option>
+                                    {vehicles.map((vehicle) => (
+                                        <option key={vehicle.id} value={vehicle.id}>{vehicle.licensePlate} - {vehicle.vehicleType}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="flex justify-end gap-3 mt-6">
+                                <button onClick={() => setShowVehicleUpdateModal(false)} className="px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg">İptal</button>
+                                <button onClick={handleUpdateVehicle} disabled={!updateVehicleId || isUpdatingVehicle} className="px-6 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 font-medium">
+                                    {isUpdatingVehicle ? 'Güncelleniyor...' : 'Güncelle'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+
+            {
+                showDriverUpdateModal && (
+                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                        <div className="bg-white border border-amber-200 rounded-2xl shadow-2xl w-full max-w-md p-6">
+                            <h3 className="text-xl font-bold text-amber-900 mb-4">Şoför Değiştir</h3>
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-amber-900 mb-2">Yeni Şoför Seçimi</label>
+                                <select value={updateDriverId} onChange={(e) => setUpdateDriverId(e.target.value)} className="w-full px-4 py-3 bg-white border border-amber-300 rounded-lg text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-500">
+                                    <option value="">Şoför Seçiniz</option>
+                                    {users.map((user: any) => (
+                                        <option key={user.id} value={user.id}>{user.firstName} {user.lastName} ({user.role})</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="flex justify-end gap-3 mt-6">
+                                <button onClick={() => setShowDriverUpdateModal(false)} className="px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg">İptal</button>
+                                <button onClick={handleUpdateDriver} disabled={!updateDriverId || isUpdatingDriver} className="px-6 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 font-medium">
+                                    {isUpdatingDriver ? 'Güncelleniyor...' : 'Güncelle'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+
             <OtpVerificationModal
                 isOpen={showOtpModal}
                 onClose={() => {
@@ -631,6 +934,6 @@ export default function ShipmentDetailsPage() {
                     }
                 }}
             />
-        </div>
+        </div >
     )
 }

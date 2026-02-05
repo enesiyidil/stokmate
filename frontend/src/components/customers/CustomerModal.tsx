@@ -19,6 +19,7 @@ export default function CustomerModal({ isOpen, onClose, customer }: CustomerMod
         firstName: '',
         lastName: '',
         phone: '',
+        alternatePhone: '',
         email: '',
         tcNo: '',
         city: '',
@@ -33,6 +34,7 @@ export default function CustomerModal({ isOpen, onClose, customer }: CustomerMod
                 firstName: customer.firstName,
                 lastName: customer.lastName,
                 phone: customer.phone || '',
+                alternatePhone: customer.alternatePhone || '',
                 email: customer.email || '',
                 tcNo: customer.tcNo || '',
                 city: customer.city || '',
@@ -45,6 +47,7 @@ export default function CustomerModal({ isOpen, onClose, customer }: CustomerMod
                 firstName: '',
                 lastName: '',
                 phone: '',
+                alternatePhone: '',
                 email: '',
                 tcNo: '',
                 city: '',
@@ -142,6 +145,20 @@ export default function CustomerModal({ isOpen, onClose, customer }: CustomerMod
                                             onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                                             className="w-full px-4 py-2 bg-white border border-amber-300 rounded-lg text-amber-900 placeholder-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-500"
                                             placeholder="Örn: 0555 123 45 67"
+                                        />
+                                    </div>
+
+                                    {/* Yedek Telefon */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-amber-700 mb-2">
+                                            Yedek Telefon
+                                        </label>
+                                        <input
+                                            type="tel"
+                                            value={formData.alternatePhone}
+                                            onChange={(e) => setFormData({ ...formData, alternatePhone: e.target.value })}
+                                            className="w-full px-4 py-2 bg-white border border-amber-300 rounded-lg text-amber-900 placeholder-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                                            placeholder="Örn: 0532 987 65 43"
                                         />
                                     </div>
 

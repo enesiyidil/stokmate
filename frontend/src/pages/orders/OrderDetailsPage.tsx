@@ -1,6 +1,6 @@
 import { ArrowLeft, Package, User, FileText, CheckCircle, XCircle, Clock, Upload, Download, Activity, Edit, Eye, Pencil, StickyNote, Plus, Strikethrough, AlertTriangle, Check } from 'lucide-react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
-import { useCancelOrderMutation, useApproveCancellationMutation, useUploadInvoiceMutation, useGetInvoiceUrlQuery, useGetOrderQuery, useUpdateSalesConsultantMutation, useUpdateBrandMutation, useGetOrderNotesQuery, useAddOrderNoteMutation, useStrikeOrderNoteMutation } from '../../services/orderApi'
+import { useCancelOrderMutation, useApproveCancellationMutation, useUploadInvoiceMutation, useGetInvoiceUrlQuery, useGetOrderQuery, useUpdateSalesConsultantMutation, useUpdateBrandMutation, useGetOrderNotesQuery, useAddOrderNoteMutation, useStrikeOrderNoteMutation, useDeleteOrderMutation, useUpdateOrderMutation } from '../../services/orderApi'
 import { useCreatePartialShipmentMutation } from '../../services/shipmentApi'
 import { useGetOrderActivitiesQuery } from '../../services/orderActivityApi'
 import { useListOrderReceiptsQuery } from '../../services/orderReceiptApi'
@@ -14,6 +14,8 @@ import CustomerModal from '../../components/customers/CustomerModal'
 import BrandBadge from '../../components/common/BrandBadge'
 import { BRANDS } from '../../constants/brandConstants'
 import AddOrderModal from '../../components/orders/AddOrderModal'
+import UpdateOrderModal from '../../components/orders/UpdateOrderModal'
+import { Trash2, Settings } from 'lucide-react'
 import { useToast } from '../../context/ToastContext'
 import ConfirmModal from '../../components/common/ConfirmModal'
 import OtpVerificationModal from '../../components/common/OtpVerificationModal'
@@ -24,6 +26,10 @@ export default function OrderDetailsPage() {
     const navigate = useNavigate()
     const location = useLocation()
     const { setTopbarContent } = useTopbar()
+    const [deleteOrder, { isLoading: isDeleting }] = useDeleteOrderMutation()
+    const [updateOrder, { isLoading: isUpdating }] = useUpdateOrderMutation()
+    const [showUpdateModal, setShowUpdateModal] = useState(false)
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
     const { success, error, warning } = useToast()
     const [showCancelConfirm, setShowCancelConfirm] = useState(false)
     const { data: order, isLoading, refetch } = useGetOrderQuery(id!)
@@ -90,9 +96,11 @@ export default function OrderDetailsPage() {
     }
 
     // Check if user can ship products - everyone except LOGISTICS_MANAGER
+    // SSH (AFTER_SALES_SERVICE) siparişleri için de sevk yapılabilir
     const canShipProducts = useMemo(() => {
         if (!order || !user) return false
-        if (order.orderType !== 'CUSTOMER_SPECIFIC') return false
+        // CUSTOMER_SPECIFIC ve SSH siparişleri için sevk yapılabilir
+        if (order.orderType !== 'CUSTOMER_SPECIFIC' && order.orderType !== 'AFTER_SALES_SERVICE') return false
         // Logistics manager cannot ship products (they manage shipments, not create them)
         if (user.role === 'LOGISTICS_MANAGER') return false
         return true
@@ -264,6 +272,32 @@ export default function OrderDetailsPage() {
             error('Sevk talebi oluşturulamadı')
         } finally {
             setIsCreatingShipment(false)
+        }
+    }
+
+    const handleDeleteOrder = async () => {
+        if (!order) return
+        try {
+            await deleteOrder(order.id).unwrap()
+            success('Sipariş ve ilişkili sevkiyatlar başarıyla silindi')
+            setShowDeleteConfirm(false)
+            navigate('/orders')
+        } catch (err) {
+            console.error('Delete failed:', err)
+            error('Sipariş silinirken bir hata oluştu')
+        }
+    }
+
+    const handleUpdateOrder = async (data: any) => {
+        if (!order) return
+        try {
+            await updateOrder({ id: order.id, data }).unwrap()
+            success('Sipariş bilgileri güncellendi')
+            setShowUpdateModal(false)
+            refetch()
+        } catch (err) {
+            console.error('Update failed:', err)
+            error('Güncelleme işlemi başarısız')
         }
     }
 
@@ -571,6 +605,32 @@ export default function OrderDetailsPage() {
                                             <p className="text-amber-900 text-sm">{order.customer.fullAddress}</p>
                                         </div>
                                     )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Management Actions - Admin/Manager Only */}
+                        {isAdminOrManager && (
+                            <div className="backdrop-blur-xl bg-gradient-to-br from-gray-50 to-amber-50 border border-amber-200 rounded-2xl shadow-xl p-6 space-y-4">
+                                <h3 className="text-lg font-semibold text-amber-900 flex items-center gap-2">
+                                    <Settings className="w-5 h-5 text-amber-700" />
+                                    Yönetim İşlemleri
+                                </h3>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button
+                                        onClick={() => verifyGate(() => setShowUpdateModal(true))}
+                                        className="flex items-center justify-center gap-2 px-4 py-2 bg-white border border-amber-300 text-amber-800 rounded-lg hover:bg-amber-50 transition-all font-medium shadow-sm hover:shadow-md"
+                                    >
+                                        <Edit className="w-4 h-4" />
+                                        Düzenle
+                                    </button>
+                                    <button
+                                        onClick={() => verifyGate(() => setShowDeleteConfirm(true))}
+                                        className="flex items-center justify-center gap-2 px-4 py-2 bg-white border border-red-300 text-red-700 rounded-lg hover:bg-red-50 transition-all font-medium shadow-sm hover:shadow-md hover:border-red-400"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                        Sil
+                                    </button>
                                 </div>
                             </div>
                         )}
@@ -1177,6 +1237,34 @@ export default function OrderDetailsPage() {
                         pendingAction()
                         setPendingAction(null)
                     }
+                }}
+            />
+            {/* Delete Confirmation Modal */}
+            <ConfirmModal
+                isOpen={showDeleteConfirm}
+                onClose={() => setShowDeleteConfirm(false)}
+                onConfirm={handleDeleteOrder}
+                title="Siparişi Sil"
+                message="Bu işlem siparişi ve bağlı tüm sevkiyatları kalıcı olarak silecektir. Bu işlem geri alınamaz. Emin misiniz?"
+                confirmText={isDeleting ? 'Siliniyor...' : 'Evet, Sil'}
+                cancelText="İptal"
+                type="danger"
+            />
+
+            {/* Update Order Modal */}
+            <UpdateOrderModal
+                isOpen={showUpdateModal}
+                onClose={() => setShowUpdateModal(false)}
+                onSubmit={handleUpdateOrder}
+                isLoading={isUpdating}
+                initialData={{
+                    orderNo: order?.orderNo || '',
+                    prosapContractNo: order?.prosapContractNo,
+                    prosapContractNameSurname: order?.prosapContractNameSurname || '',
+                    orderDate: order?.orderDate || '',
+                    customerId: order?.customer?.id,
+                    salesConsultantId: order?.salesConsultant?.id,
+                    orderNotes: order?.orderNotes || undefined
                 }}
             />
         </div>

@@ -1,12 +1,15 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 // Force HMR update
-import { CheckSquare, Package, Calendar, Truck, User } from 'lucide-react'
-import { useGetOrderAcceptancesQuery } from '../../services/productAcceptanceApi'
+import { CheckSquare, Package, Calendar, Truck, User, Trash2 } from 'lucide-react'
+import { useGetOrderAcceptancesQuery, useDeleteAcceptanceMutation } from '../../services/productAcceptanceApi'
 import { useGetUserSummariesQuery } from '../../services/userApi'
 import { useTopbar } from '../../context/TopbarContext'
 import ProductAcceptanceModal from '../../components/orders/ProductAcceptanceModal'
 import FilterSearchBar from '../../components/common/FilterSearchBar'
+import ConfirmModal from '../../components/common/ConfirmModal'
+import { useToast } from '../../context/ToastContext'
+import { useAppSelector } from '../../hooks/useAuth'
 
 export default function ProductAcceptancePage() {
     const [searchParams] = useSearchParams()
@@ -26,6 +29,28 @@ export default function ProductAcceptancePage() {
     // Passing empty string to get all acceptances (assuming endpoint supports this or returns all if empty)
     const { data: allAcceptances = [], refetch, isLoading } = useGetOrderAcceptancesQuery('')
     const { data: users = [] } = useGetUserSummariesQuery()
+    const [deleteAcceptance, { isLoading: isDeleting }] = useDeleteAcceptanceMutation()
+    const { success, error } = useToast()
+    const { user } = useAppSelector((state) => state.auth)
+
+    // Admin/Manager can delete acceptances
+    const canDeleteAcceptance = ['ADMIN', 'MANAGER'].includes(user?.role || '')
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+    const [acceptanceToDelete, setAcceptanceToDelete] = useState<any>(null)
+
+    const handleDeleteAcceptance = async () => {
+        if (!acceptanceToDelete) return
+
+        try {
+            await deleteAcceptance(acceptanceToDelete.id).unwrap()
+            success('Ürün kabul kaydı başarıyla silindi!')
+            setShowDeleteConfirm(false)
+            setAcceptanceToDelete(null)
+            refetch()
+        } catch (err: any) {
+            error('Hata: ' + (err.data?.message || err.message || 'Bir hata oluştu'))
+        }
+    }
 
     // Get unique users who have accepted/approved products
     const acceptors = useMemo(() => {
@@ -223,16 +248,19 @@ export default function ProductAcceptancePage() {
                                 <th className="px-6 py-4 text-left text-sm font-semibold text-amber-900">Şoför</th>
                                 <th className="px-6 py-4 text-left text-sm font-semibold text-amber-900">Kabul Eden</th>
                                 <th className="px-6 py-4 text-left text-sm font-semibold text-amber-900">Durum</th>
+                                {canDeleteAcceptance && (
+                                    <th className="px-6 py-4 text-left text-sm font-semibold text-amber-900">İşlemler</th>
+                                )}
                             </tr>
                         </thead>
                         <tbody>
                             {isLoading ? (
                                 <tr>
-                                    <td colSpan={9} className="px-6 py-12 text-center text-amber-700">Yükleniyor...</td>
+                                    <td colSpan={canDeleteAcceptance ? 10 : 9} className="px-6 py-12 text-center text-amber-700">Yükleniyor...</td>
                                 </tr>
                             ) : acceptances.length === 0 ? (
                                 <tr>
-                                    <td colSpan={9} className="px-6 py-12 text-center text-amber-700">
+                                    <td colSpan={canDeleteAcceptance ? 10 : 9} className="px-6 py-12 text-center text-amber-700">
                                         <div className="flex flex-col items-center justify-center gap-2">
                                             <Package className="w-12 h-12 text-amber-200" />
                                             <p className="font-medium">Kayıt Bulunamadı</p>
@@ -301,6 +329,22 @@ export default function ProductAcceptancePage() {
                                                 </span>
                                             )}
                                         </td>
+                                        {canDeleteAcceptance && (
+                                            <td className="px-6 py-4">
+                                                <button
+                                                    onClick={() => {
+                                                        setAcceptanceToDelete(acceptance)
+                                                        setShowDeleteConfirm(true)
+                                                    }}
+                                                    disabled={isDeleting}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors border border-red-200 text-sm font-medium disabled:opacity-50"
+                                                    title="Kabul Kaydını Sil"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                    Sil
+                                                </button>
+                                            </td>
+                                        )}
                                     </tr>
                                 ))
                             )}
@@ -319,6 +363,25 @@ export default function ProductAcceptancePage() {
                     }}
                 />
             )}
+
+            {/* Delete Confirmation Modal */}
+            <ConfirmModal
+                isOpen={showDeleteConfirm}
+                onClose={() => {
+                    setShowDeleteConfirm(false)
+                    setAcceptanceToDelete(null)
+                }}
+                onCancel={() => {
+                    setShowDeleteConfirm(false)
+                    setAcceptanceToDelete(null)
+                }}
+                onConfirm={handleDeleteAcceptance}
+                title="Ürün Kabulü Sil"
+                message={`"${acceptanceToDelete?.productName}" ürününün kabul kaydını silmek istediğinizden emin misiniz? Bu işlem kabul edilen miktarları geri alır ve sipariste güncelleme yapar.`}
+                confirmText={isDeleting ? 'Siliniyor...' : 'Sil'}
+                cancelText="Vazgeç"
+                type="danger"
+            />
         </div>
     )
 }

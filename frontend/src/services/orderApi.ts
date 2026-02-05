@@ -1,5 +1,5 @@
 import { api } from '../api/base.api'
-import type { CustomerRequest, CustomerResponse } from './customerApi'
+import type { CustomerRequest } from './customerApi'
 
 export type OrderStatus =
     | 'CREATED'
@@ -79,6 +79,16 @@ export interface PartialDeliveryUpdateRequest {
 
 export interface UpdateSalesConsultantRequest {
     salesConsultantId?: string
+}
+
+export interface UpdateOrderRequest {
+    orderNo?: string
+    prosapContractNo?: string
+    prosapContractNameSurname?: string
+    orderDate?: string
+    customerId?: string
+    salesConsultantId?: string
+    orderNotes?: string
 }
 
 export interface ProductShipmentRequest {
@@ -462,6 +472,25 @@ export const orderApi = api.injectEndpoints({
             }),
             providesTags: ['Orders'], // Re-using Orders tag for simplicity, ideally should be generic
         }),
+
+        // Hard delete order
+        deleteOrder: builder.mutation<void, string>({
+            query: (id) => ({
+                url: `/orders/${id}`,
+                method: 'DELETE',
+            }),
+            invalidatesTags: ['Orders'],
+        }),
+
+        // Full update order
+        updateOrder: builder.mutation<OrderResponse, { id: string; data: UpdateOrderRequest }>({
+            query: ({ id, data }) => ({
+                url: `/orders/${id}`,
+                method: 'PUT',
+                body: data,
+            }),
+            invalidatesTags: ['Orders'],
+        }),
     }),
 })
 
@@ -526,4 +555,6 @@ export const {
     useGetAllSystemActivitiesQuery,
     useGetBusinessActivitiesQuery,
     useGetDashboardStatsQuery,
+    useDeleteOrderMutation,
+    useUpdateOrderMutation,
 } = orderApi

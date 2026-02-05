@@ -43,11 +43,15 @@ export interface ShipmentDetailsResponse {
     orderId: string
     orderNo: string
     orderType: 'ORDER' | 'SALE'
+    shipmentType?: 'ORDER' | 'SALE'  // Added for distinguishing sale vs order shipments
+    saleId?: string
+    saleNo?: string
     orderDate: string
     contractNo?: string
     customer: {
         name: string
         phone: string
+        alternatePhone?: string
         address: string
     }
     salesConsultant?: {
@@ -66,6 +70,7 @@ export interface ShipmentDetailsResponse {
     products: ProductShipmentDetail[]
     shipmentStatus: string
     plannedShipmentDate?: string
+    approvedBy?: string
     deliveryStatus?: 'PROBLEM_FREE' | 'PROBLEMATIC'
     problemType?: 'FACTORY_DEFECT' | 'TRANSPORT_ASSEMBLY_DEFECT'
     deliveryNotes?: string
@@ -188,6 +193,16 @@ export const shipmentApi = api.injectEndpoints({
                 cache: 'no-cache'
             })
         }),
+        downloadShipmentReportByShipmentId: builder.mutation<Blob, string>({
+            query: (shipmentId) => ({
+                url: `/shipment/by-shipment/${shipmentId}/report`,
+                method: 'GET',
+                responseHandler: async (response) => {
+                    return response.blob()
+                },
+                cache: 'no-cache'
+            })
+        }),
         downloadSignedDocument: builder.mutation<Blob, string>({
             query: (shipmentId) => ({
                 url: `/shipment/${shipmentId}/signed-document`,
@@ -237,7 +252,51 @@ export const shipmentApi = api.injectEndpoints({
                 body: formData
             }),
             invalidatesTags: ['Orders']
-        })
+        }),
+        // Admin/Manager shipment management endpoints
+        cancelShipment: builder.mutation<void, string>({
+            query: (shipmentId) => ({
+                url: `/shipment/${shipmentId}/cancel`,
+                method: 'DELETE'
+            }),
+            invalidatesTags: ['Orders', 'Sales']
+        }),
+        updatePlannedDate: builder.mutation<void, { shipmentId: string; newDate: string }>({
+            query: ({ shipmentId, newDate }) => ({
+                url: `/shipment/${shipmentId}/planned-date`,
+                method: 'PATCH',
+                body: { newDate },
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            }),
+            invalidatesTags: ['Orders', 'Sales']
+        }),
+        withdrawShipment: builder.mutation<void, string>({
+            query: (shipmentId) => ({
+                url: `/shipment/${shipmentId}/withdraw`,
+                method: 'POST'
+            }),
+            invalidatesTags: ['Orders', 'Sales']
+        }),
+        updateShipmentVehicle: builder.mutation<void, { shipmentId: string; vehicleId: string }>({
+            query: ({ shipmentId, vehicleId }) => ({
+                url: `/shipment/${shipmentId}/vehicle`,
+                method: 'PATCH',
+                body: { vehicleId },
+                headers: { 'Content-Type': 'application/json' }
+            }),
+            invalidatesTags: ['Orders', 'Sales']
+        }),
+        updateShipmentDriverById: builder.mutation<void, { shipmentId: string; driverId: string }>({
+            query: ({ shipmentId, driverId }) => ({
+                url: `/shipment/${shipmentId}/update-driver`,
+                method: 'PATCH',
+                body: { driverId },
+                headers: { 'Content-Type': 'application/json' }
+            }),
+            invalidatesTags: ['Orders', 'Sales']
+        }),
     })
 })
 
@@ -256,11 +315,16 @@ export const {
     useUpdateShipmentDriverMutation,
     useListVehiclesQuery,
     useDownloadShipmentReportMutation,
+    useDownloadShipmentReportByShipmentIdMutation,
     useDownloadSignedDocumentMutation,
     useCreateSaleShipmentMutation,
     useGetCompletedAwaitingApprovalQuery,
     useGetApprovedShipmentsQuery,
     useGetOrderShipmentProgressQuery,
     useGetSaleShipmentProgressQuery,
-    useUpdateDeliveryDetailsMutation
+    useCancelShipmentMutation,
+    useUpdatePlannedDateMutation,
+    useWithdrawShipmentMutation,
+    useUpdateShipmentVehicleMutation,
+    useUpdateShipmentDriverByIdMutation
 } = shipmentApi

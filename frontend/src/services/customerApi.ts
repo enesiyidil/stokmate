@@ -4,6 +4,7 @@ export interface CustomerRequest {
     firstName: string
     lastName: string
     phone?: string
+    alternatePhone?: string  // Yedek telefon numarası
     email?: string
     tcNo?: string
     city?: string
@@ -17,6 +18,7 @@ export interface CustomerResponse {
     firstName: string
     lastName: string
     phone?: string
+    alternatePhone?: string  // Yedek telefon numarası
     email?: string
     tcNo?: string
     city?: string

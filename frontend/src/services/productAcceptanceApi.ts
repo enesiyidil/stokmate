@@ -71,6 +71,15 @@ export const productAcceptanceApi = baseApi.injectEndpoints({
                 { type: 'ProductAcceptances', id: orderId },
             ],
         }),
+
+        // Admin/Manager only: Delete a product acceptance
+        deleteAcceptance: builder.mutation<void, string>({
+            query: (acceptanceId) => ({
+                url: `/acceptances/${acceptanceId}`,
+                method: 'DELETE',
+            }),
+            invalidatesTags: ['Orders', 'ProductAcceptances'],
+        }),
     }),
 })
 
@@ -78,4 +87,5 @@ export const {
     useAcceptProductMutation,
     useGetPendingProductsQuery,
     useGetOrderAcceptancesQuery,
+    useDeleteAcceptanceMutation,
 } = productAcceptanceApi

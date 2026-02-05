@@ -66,7 +66,7 @@ const AboutPage: React.FC = () => {
                                 <Tag className="w-5 h-5 text-amber-600" />
                                 <span className="text-sm text-amber-700">Sürüm</span>
                             </div>
-                            <p className="text-lg font-bold text-amber-900 font-mono">v1.9.8.5</p>
+                            <p className="text-lg font-bold text-amber-900 font-mono">v2.0.1.7</p>
                         </div>
                         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                             <div className="flex items-center gap-3 mb-2">
