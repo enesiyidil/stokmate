@@ -76,4 +76,13 @@ public class Product extends AuditableEntity {
     public BigDecimal getCancelledStockQuantity() {
         return cancelledStockQuantity == null ? BigDecimal.ZERO : cancelledStockQuantity;
     }
+
+    // Soft delete fields
+    @Column(nullable = false)
+    private boolean deleted = false;
+
+    private java.time.Instant deletionDate;
+
+    @Column(name = "is_deleted", nullable = false)
+    private Boolean isDeleted = false;
 }

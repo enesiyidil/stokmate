@@ -93,7 +93,12 @@ public class ProductService {
 
     public void delete(UUID id) {
         Product product = getEntity(id);
-        productRepository.delete(product);
+        // Soft delete implementation
+        product.setDeleted(true);
+        product.setIsDeleted(true);
+        product.setDeletionDate(java.time.Instant.now());
+        productRepository.save(product);
+        log.info("Product soft deleted: {}", product.getCode());
     }
 
     public Page<ProductResponse> list(String name, String brand, Boolean activeForSale, Pageable pageable) {

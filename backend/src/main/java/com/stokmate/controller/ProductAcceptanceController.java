@@ -46,4 +46,16 @@ public class ProductAcceptanceController {
             @PathVariable(value = "orderId") String orderId) {
         return ResponseEntity.ok(productAcceptanceService.getOrderAcceptances(orderId));
     }
+
+    /**
+     * Delete a product acceptance (Admin/Manager only)
+     */
+    @DeleteMapping("/{acceptanceId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    public ResponseEntity<Void> deleteAcceptance(
+            @PathVariable String acceptanceId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        productAcceptanceService.deleteAcceptance(acceptanceId, principal.getUser());
+        return ResponseEntity.ok().build();
+    }
 }

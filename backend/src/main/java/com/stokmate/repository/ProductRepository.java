@@ -13,10 +13,12 @@ public interface ProductRepository extends JpaRepository<Product, UUID>, JpaSpec
     Optional<Product> findByCode(String code);
 
     @Query("select distinct p from Product p left join p.keywords k " +
-            "where lower(p.name) like lower(concat('%', :q, '%')) " +
+            "where (lower(p.name) like lower(concat('%', :q, '%')) " +
             "or lower(p.description) like lower(concat('%', :q, '%')) " +
             "or lower(p.brand) like lower(concat('%', :q, '%')) " +
             "or lower(p.code) like lower(concat('%', :q, '%')) " +
-            "or lower(k) like lower(concat('%', :q, '%'))")
-    org.springframework.data.domain.Page<Product> search(@Param("q") String q, org.springframework.data.domain.Pageable pageable);
+            "or lower(k) like lower(concat('%', :q, '%'))) " +
+            "and p.isDeleted = false")
+    org.springframework.data.domain.Page<Product> search(@Param("q") String q,
+            org.springframework.data.domain.Pageable pageable);
 }

@@ -36,6 +36,8 @@ public interface ShipmentRepository extends JpaRepository<Shipment, UUID> {
 
         List<Shipment> findByOrder(com.stokmate.domain.Order order);
 
+        List<Shipment> findBySale(com.stokmate.domain.Sale sale);
+
         @EntityGraph(attributePaths = { "items", "items.orderProduct" })
         List<Shipment> findByOrderIdAndStatusIn(UUID orderId, java.util.Collection<ShipmentStatus> statuses);
 

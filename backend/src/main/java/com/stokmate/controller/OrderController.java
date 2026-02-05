@@ -228,4 +228,22 @@ public class OrderController {
                         @Valid @RequestBody com.stokmate.dto.order.UpdateBrandRequest request) {
                 return orderService.updateBrand(orderId, request.getBrand());
         }
+
+        @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
+        @org.springframework.web.bind.annotation.DeleteMapping("/{orderId}")
+        @Operation(summary = "Delete order (Hard Delete)", description = "Permanently deletes an order and its associated shipments. Only admin/manager can perform this action.")
+        public org.springframework.http.ResponseEntity<Void> deleteOrder(
+                        @io.swagger.v3.oas.annotations.Parameter(description = "Order ID (UUID)", required = true) @PathVariable("orderId") UUID orderId) {
+                orderService.deleteOrder(orderId);
+                return org.springframework.http.ResponseEntity.ok().build();
+        }
+
+        @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
+        @org.springframework.web.bind.annotation.PutMapping("/{orderId}")
+        @Operation(summary = "Update order details", description = "Updates order details like date, contract no, notes. Only admin/manager can perform this action.")
+        public OrderResponse updateOrder(
+                        @io.swagger.v3.oas.annotations.Parameter(description = "Order ID (UUID)", required = true) @PathVariable("orderId") UUID orderId,
+                        @Valid @RequestBody com.stokmate.dto.order.UpdateOrderRequest request) {
+                return orderService.updateOrder(orderId, request);
+        }
 }

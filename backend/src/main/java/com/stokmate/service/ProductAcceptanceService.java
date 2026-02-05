@@ -305,4 +305,87 @@ public class ProductAcceptanceService {
             }
         }
     }
+
+    // =============== ADMIN/MANAGER DELETE FUNCTIONALITY ===============
+
+    /**
+     * Delete a product acceptance (Admin/Manager only)
+     * This will rollback the accepted quantity and related changes
+     */
+    @Transactional
+    public void deleteAcceptance(String acceptanceId, User user) {
+        // Permission check
+        if (!user.getRole().canDeleteProductAcceptances()) {
+            throw new BadRequestException("Bu işlem için yetkiniz yok");
+        }
+
+        ProductAcceptance acceptance = productAcceptanceRepository.findById(acceptanceId)
+                .orElseThrow(() -> new NotFoundException("Ürün kabul kaydı bulunamadı"));
+
+        OrderProduct orderProduct = acceptance.getOrderProduct();
+        Order order = orderProduct.getOrder();
+        BigDecimal acceptedQty = acceptance.getAcceptedQuantity();
+
+        // Rollback accepted quantity on OrderProduct
+        BigDecimal currentAccepted = orderProduct.getAcceptedQuantity();
+        BigDecimal newAccepted = currentAccepted.subtract(acceptedQty);
+        orderProduct.setAcceptedQuantity(newAccepted.max(BigDecimal.ZERO));
+        orderProductRepository.save(orderProduct);
+
+        // For STOCK orders, rollback stock changes
+        if (order.getOrderType() == OrderType.STOCK) {
+            Product product = productRepository.findByCode(orderProduct.getProductCode()).orElse(null);
+
+            if (product != null) {
+                boolean isCancelledStock = order.isConvertedFromCustomer();
+
+                if (isCancelledStock) {
+                    // Rollback cancelled stock quantity
+                    BigDecimal oldCancelledQty = product.getCancelledStockQuantity();
+                    BigDecimal newCancelledQty = oldCancelledQty.subtract(acceptedQty);
+                    product.setCancelledStockQuantity(newCancelledQty.max(BigDecimal.ZERO));
+                    productRepository.save(product);
+
+                    // Create rollback event
+                    ProductEvent rollbackEvent = new ProductEvent();
+                    rollbackEvent.setProduct(product);
+                    rollbackEvent.setEventType("CANCELLED_STOCK_DELETION");
+                    rollbackEvent.setQuantityChange(acceptedQty.negate());
+                    rollbackEvent.setDescription(
+                            String.format("İptal stoğu kabulü silindi - Sipariş: %s", order.getOrderNo()));
+                    rollbackEvent.setCreatedBy(user);
+                    rollbackEvent.setCreatedAt(LocalDateTime.now());
+                    productEventRepository.save(rollbackEvent);
+                } else {
+                    // Create stock decrease event
+                    ProductEvent rollbackEvent = new ProductEvent();
+                    rollbackEvent.setProduct(product);
+                    rollbackEvent.setEventType("STOCK_ACCEPTANCE_DELETED");
+                    rollbackEvent.setQuantityChange(acceptedQty.negate());
+                    rollbackEvent.setDescription(String.format("Ürün kabulü silindi - Sipariş: %s - Silen: %s %s",
+                            order.getOrderNo(), user.getFirstName(), user.getLastName()));
+                    rollbackEvent.setCreatedBy(user);
+                    rollbackEvent.setCreatedAt(LocalDateTime.now());
+                    productEventRepository.save(rollbackEvent);
+                }
+            }
+        }
+
+        // Delete acceptance images from storage
+        if (acceptance.getImagePaths() != null) {
+            for (String imagePath : acceptance.getImagePaths()) {
+                try {
+                    storageService.delete(imagePath);
+                } catch (Exception e) {
+                    log.warn("Failed to delete acceptance image: {}", imagePath, e);
+                }
+            }
+        }
+
+        // Delete the acceptance
+        productAcceptanceRepository.delete(acceptance);
+
+        log.info("Product acceptance {} deleted by user {} for order {}",
+                acceptanceId, user.getId(), order.getOrderNo());
+    }
 }

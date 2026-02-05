@@ -136,6 +136,21 @@ public class ShipmentController {
     }
 
     /**
+     * Generate shipment report by Shipment ID (for sale shipments)
+     */
+    @GetMapping("/by-shipment/{shipmentId}/report")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'STORE_EMPLOYEE', 'LOGISTICS_MANAGER', 'OPERATIONS_MANAGER', 'STORE_MANAGER', 'DIRECTOR')")
+    public ResponseEntity<byte[]> generateShipmentReportByShipmentId(@PathVariable("shipmentId") UUID shipmentId)
+            throws Exception {
+        byte[] pdfBytes = shipmentReportService.generateShipmentReportByShipmentId(shipmentId);
+
+        return ResponseEntity.ok()
+                .header("Content-Type", "application/pdf")
+                .header("Content-Disposition", "attachment; filename=sevk-raporu-" + shipmentId + ".pdf")
+                .body(pdfBytes);
+    }
+
+    /**
      * Create a shipment from a sale
      */
     @PostMapping("/sale/create")
@@ -232,6 +247,75 @@ public class ShipmentController {
             @RequestParam(value = "additionalPhotos", required = false) List<org.springframework.web.multipart.MultipartFile> photos)
             throws Exception {
         shipmentService.updateDeliveryDetails(shipmentId, request, photos);
+        return ResponseEntity.ok().build();
+    }
+
+    // =============== ADMIN/MANAGER SHIPMENT MANAGEMENT ENDPOINTS ===============
+
+    /**
+     * Cancel a shipment (Admin/Manager only)
+     * Cascades updates to order and sale statuses
+     */
+    @DeleteMapping("/{shipmentId}/cancel")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    public ResponseEntity<Void> cancelShipment(
+            @PathVariable UUID shipmentId,
+            @AuthenticationPrincipal UserPrincipal userPrincipal) {
+        shipmentService.cancelShipment(shipmentId, userPrincipal.getUser().getId());
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * Update planned shipment date (Admin/Manager only)
+     * Admin/Manager can set past dates, others cannot
+     */
+    @PatchMapping("/{shipmentId}/planned-date")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    public ResponseEntity<Void> updatePlannedDate(
+            @PathVariable UUID shipmentId,
+            @RequestBody UpdatePlannedDateRequest request,
+            @AuthenticationPrincipal UserPrincipal userPrincipal) {
+        // Parse ISO-8601 datetime with timezone (e.g., 2026-02-20T00:00:00.000Z)
+        java.time.Instant instant = java.time.Instant.parse(request.getNewDate());
+        java.time.LocalDateTime newDate = java.time.LocalDateTime.ofInstant(instant, java.time.ZoneId.systemDefault());
+        shipmentService.updatePlannedDate(shipmentId, newDate, userPrincipal.getUser().getId());
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * Withdraw a shipment request (Admin/Manager only)
+     * Can only withdraw PENDING or APPROVED shipments
+     */
+    @PostMapping("/{shipmentId}/withdraw")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    public ResponseEntity<Void> withdrawShipment(
+            @PathVariable UUID shipmentId,
+            @AuthenticationPrincipal UserPrincipal userPrincipal) {
+        shipmentService.withdrawShipment(shipmentId, userPrincipal.getUser().getId());
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * Update shipment vehicle (Admin/Manager only)
+     */
+    @PatchMapping("/{shipmentId}/vehicle")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    public ResponseEntity<Void> updateShipmentVehicle(
+            @PathVariable UUID shipmentId,
+            @RequestBody UpdateVehicleRequest request) {
+        shipmentService.updateShipmentVehicle(shipmentId, request);
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * Update shipment driver by Shipment ID (Admin/Manager only)
+     */
+    @PatchMapping("/{shipmentId}/update-driver")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    public ResponseEntity<Void> updateShipmentDriverById(
+            @PathVariable UUID shipmentId,
+            @RequestBody UpdateDriverRequest request) {
+        shipmentService.updateShipmentDriverById(shipmentId, request);
         return ResponseEntity.ok().build();
     }
 }

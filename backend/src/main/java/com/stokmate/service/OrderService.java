@@ -47,6 +47,7 @@ import com.stokmate.repository.CustomerRepository;
 import com.stokmate.repository.ProductRepository;
 import com.stokmate.repository.ProductArrivalRepository;
 import com.stokmate.repository.ShipmentRepository;
+import com.stokmate.repository.OrderNoteRepository;
 import com.stokmate.mapper.CustomerMapper;
 
 @Service
@@ -58,6 +59,7 @@ public class OrderService {
     private final OrderMapper orderMapper;
     private final OrderProductMapper orderProductMapper;
     private final OrderActivityService orderActivityService;
+    private final OrderNoteRepository orderNoteRepository;
     private final StorageService storageService;
     private final CustomerRepository customerRepository;
     private final CustomerMapper customerMapper;
@@ -793,6 +795,122 @@ public class OrderService {
         }
 
         return mapping;
+    }
+
+    /**
+     * Hard delete order (Admin/Manager only)
+     * Deletes order and all associated data (shipments, products, activities)
+     */
+    @Transactional
+    public void deleteOrder(UUID orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new NotFoundException("Order not found"));
+
+        log.info("Hard deleting order: {}", order.getOrderNo());
+
+        // 1. Delete associated shipments
+        List<com.stokmate.domain.Shipment> shipments = shipmentRepository.findByOrderId(orderId);
+        if (!shipments.isEmpty()) {
+            log.info("Deleting {} shipments associated with order {}", shipments.size(), order.getOrderNo());
+            shipmentRepository.deleteAll(shipments);
+        }
+
+        // 2. Delete the order (products and activities will be deleted by Cascade if
+        // configured,
+        // but activities usually don't cascade from OneToMany in Order entity, we might
+        // need to handle them if they are not mapped)
+        // Order entity: @OneToMany(mappedBy = "order", cascade = CascadeType.ALL...
+        // private Set<OrderProduct> products
+        // OrderActivity entity usually has @ManyToOne to Order.
+        // If DB has ON DELETE CASCADE constraint, it's fine. If not, we might fail.
+        // Let's rely on JPA or DB. If it fails, we will know.
+        // Safest is to delete order and let DB handle it or JPA.
+
+        // Also handling linked SSH orders if any
+        List<Order> sshOrders = orderRepository.findByParentOrderId(orderId);
+        if (!sshOrders.isEmpty()) {
+            log.info("Deleting {} SSH sub-orders associated with order {}", sshOrders.size(), order.getOrderNo());
+            orderRepository.deleteAll(sshOrders);
+        }
+
+        // Explicitly delete activities to prevent FK constraint violation
+        orderActivityService.deleteActivitiesForOrder(orderId);
+
+        // Explicitly delete order notes
+        orderNoteRepository.deleteByOrderId(orderId);
+
+        orderRepository.delete(order);
+        log.info("Order deleted successfully");
+    }
+
+    /**
+     * Full update of order details (Admin/Manager only)
+     */
+    @Transactional
+    public OrderResponse updateOrder(UUID orderId, com.stokmate.dto.order.UpdateOrderRequest request) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new NotFoundException("Order not found"));
+
+        boolean somethingChanged = false;
+
+        if (request.getOrderNo() != null && !request.getOrderNo().equals(order.getOrderNo())) {
+            // Check uniqueness if changed
+            if (orderRepository.existsByOrderNo(request.getOrderNo())) {
+                throw new BadRequestException("Order number already exists: " + request.getOrderNo());
+            }
+            order.setOrderNo(request.getOrderNo());
+            somethingChanged = true;
+        }
+
+        if (request.getProsapContractNo() != null
+                && !request.getProsapContractNo().equals(order.getProsapContractNo())) {
+            order.setProsapContractNo(request.getProsapContractNo());
+            somethingChanged = true;
+        }
+
+        if (request.getProsapContractNameSurname() != null
+                && !request.getProsapContractNameSurname().equals(order.getProsapContractNameSurname())) {
+            order.setProsapContractNameSurname(request.getProsapContractNameSurname());
+            somethingChanged = true;
+        }
+
+        if (request.getOrderDate() != null && !request.getOrderDate().equals(order.getOrderDate())) {
+            order.setOrderDate(request.getOrderDate());
+            somethingChanged = true;
+        }
+
+        if (request.getOrderNotes() != null) {
+            order.setOrderNotes(request.getOrderNotes());
+            somethingChanged = true;
+        }
+
+        if (request.getCustomerId() != null
+                && (order.getCustomer() == null || !request.getCustomerId().equals(order.getCustomer().getId()))) {
+            Customer customer = customerRepository.findById(request.getCustomerId())
+                    .orElseThrow(() -> new NotFoundException("Customer not found"));
+            order.setCustomer(customer);
+            somethingChanged = true;
+        }
+
+        if (request.getSalesConsultantId() != null) {
+            com.stokmate.domain.User salesConsultant = userRepository.findById(request.getSalesConsultantId())
+                    .orElseThrow(() -> new NotFoundException("Sales consultant not found"));
+            order.setSalesConsultant(salesConsultant);
+            somethingChanged = true;
+        }
+
+        if (somethingChanged) {
+            Order saved = orderRepository.save(order);
+            // Log activity
+            try {
+                orderActivityService.logActivity(saved, ActivityType.ORDER_UPDATED, "Sipariş bilgileri güncellendi");
+            } catch (Exception e) {
+                // ignore log error
+            }
+            return orderMapper.toResponse(saved);
+        }
+
+        return orderMapper.toResponse(order);
     }
 
     /**

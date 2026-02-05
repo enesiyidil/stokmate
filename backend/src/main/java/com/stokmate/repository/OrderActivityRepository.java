@@ -13,6 +13,8 @@ public interface OrderActivityRepository extends JpaRepository<OrderActivity, UU
 
         List<OrderActivity> findByUserIdOrderByCreatedAtDesc(UUID userId);
 
+        void deleteByOrderId(UUID orderId);
+
         List<OrderActivity> findTop5ByOrderByCreatedAtDesc();
 
         @org.springframework.data.jpa.repository.Query("SELECT oa FROM OrderActivity oa WHERE " +

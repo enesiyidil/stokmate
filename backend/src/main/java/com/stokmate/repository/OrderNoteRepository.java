@@ -11,4 +11,6 @@ import java.util.UUID;
 public interface OrderNoteRepository extends JpaRepository<OrderNote, UUID> {
 
     List<OrderNote> findByOrderIdOrderByCreatedAtDesc(UUID orderId);
+
+    void deleteByOrderId(UUID orderId);
 }
