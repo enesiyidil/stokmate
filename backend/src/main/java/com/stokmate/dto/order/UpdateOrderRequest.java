@@ -32,4 +32,5 @@ public class UpdateOrderRequest {
 
     // Notes
     private String orderNotes;
+    private String shipmentNote;
 }

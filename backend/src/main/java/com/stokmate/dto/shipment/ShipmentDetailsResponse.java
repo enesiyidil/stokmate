@@ -30,6 +30,7 @@ public class ShipmentDetailsResponse {
     private String shipmentStatus;
     private LocalDateTime plannedShipmentDate;
     private String approvedBy;
+    private String shipmentNote;
 
     // Sale related
     private String saleId;

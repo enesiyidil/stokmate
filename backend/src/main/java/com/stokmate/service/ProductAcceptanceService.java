@@ -16,6 +16,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.stokmate.dto.shipment.PartialShipmentRequest;
+import com.stokmate.dto.shipment.ProductShipmentRequest;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -36,6 +39,8 @@ public class ProductAcceptanceService {
     private final com.stokmate.repository.ProductEventRepository productEventRepository;
     private final com.stokmate.repository.ProductPriceHistoryRepository productPriceHistoryRepository;
     private final com.stokmate.repository.ProductRepository productRepository;
+    private final ShipmentService shipmentService;
+    private final com.stokmate.repository.ShipmentRepository shipmentRepository;
 
     @Transactional
     public ProductAcceptanceResponse acceptProduct(
@@ -90,6 +95,7 @@ public class ProductAcceptanceService {
         orderProduct.setAcceptedQuantity(
                 orderProduct.getAcceptedQuantity().add(request.getAcceptedQuantity()));
         orderProductRepository.save(orderProduct);
+        orderProductRepository.flush(); // Ensure visibility
 
         // For STOCK orders, create ProductEvent and ProductPriceHistory
         Order order = orderProduct.getOrder();
@@ -177,7 +183,7 @@ public class ProductAcceptanceService {
         }
 
         // Check if order should be auto-completed
-        checkAndCompleteOrder(orderProduct.getOrder());
+        checkAndCompleteOrder(orderProduct.getOrder(), user);
 
         return productAcceptanceMapper.toResponse(saved);
     }
@@ -287,21 +293,86 @@ public class ProductAcceptanceService {
                 .collect(Collectors.toList());
     }
 
-    private void checkAndCompleteOrder(Order order) {
-        // With simplified status system, order stays IN_PROGRESS until all products are
-        // SHIPPED
-        // This method now just ensures order is in valid state (not auto-completing on
-        // acceptance)
+    private void checkAndCompleteOrder(Order orderArg, User user) {
+        log.info("Checking order completion for order: {}", orderArg.getOrderNo());
+
+        // Reload order to ensure we have the latest product data (especially accepted
+        // quantities)
+        Order order = orderRepository.findById(orderArg.getId())
+                .orElse(orderArg);
+
         boolean allAccepted = order.getProducts().stream()
                 .allMatch(OrderProduct::isFullyAccepted);
+
+        log.info("Order {}: allAccepted = {}", order.getOrderNo(), allAccepted);
 
         if (allAccepted) {
             log.info("All products accepted for order {} - order remains IN_PROGRESS until shipped",
                     order.getOrderNo());
-            // Order stays IN_PROGRESS, will be completed by shipment finalization
+
             if (order.getStatus() == OrderStatus.PENDING_ACCEPTANCE) {
                 order.setStatus(OrderStatus.IN_PROGRESS);
                 orderRepository.save(order);
+            }
+
+            // AUTO-SHIPMENT LOGIC
+            log.info("Checking auto-shipment for order type: {}", order.getOrderType());
+
+            if (order.getOrderType() == OrderType.CUSTOMER_SPECIFIC
+                    || order.getOrderType() == OrderType.AFTER_SALES_SERVICE) {
+
+                // Get pending shipments to avoid double shipping
+                List<Shipment> activeShipments = shipmentRepository.findByOrder(order).stream()
+                        .filter(s -> s.getStatus() != com.stokmate.domain.ShipmentStatus.FINALIZED)
+                        .collect(Collectors.toList());
+
+                log.info("Found {} active shipments for order {}", activeShipments.size(), order.getOrderNo());
+
+                List<ProductShipmentRequest> itemsToShip = new ArrayList<>();
+                for (OrderProduct op : order.getProducts()) {
+                    BigDecimal pendingQty = activeShipments.stream()
+                            .flatMap(s -> s.getItems().stream())
+                            .filter(item -> item.getOrderProduct() != null
+                                    && item.getOrderProduct().getId().equals(op.getId()))
+                            .map(item -> BigDecimal.valueOf(item.getShippedQuantity()))
+                            .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+                    BigDecimal availableQty = op.getRemainingShipQuantity().subtract(pendingQty);
+
+                    log.info("Product {}: Accepted={}, Shipped={}, Pending={}, Available={}",
+                            op.getProductName(), op.getAcceptedQuantity(), op.getShippedQuantity(), pendingQty,
+                            availableQty);
+
+                    if (availableQty.compareTo(BigDecimal.ZERO) > 0) {
+                        itemsToShip.add(ProductShipmentRequest.builder()
+                                .orderProductId(op.getId())
+                                .quantityToShip(availableQty)
+                                .build());
+                    }
+                }
+
+                log.info("Found {} items to auto-ship", itemsToShip.size());
+
+                if (!itemsToShip.isEmpty()) {
+                    log.info("Auto-creating shipment for order {} with {} items", order.getOrderNo(),
+                            itemsToShip.size());
+                    PartialShipmentRequest shipmentRequest = PartialShipmentRequest.builder()
+                            .orderId(order.getId())
+                            .productShipments(itemsToShip)
+                            .notes(String.format("Otomatik oluşturulan sevkiyat (Tüm ürünler kabul edildi) - %s",
+                                    LocalDateTime.now()
+                                            .format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))))
+                            .build();
+
+                    try {
+                        shipmentService.createPartialShipment(shipmentRequest, user.getId());
+                        log.info("Successfully auto-created shipment for order {}", order.getOrderNo());
+                    } catch (Exception e) {
+                        log.error("Failed to auto-create shipment for order {}", order.getOrderNo(), e);
+                    }
+                }
+            } else {
+                log.info("Order type {} not eligible for auto-shipment", order.getOrderType());
             }
         }
     }

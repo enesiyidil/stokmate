@@ -36,6 +36,8 @@ public class OrderReceiptService {
         private final ProductArrivalRepository productArrivalRepository;
         private final com.stokmate.repository.ProductEventRepository productEventRepository;
         private final com.stokmate.repository.ProductPriceHistoryRepository productPriceHistoryRepository;
+        private final ShipmentService shipmentService;
+        private final ShipmentRepository shipmentRepository;
 
         @Transactional
         public OrderReceiptResponse createReceipt(
@@ -253,6 +255,71 @@ public class OrderReceiptService {
                                 orderActivityService.logActivity(order, ActivityType.ORDER_UPDATED,
                                                 "Tüm ürünler kabul edildi, sevk onayı bekleniyor");
                                 log.info("Order {} marked as PENDING_SHIPMENT_APPROVAL", order.getOrderNo());
+
+                                // AUTO-SHIPMENT LOGIC
+                                try {
+                                        // Get pending shipments to avoid double shipping
+                                        List<Shipment> activeShipments = shipmentRepository.findByOrder(order).stream()
+                                                        .filter(s -> s.getStatus() != ShipmentStatus.FINALIZED)
+                                                        .collect(Collectors.toList());
+
+                                        List<com.stokmate.dto.shipment.ProductShipmentRequest> itemsToShip = java.util.Collections
+                                                        .emptyList();
+
+                                        // Calculate items to ship
+                                        itemsToShip = order.getProducts().stream()
+                                                        .map(op -> {
+                                                                BigDecimal pendingQty = activeShipments.stream()
+                                                                                .flatMap(s -> s.getItems().stream())
+                                                                                .filter(item -> item
+                                                                                                .getOrderProduct() != null
+                                                                                                && item.getOrderProduct()
+                                                                                                                .getId()
+                                                                                                                .equals(op.getId()))
+                                                                                .map(item -> BigDecimal.valueOf(item
+                                                                                                .getShippedQuantity()))
+                                                                                .reduce(BigDecimal.ZERO,
+                                                                                                BigDecimal::add);
+
+                                                                BigDecimal availableQty = op.getAcceptedQuantity()
+                                                                                .subtract(op.getShippedQuantity() != null
+                                                                                                ? op.getShippedQuantity()
+                                                                                                : BigDecimal.ZERO)
+                                                                                .subtract(pendingQty);
+                                                                return java.util.Map.entry(op, availableQty);
+                                                        })
+                                                        .filter(entry -> entry.getValue()
+                                                                        .compareTo(BigDecimal.ZERO) > 0)
+                                                        .map(entry -> com.stokmate.dto.shipment.ProductShipmentRequest
+                                                                        .builder()
+                                                                        .orderProductId(entry.getKey().getId())
+                                                                        .quantityToShip(entry.getValue())
+                                                                        .build())
+                                                        .collect(Collectors.toList());
+
+                                        if (!itemsToShip.isEmpty()) {
+                                                log.info("Auto-creating shipment for order {} with {} items",
+                                                                order.getOrderNo(),
+                                                                itemsToShip.size());
+                                                com.stokmate.dto.shipment.PartialShipmentRequest shipmentRequest = com.stokmate.dto.shipment.PartialShipmentRequest
+                                                                .builder()
+                                                                .orderId(order.getId())
+                                                                .productShipments(itemsToShip)
+                                                                .notes(String.format(
+                                                                                "Otomatik oluşturulan sevkiyat (Tüm ürünler kabul edildi) - %s",
+                                                                                java.time.LocalDateTime.now()
+                                                                                                .format(java.time.format.DateTimeFormatter
+                                                                                                                .ofPattern("dd.MM.yyyy HH:mm"))))
+                                                                .build();
+
+                                                shipmentService.createPartialShipment(shipmentRequest,
+                                                                approver.getId());
+                                                log.info("Successfully auto-created shipment for order {}",
+                                                                order.getOrderNo());
+                                        }
+                                } catch (Exception e) {
+                                        log.error("Failed to auto-create shipment for order {}", order.getOrderNo(), e);
+                                }
                         }
 
                 } else if (anyProductAccepted && order.getStatus() != OrderStatus.PARTIALLY_ACCEPTED) {
