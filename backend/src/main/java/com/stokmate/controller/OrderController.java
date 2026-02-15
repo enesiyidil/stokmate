@@ -203,9 +203,9 @@ public class OrderController {
                 return orderService.updatePartialDelivery(orderId, request, currentUser);
         }
 
-        @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
+        @PreAuthorize("hasAnyRole('ADMIN','MANAGER','STORE_MANAGER')")
         @org.springframework.web.bind.annotation.PatchMapping("/{orderId}/sales-consultant")
-        @Operation(summary = "Update sales consultant", description = "Assigns or removes a sales consultant for an order. Only admin/manager can perform this action.")
+        @Operation(summary = "Update sales consultant", description = "Assigns or removes a sales consultant for an order. Store Manager, Admin and Manager can perform this action.")
         public OrderResponse updateSalesConsultant(
                         @io.swagger.v3.oas.annotations.Parameter(description = "Order ID (UUID)", required = true) @PathVariable("orderId") UUID orderId,
                         @Valid @RequestBody com.stokmate.dto.order.UpdateSalesConsultantRequest request) {

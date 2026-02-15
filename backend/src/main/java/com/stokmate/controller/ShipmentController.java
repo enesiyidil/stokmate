@@ -83,7 +83,7 @@ public class ShipmentController {
     }
 
     @PostMapping("/partial")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE', 'OPERATIONS_MANAGER')")
     public ResponseEntity<Void> createPartialShipment(
             @RequestBody PartialShipmentRequest request,
             @AuthenticationPrincipal UserPrincipal userPrincipal) {

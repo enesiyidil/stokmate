@@ -36,4 +36,7 @@ public class ShipmentResponse {
     private UUID saleId;
     private String saleNo;
     private String shipmentType; // ORDER or SALE
+
+    // Brand info
+    private String brand; // OAK, PINE, MAPLE
 }

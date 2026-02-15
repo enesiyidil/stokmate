@@ -58,7 +58,7 @@ public class Shipment extends AuditableEntity {
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "shipment_delivery_photos", joinColumns = @JoinColumn(name = "shipment_id"))
     @Column(name = "photo_path")
-    private List<String> deliveryPhotoPaths = new ArrayList<>();
+    private java.util.Set<String> deliveryPhotoPaths = new java.util.HashSet<>();
 
     // Final approval
     @Enumerated(EnumType.STRING)

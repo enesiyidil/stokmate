@@ -293,6 +293,7 @@ public class ShipmentService {
                                                 ? shipment.getApprovedBy().getFirstName() + " "
                                                                 + shipment.getApprovedBy().getLastName()
                                                 : null)
+                                .shipmentNote(order.getShipmentNote())
                                 .deliveryNotes(shipment != null ? shipment.getDeliveryNotes() : null)
                                 .signedDocumentUrl(shipment != null ? shipment.getSignedDocumentPath() : null)
                                 .deliveryPhotoUrls(shipment != null && shipment.getDeliveryPhotoPaths() != null
@@ -458,6 +459,7 @@ public class ShipmentService {
                                                 : null)
                                 .problemType(shipment.getProblemType() != null ? shipment.getProblemType().toString()
                                                 : null)
+                                .shipmentNote(order != null ? order.getShipmentNote() : null)
                                 .deliveryNotes(shipment.getDeliveryNotes())
                                 .signedDocumentUrl(shipment.getSignedDocumentPath())
                                 .deliveryPhotoUrls(shipment.getDeliveryPhotoPaths() != null
@@ -680,7 +682,7 @@ public class ShipmentService {
                 }
 
                 if (request.getDeliveryPhotos() != null && !request.getDeliveryPhotos().isEmpty()) {
-                        List<String> photoPaths = new java.util.ArrayList<>();
+                        java.util.Set<String> photoPaths = new java.util.HashSet<>();
                         for (MultipartFile photo : request.getDeliveryPhotos()) {
                                 if (!photo.isEmpty()) {
                                         String photoPath = storageService.store(photo, "shipment-photos");
@@ -1187,9 +1189,9 @@ public class ShipmentService {
 
                 // Add additional photos
                 if (additionalPhotos != null && !additionalPhotos.isEmpty()) {
-                        List<String> existingPhotos = shipment.getDeliveryPhotoPaths();
+                        java.util.Set<String> existingPhotos = shipment.getDeliveryPhotoPaths();
                         if (existingPhotos == null) {
-                                existingPhotos = new ArrayList<>();
+                                existingPhotos = new java.util.HashSet<>();
                         }
 
                         for (MultipartFile photo : additionalPhotos) {
@@ -1281,6 +1283,28 @@ public class ShipmentService {
                 }
 
                 log.debug("toShipmentResponse: Building response for shipment {}", shipment.getId());
+
+                // Extract brand from first product
+                String brandStr = null;
+                try {
+                        if (shipment.getOrder() != null && shipment.getOrder().getProducts() != null) {
+                                brandStr = shipment.getOrder().getProducts().stream()
+                                                .filter(p -> p.getBrand() != null)
+                                                .map(p -> p.getBrand().name())
+                                                .findFirst()
+                                                .orElse(null);
+                        } else if (shipment.getSale() != null && shipment.getSale().getProducts() != null) {
+                                brandStr = shipment.getSale().getProducts().stream()
+                                                .filter(sp -> sp.getProduct() != null
+                                                                && sp.getProduct().getBrand() != null)
+                                                .map(sp -> sp.getProduct().getBrand().name())
+                                                .findFirst()
+                                                .orElse(null);
+                        }
+                } catch (Exception e) {
+                        log.warn("Could not load brand for shipment {}: {}", shipment.getId(), e.getMessage());
+                }
+
                 return ShipmentResponse.builder()
                                 .id(shipment.getId())
                                 .orderId(orderId)
@@ -1304,6 +1328,7 @@ public class ShipmentService {
                                 .saleNo(shipment.getSale() != null ? shipment.getSale().getSaleNo() : null)
                                 .shipmentType(shipment.getOrder() != null ? "ORDER"
                                                 : (shipment.getSale() != null ? "SALE" : "UNKNOWN"))
+                                .brand(brandStr)
                                 .build();
         }
 

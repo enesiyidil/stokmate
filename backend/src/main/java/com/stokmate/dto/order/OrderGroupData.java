@@ -31,6 +31,9 @@ public class OrderGroupData {
     @JsonProperty("orderDate")
     private LocalDate orderDate;
 
+    @JsonProperty("shipmentNote")
+    private String shipmentNote;
+
     @JsonProperty("products")
     @Builder.Default
     private List<OrderProductExcelRow> products = new ArrayList<>();
