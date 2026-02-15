@@ -89,6 +89,7 @@ export interface UpdateOrderRequest {
     customerId?: string
     salesConsultantId?: string
     orderNotes?: string
+    shipmentNote?: string
 }
 
 export interface ProductShipmentRequest {
@@ -147,6 +148,7 @@ export interface OrderResponse {
     problemShipments?: ProblemShipmentSummary[]
     // Flag to indicate this order was converted from a customer-specific order (iptal stoğu)
     convertedFromCustomer?: boolean
+    shipmentNote?: string
 }
 
 export interface SshOrderSummary {
@@ -198,6 +200,7 @@ export interface OrderGroupData {
     prosapContractNameSurname: string
     orderDate: string
     products: OrderProductExcelRow[]
+    shipmentNote?: string
 }
 
 export interface ExcelExtractionResponse {
@@ -245,6 +248,7 @@ export interface OrderCreateRequest {
     parentOrderId?: string
     linkedShipmentId?: string
     hidden?: boolean
+    shipmentNote?: string
 }
 
 export interface InvoiceUrlResponse {

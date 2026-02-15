@@ -477,7 +477,14 @@ export default function ShipmentDetailsPage() {
                         <div><p className="text-xs text-amber-700 mb-1">Sipariş/Satış Tarihi</p><p className="text-amber-900 font-medium">{formatDate(shipmentDetails.orderDate)}</p></div>
                         <div><p className="text-xs text-amber-700 mb-1">Planlanan Sevk</p><p className="text-amber-900 font-medium">{shipmentDetails.plannedShipmentDate ? formatDate(shipmentDetails.plannedShipmentDate) : 'Henüz Planlanmadı'}</p></div>
                         <div><p className="text-xs text-amber-700 mb-1">Şoför</p><p className="text-amber-900 font-medium">{shipmentDetails.driver?.name || 'Atanmamış'}</p></div>
-                        <div><p className="text-xs text-amber-700 mb-1">Araç</p><p className="text-amber-900 font-medium">{shipmentDetails.vehicle ? `${shipmentDetails.vehicle.licensePlate} (${shipmentDetails.vehicle.vehicleType})` : 'Atanmamış'}</p></div></div>
+                        <div><p className="text-xs text-amber-700 mb-1">Araç</p><p className="text-amber-900 font-medium">{shipmentDetails.vehicle ? `${shipmentDetails.vehicle.licensePlate} (${shipmentDetails.vehicle.vehicleType})` : 'Atanmamış'}</p></div>
+                        {shipmentDetails.shipmentNote && (
+                            <div className="col-span-1 md:col-span-2 lg:col-span-5 pt-2 border-t border-amber-100 mt-1">
+                                <p className="text-xs text-amber-700 mb-1 font-semibold">Sevkiyat Notu</p>
+                                <p className="text-amber-900 text-sm whitespace-pre-wrap bg-amber-50 p-2 rounded-lg border border-amber-100">{shipmentDetails.shipmentNote}</p>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

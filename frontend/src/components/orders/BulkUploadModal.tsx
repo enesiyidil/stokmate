@@ -187,6 +187,7 @@ export default function BulkUploadModal({ onClose, onSuccess }: Props) {
                     orderDate: order.orderDate,
                     orderType: order.orderType || 'STOCK',
                     salesConsultantId: order.salesConsultantId,
+                    shipmentNote: order.shipmentNote || undefined,
                     products: order.products.map(p => ({
                         productCode: p.productCode,
                         productName: p.productName,
@@ -274,6 +275,7 @@ export default function BulkUploadModal({ onClose, onSuccess }: Props) {
                     orderDate: order.orderDate,
                     orderType: order.orderType || 'STOCK',
                     salesConsultantId: order.salesConsultantId,
+                    shipmentNote: order.shipmentNote || undefined,
                     products: order.products.map(p => ({
                         productCode: p.productCode,
                         productName: p.productName,
@@ -607,6 +609,12 @@ export default function BulkUploadModal({ onClose, onSuccess }: Props) {
                                                         <p className="text-xs text-amber-700">Tarih</p>
                                                         <p className="text-amber-900">{new Date(order.orderDate).toLocaleDateString('tr-TR')}</p>
                                                     </div>
+                                                    {order.shipmentNote && (
+                                                        <div className="col-span-2 md:col-span-4">
+                                                            <p className="text-xs text-amber-700">Sevkiyat Notu</p>
+                                                            <p className="text-amber-900 text-sm">{order.shipmentNote}</p>
+                                                        </div>
+                                                    )}
                                                 </div>
 
                                                 {/* Order Type Selection */}

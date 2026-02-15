@@ -33,20 +33,12 @@ import AccessDeniedModal from './components/common/AccessDeniedModal'
 import SessionExpiredModal from './components/auth/SessionExpiredModal'
 
 import DeliveryConfirmPage from './pages/delivery/DeliveryConfirmPage'
-
-// ...
-
+import ReportsPageReal from './pages/reports/ReportsPage'
 
 
 
-const ReportsPage = () => (
-  <div className="p-6">
-    <div className="backdrop-blur-md bg-stone-900/90 border border-amber-700/40 rounded-2xl p-12 text-center shadow-2xl">
-      <h1 className="text-3xl font-bold text-amber-100 mb-4">Raporlar</h1>
-      <p className="text-amber-300">Rapor sayfası yakında...</p>
-    </div>
-  </div>
-)
+
+
 
 const Unauthorized = () => (
   <div className="min-h-screen bg-gradient-to-br from-stone-800 via-amber-900 to-orange-950 flex items-center justify-center p-4">
@@ -88,7 +80,7 @@ function App() {
               <Route path="/shipment/:orderId" element={<ShipmentDetailsPage />} />
               <Route path="/requests" element={<SupportRequestsPage />} />
               <Route path="/customers" element={<CustomersPage />} />
-              <Route path="/reports" element={<ReportsPage />} />
+              <Route path="/reports" element={<ReportsPageReal />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/support-requests" element={<SupportRequestsPage />} />
               <Route path="/about" element={<AboutPage />} />

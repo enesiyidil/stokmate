@@ -36,6 +36,7 @@ export interface ShipmentResponse {
     approvedById?: string
     approvedByName?: string
     approvalDate?: string
+    brand?: string // OAK, PINE, MAPLE
 }
 
 export interface ShipmentDetailsResponse {
@@ -76,6 +77,7 @@ export interface ShipmentDetailsResponse {
     deliveryNotes?: string
     signedDocumentUrl?: string
     deliveryPhotoUrls?: string[]
+    shipmentNote?: string
 }
 
 export interface ProductShipmentDetail {

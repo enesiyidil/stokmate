@@ -8,8 +8,10 @@ import PlanShipmentModal from '../../components/shipment/PlanShipmentModal'
 import OtpVerificationModal from '../../components/common/OtpVerificationModal'
 import FilterSearchBar from '../../components/common/FilterSearchBar'
 import ConfirmModal from '../../components/common/ConfirmModal'
+import BrandBadge from '../../components/common/BrandBadge'
 import { useAppSelector } from '../../hooks/useAuth'
 import { useToast } from '../../context/ToastContext'
+import type { Brand } from '../../constants/brandConstants'
 
 type TabKey = 'all' | 'pending' | 'awaiting' | 'ready' | 'completed'
 
@@ -54,6 +56,7 @@ const ShipmentOperationsPage: React.FC = () => {
     // Filter states
     const [searchQuery, setSearchQuery] = useState('')
     const [deliveryFilter, setDeliveryFilter] = useState<'ALL' | 'PROBLEM_FREE' | 'PROBLEMATIC' | 'NOT_DELIVERED'>('ALL')
+    const [brandFilter, setBrandFilter] = useState<'ALL' | 'OAK' | 'PINE' | 'MAPLE' | 'MARKASIZ'>('ALL')
 
     // Queries
     const { data: pendingShipments = [], isLoading: loadingPending, refetch: refetchPending } = useListPendingShipmentsQuery()
@@ -125,6 +128,15 @@ const ShipmentOperationsPage: React.FC = () => {
                     }
                 }
 
+                // Brand filter
+                if (brandFilter !== 'ALL') {
+                    if (brandFilter === 'MARKASIZ') {
+                        if (s.brand && s.brand !== '') return false
+                    } else {
+                        if (s.brand !== brandFilter) return false
+                    }
+                }
+
                 return true
             })
         }
@@ -136,7 +148,7 @@ const ShipmentOperationsPage: React.FC = () => {
             ready: filterShipments([...ready].sort(sortOldestFirst)),
             completed: filterShipments(completedSorted)
         }
-    }, [pendingShipments, awaitingShipments, readyShipments, completedShipments, finalizedShipments, searchQuery, deliveryFilter])
+    }, [pendingShipments, awaitingShipments, readyShipments, completedShipments, finalizedShipments, searchQuery, deliveryFilter, brandFilter])
 
     const activeData = dataMap[activeTab]
 
@@ -291,6 +303,12 @@ const ShipmentOperationsPage: React.FC = () => {
                             <span className="text-xs text-amber-500">Tarih</span>
                             <span className="text-amber-900 font-medium">{shipment.orderDate ? new Date(shipment.orderDate).toLocaleDateString('tr-TR') : '-'}</span>
                         </div>
+                        {shipment.brand && (
+                            <div className="flex flex-col">
+                                <span className="text-xs text-amber-500">Marka</span>
+                                <BrandBadge brand={shipment.brand as Brand} />
+                            </div>
+                        )}
                     </div>
 
                     <div className="flex items-center justify-end gap-2 pt-2 border-t border-amber-50 mt-2">
@@ -366,6 +384,7 @@ const ShipmentOperationsPage: React.FC = () => {
                     <tr className="border-b border-amber-200/50 bg-amber-50/50">
                         <th className="text-left py-4 px-6 text-sm font-semibold text-amber-900 w-64">Sevk / Kaynak</th>
                         <th className="text-left py-4 px-6 text-sm font-semibold text-amber-900">Müşteri</th>
+                        <th className="text-left py-4 px-6 text-sm font-semibold text-amber-900 w-24">Marka</th>
                         <th className="text-left py-4 px-6 text-sm font-semibold text-amber-900 w-32">Tarihler</th>
                         {(activeTab === 'completed' || activeTab === 'all') && <th className="text-left py-4 px-6 text-sm font-semibold text-amber-900 w-36">Durum</th>}
                         <th className="text-right py-4 px-6 text-sm font-semibold text-amber-900 w-40">İşlemler</th>
@@ -390,6 +409,13 @@ const ShipmentOperationsPage: React.FC = () => {
                             </td>
                             <td className="py-4 px-6">
                                 <span className="text-amber-900 font-medium">{shipment.customerName || '-'}</span>
+                            </td>
+                            <td className="py-4 px-6">
+                                {shipment.brand ? (
+                                    <BrandBadge brand={shipment.brand as Brand} />
+                                ) : (
+                                    <span className="text-amber-400">-</span>
+                                )}
                             </td>
                             <td className="py-4 px-6">
                                 <div className="flex flex-col gap-1 text-xs text-amber-700">
@@ -521,6 +547,18 @@ const ShipmentOperationsPage: React.FC = () => {
                             { key: 'PROBLEM_FREE', label: 'Sorunsuz', activeColor: 'bg-green-600' },
                             { key: 'PROBLEMATIC', label: 'Sorunlu', activeColor: 'bg-red-600' },
                             { key: 'NOT_DELIVERED', label: 'Teslim Edilmedi', activeColor: 'bg-gray-600' }
+                        ]
+                    },
+                    {
+                        label: 'Marka',
+                        value: brandFilter,
+                        onChange: (val) => setBrandFilter(val as 'ALL' | 'OAK' | 'PINE' | 'MAPLE' | 'MARKASIZ'),
+                        options: [
+                            { key: 'ALL', label: 'Tümü' },
+                            { key: 'OAK', label: 'Doğtaş', activeColor: 'bg-red-600' },
+                            { key: 'MAPLE', label: 'Maple', activeColor: 'bg-blue-600' },
+                            { key: 'PINE', label: 'Pine', activeColor: 'bg-purple-600' },
+                            { key: 'MARKASIZ', label: 'Markasız', activeColor: 'bg-gray-600' }
                         ]
                     }
                 ]}

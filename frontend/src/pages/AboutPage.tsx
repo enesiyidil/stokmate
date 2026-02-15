@@ -60,13 +60,13 @@ const AboutPage: React.FC = () => {
                         <Globe className="w-5 h-5" />
                         Uygulama Bilgileri
                     </h2>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
                             <div className="flex items-center gap-3 mb-2">
                                 <Tag className="w-5 h-5 text-amber-600" />
                                 <span className="text-sm text-amber-700">Sürüm</span>
                             </div>
-                            <p className="text-lg font-bold text-amber-900 font-mono">v2.0.1.7</p>
+                            <p className="text-lg font-bold text-amber-900 font-mono">v1-b2.4.31</p>
                         </div>
                         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                             <div className="flex items-center gap-3 mb-2">
@@ -81,6 +81,13 @@ const AboutPage: React.FC = () => {
                                 <span className="text-sm text-green-700">Yayın Tarihi</span>
                             </div>
                             <p className="text-lg font-bold text-green-900">05.01.2026</p>
+                        </div>
+                        <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
+                            <div className="flex items-center gap-3 mb-2">
+                                <Calendar className="w-5 h-5 text-purple-600" />
+                                <span className="text-sm text-purple-700">Güncelleme</span>
+                            </div>
+                            <p className="text-lg font-bold text-purple-900">11.02.2026</p>
                         </div>
                     </div>
                 </div>
