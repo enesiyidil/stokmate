@@ -196,10 +196,17 @@ public class OrderService {
                     String prosapContractNameSurname = getCellValue(dataRow,
                             columnMapping.prosapContractNameSurnameIndex);
                     LocalDate orderDate = parseDateCell(dataRow, columnMapping.orderDateIndex);
+                    String note = getCellValue(dataRow, columnMapping.noteIndex);
 
                     log.info("Creating new order group for order no: {}", rowOrderNo);
-                    return new OrderGroupData(rowOrderNo, prosapContractNo, prosapContractNameSurname, orderDate,
-                            new java.util.ArrayList<>());
+                    return OrderGroupData.builder()
+                            .orderNo(rowOrderNo)
+                            .prosapContractNo(prosapContractNo)
+                            .prosapContractNameSurname(prosapContractNameSurname)
+                            .orderDate(orderDate)
+                            .shipmentNote(note)
+                            .products(new java.util.ArrayList<>())
+                            .build();
                 });
 
                 // Extract product from this row
@@ -256,6 +263,12 @@ public class OrderService {
         }
 
         Order order = orderMapper.toEntity(request);
+
+        // Manual mapping to ensure persistence if mapper is stale
+        if (request.getShipmentNote() != null) {
+            order.setShipmentNote(request.getShipmentNote());
+        }
+        log.info("Creating order with ShipmentNote: '{}'", order.getShipmentNote());
 
         // Handle customer-specific order
         if (request.getCustomerId() != null) {
@@ -337,7 +350,12 @@ public class OrderService {
     public OrderResponse getOrderById(UUID orderId) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new NotFoundException("Order not found"));
-        return orderMapper.toResponse(order);
+        OrderResponse response = orderMapper.toResponse(order);
+
+        // Manual mapping for display
+        response.setShipmentNote(order.getShipmentNote());
+
+        return response;
     }
 
     /**
@@ -781,6 +799,7 @@ public class OrderService {
                 case "KDV(%)" -> mapping.vatIndex = i;
                 case "Ödeme Koşulu" -> mapping.paymentConditionIndex = i;
                 case "ÖDK Tanımı" -> mapping.paymentConditionDefinitionIndex = i;
+                case "Not" -> mapping.noteIndex = i;
                 default -> {
                     // Try to match quantity columns
                     if (header.contains("Miktar") || header.contains("Qty") || header.contains("Quantity")) {
@@ -881,6 +900,11 @@ public class OrderService {
 
         if (request.getOrderNotes() != null) {
             order.setOrderNotes(request.getOrderNotes());
+            somethingChanged = true;
+        }
+
+        if (request.getShipmentNote() != null) {
+            order.setShipmentNote(request.getShipmentNote());
             somethingChanged = true;
         }
 
@@ -1057,6 +1081,7 @@ public class OrderService {
         int paymentConditionIndex = -1;
         int paymentConditionDefinitionIndex = -1;
         int quantityIndex = -1;
+        int noteIndex = -1;
     }
 
     /**

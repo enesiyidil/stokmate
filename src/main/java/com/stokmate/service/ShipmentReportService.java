@@ -229,6 +229,21 @@ public class ShipmentReportService {
                         drawText(cs, fitted, x + inset + 6, bodyY + bodyH - inset - 16, PDType1Font.HELVETICA_BOLD, 8);
                 }
 
+                // "NOT: ..." (shipmentNote from Excel)
+                if (details.getShipmentNote() != null && !details.getShipmentNote().trim().isEmpty()) {
+                        String noteLine = "NOT: " + normalizeText(details.getShipmentNote());
+                        float maxTextW = (width - 2 * inset) - 12;
+                        float noteStartY = bodyY + bodyH - inset - 30;
+                        float lineHeight = 10f;
+
+                        List<String> lines = wrapText(noteLine, PDType1Font.HELVETICA, 7, maxTextW);
+                        int maxLines = 7;
+                        for (int li = 0; li < Math.min(lines.size(), maxLines); li++) {
+                                drawText(cs, lines.get(li), x + inset + 6, noteStartY - (li * lineHeight),
+                                                PDType1Font.HELVETICA, 7);
+                        }
+                }
+
                 // TESLIM TARIHI label + small box
                 float gapBelow = 10f;
                 float labelY = bodyY - gapBelow - 10f;
