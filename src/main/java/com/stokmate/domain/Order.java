@@ -131,6 +131,9 @@ public class Order extends AuditableEntity {
     @Column(columnDefinition = "TEXT")
     private String orderNotes;
 
+    @Column(columnDefinition = "TEXT")
+    private String shipmentNote;
+
     @PrePersist
     public void prePersist() {
         if (this.status == null) {

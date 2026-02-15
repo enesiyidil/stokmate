@@ -71,6 +71,8 @@ public class OrderResponse {
 
     private String orderNotes;
 
+    private String shipmentNote;
+
     // Partial delivery tracking fields (ORDER level)
     private Boolean partialDeliveryMarked;
     private String deliveryNotes;
