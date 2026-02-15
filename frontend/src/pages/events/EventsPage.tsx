@@ -105,10 +105,10 @@ export function EventsPage() {
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-3">
                                                         <div className="w-8 h-8 bg-gradient-to-br from-amber-600 to-orange-600 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm">
-                                                            {activity.userFullName.charAt(0)}
+                                                            {(activity.userFullName ?? '?').charAt(0)}
                                                         </div>
                                                         <div>
-                                                            <div className="font-medium text-gray-900">{activity.userFullName}</div>
+                                                            <div className="font-medium text-gray-900">{activity.userFullName ?? 'Bilinmeyen Kullanıcı'}</div>
                                                             <div className="text-xs text-gray-500">{activity.userEmail}</div>
                                                         </div>
                                                     </div>

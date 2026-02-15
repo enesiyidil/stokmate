@@ -479,6 +479,12 @@ export default function OrderDetailsPage() {
                                 <p className="text-amber-400">-</p>
                             )}
                         </div>
+                        {order.shipmentNote && (
+                            <div className="col-span-1 md:col-span-2 lg:col-span-5 pt-2 border-t border-amber-100 mt-1">
+                                <p className="text-xs text-amber-700 mb-1 font-semibold">Sevkiyat Notu</p>
+                                <p className="text-amber-900 text-sm whitespace-pre-wrap bg-amber-50 p-2 rounded-lg border border-amber-100">{order.shipmentNote}</p>
+                            </div>
+                        )}
                     </div>
 
                     {/* Sales Consultant Info - Only for CUSTOMER_SPECIFIC orders */}

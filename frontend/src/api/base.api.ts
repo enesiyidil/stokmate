@@ -57,7 +57,7 @@ const baseQueryWithAccessDeniedHandler: typeof rawBaseQuery = async (args, api, 
 export const baseApi = createApi({
     reducerPath: 'api',
     baseQuery: baseQueryWithAccessDeniedHandler,
-    tagTypes: ['Auth', 'Product', 'Store', 'User', 'Order', 'Orders', 'OrderReceipt', 'Sales', 'Requests', 'Users', 'OrderReceipts', 'Stores', 'StoreEmployees', 'ProductAcceptances', 'Vehicles', 'Notifications', 'Announcement'],
+    tagTypes: ['Auth', 'Product', 'Store', 'User', 'Order', 'Orders', 'OrderReceipt', 'Sales', 'Requests', 'Users', 'OrderReceipts', 'Stores', 'StoreEmployees', 'ProductAcceptances', 'Vehicles', 'Notifications', 'Announcement', 'Reports'],
     endpoints: () => ({}),
 })
 
