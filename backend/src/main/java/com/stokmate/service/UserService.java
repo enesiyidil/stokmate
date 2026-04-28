@@ -78,6 +78,16 @@ public class UserService {
                 .collect(Collectors.toList());
     }
 
+    public org.springframework.data.domain.Page<UserResponse> getAllUsersPaged(
+            String search, org.springframework.data.domain.Pageable pageable) {
+        String searchParam = null;
+        if (search != null && !search.isBlank()) {
+            searchParam = "%" + search.toLowerCase() + "%";
+        }
+        return userRepository.findPagedWithSearch(searchParam, pageable)
+                .map(this::toUserResponse);
+    }
+
     @Transactional
     public UserResponse createUser(CreateUserRequest request) {
         // Check if email already exists

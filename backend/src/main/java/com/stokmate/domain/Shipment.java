@@ -85,6 +85,28 @@ public class Shipment extends AuditableEntity {
 
     private String receiverName;
 
+    // Problem resolution fields
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean problemResolved = false;
+
+    @Enumerated(EnumType.STRING)
+    private ProblemResolutionType resolutionType;
+
+    @Lob
+    @Column(columnDefinition = "TEXT")
+    private String resolutionDescription;
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "shipment_resolution_photos", joinColumns = @JoinColumn(name = "shipment_id"))
+    @Column(name = "photo_path")
+    private java.util.Set<String> resolutionPhotoPaths = new java.util.HashSet<>();
+
+    private LocalDateTime resolvedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "resolved_by_id")
+    private User resolvedBy;
+
     /**
      * Helper method to add ShipmentItem with proper bidirectional relationship
      */

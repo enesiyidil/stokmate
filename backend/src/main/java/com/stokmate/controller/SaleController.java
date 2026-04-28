@@ -36,11 +36,13 @@ public class SaleController {
 
   @GetMapping
   @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE', 'OPERATIONS_MANAGER')")
-  @Operation(summary = "List sales with filters")
-  public List<SaleResponse> list(
-      @RequestParam(name = "status", required = false) SaleStatus status,
-      @RequestParam(name = "consultantId", required = false) UUID consultantId) {
-    return saleService.list(status, consultantId);
+  @Operation(summary = "List sales (paginated)")
+  public org.springframework.data.domain.Page<SaleResponse> list(
+      @RequestParam(name = "statusGroup", required = false) String statusGroup,
+      @RequestParam(name = "consultantId", required = false) UUID consultantId,
+      @RequestParam(name = "search", required = false) String search,
+      org.springframework.data.domain.Pageable pageable) {
+    return saleService.listPaged(statusGroup, consultantId, search, pageable);
   }
 
   @GetMapping("/{id}")

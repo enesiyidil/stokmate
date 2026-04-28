@@ -21,6 +21,19 @@ public class ShipmentController {
     private final ShipmentService shipmentService;
     private final ShipmentReportService shipmentReportService;
 
+    // Unified paginated list endpoint
+    @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE', 'OPERATIONS_MANAGER', 'LOGISTICS_MANAGER')")
+    public org.springframework.data.domain.Page<ShipmentResponse> listShipments(
+            @RequestParam(value = "statusGroup", required = false) String statusGroup,
+            @RequestParam(value = "search", required = false) String search,
+            @RequestParam(value = "deliveryStatus", required = false) String deliveryStatus,
+            @RequestParam(value = "brand", required = false) String brand,
+            @RequestParam(value = "problemResolved", required = false) String problemResolved,
+            org.springframework.data.domain.Pageable pageable) {
+        return shipmentService.listPaged(statusGroup, search, deliveryStatus, brand, problemResolved, pageable);
+    }
+
     // View/Plan/Complete: LOGISTICS_MANAGER, DIRECTOR, MANAGER, ADMIN,
     // OPERATIONS_MANAGER; View only:
     // STORE roles
@@ -304,6 +317,20 @@ public class ShipmentController {
             @PathVariable UUID shipmentId,
             @RequestBody UpdateVehicleRequest request) {
         shipmentService.updateShipmentVehicle(shipmentId, request);
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * Resolve a problematic shipment manually (with description and photos)
+     */
+    @PostMapping("/{shipmentId}/resolve-problem")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'LOGISTICS_MANAGER', 'OPERATIONS_MANAGER')")
+    public ResponseEntity<Void> resolveShipmentProblem(
+            @PathVariable UUID shipmentId,
+            @ModelAttribute ResolveProblemRequest request,
+            @AuthenticationPrincipal UserPrincipal userPrincipal) throws Exception {
+        request.setShipmentId(shipmentId);
+        shipmentService.resolveShipmentProblem(request, userPrincipal.getUser().getId());
         return ResponseEntity.ok().build();
     }
 

@@ -156,6 +156,16 @@ public class OrderActivityService {
         } else if ("INVOICE".equalsIgnoreCase(category)) {
             types.add(ActivityType.INVOICE_UPLOADED);
             types.add(ActivityType.INVOICE_DELETED);
+        } else if ("CROSS_CONVERSION".equalsIgnoreCase(category)) {
+            types.add(ActivityType.CROSS_CONVERSION_CREATED);
+            types.add(ActivityType.CROSS_CONVERSION_UPDATED);
+            types.add(ActivityType.CROSS_CONVERSION_DELETED);
+        } else if ("BALANCE".equalsIgnoreCase(category)) {
+            types.add(ActivityType.BALANCE_CREATED);
+            types.add(ActivityType.BALANCE_PAYMENT_ADDED);
+            types.add(ActivityType.BALANCE_UPDATED);
+            types.add(ActivityType.BALANCE_DELETED);
+            types.add(ActivityType.BALANCE_CLOSED);
         }
         return types;
     }

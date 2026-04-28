@@ -194,6 +194,20 @@ public class OrderReceiptService {
         }
 
         @Transactional(readOnly = true)
+        public org.springframework.data.domain.Page<OrderReceiptResponse> listAllPaged(
+                        String search,
+                        OrderReceiptStatus status,
+                        UUID receivedBy,
+                        UUID approvedBy,
+                        org.springframework.data.domain.Pageable pageable) {
+
+                org.springframework.data.domain.Page<OrderReceipt> page = orderReceiptRepository.findAllPaged(
+                                search, status, receivedBy, approvedBy, pageable);
+
+                return page.map(this::toResponseWithPhotos);
+        }
+
+        @Transactional(readOnly = true)
         public OrderReceiptResponse getReceiptById(UUID id) {
                 OrderReceipt receipt = orderReceiptRepository.findById(id)
                                 .orElseThrow(() -> new BadRequestException("Receipt not found"));
