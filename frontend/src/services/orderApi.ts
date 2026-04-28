@@ -276,13 +276,23 @@ export const orderApi = api.injectEndpoints({
         getDashboardStats: builder.query<DashboardStatsDTO, void>({
             query: () => '/dashboard/stats',
         }),
-        // List all orders or filter by status
-        listOrders: builder.query<OrderResponse[], { status?: OrderStatus; includeHidden?: boolean }>({
-            query: ({ status, includeHidden }) => ({
+        // List all orders (paginated)
+        listOrders: builder.query<import('../types/common').PageResponse<OrderResponse>, {
+            page?: number; size?: number; search?: string;
+            statusGroup?: string; orderType?: string; brand?: string;
+            consultantId?: string; includeHidden?: boolean
+        }>({
+            query: (params) => ({
                 url: '/orders',
                 params: {
-                    ...(status && { status }),
-                    ...(includeHidden && { includeHidden }),
+                    page: params.page ?? 0,
+                    size: params.size ?? 50,
+                    ...(params.search && { search: params.search }),
+                    ...(params.statusGroup && { statusGroup: params.statusGroup }),
+                    ...(params.orderType && { orderType: params.orderType }),
+                    ...(params.brand && { brand: params.brand }),
+                    ...(params.consultantId && { consultantId: params.consultantId }),
+                    includeHidden: params.includeHidden ?? true,
                 },
             }),
             providesTags: ['Orders'],

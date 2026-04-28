@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { X, Building2, Save } from 'lucide-react'
 import { useUpdateStoreMutation, type StoreResponse } from '../../services/storeApi'
 import { useToast } from '../../context/ToastContext'
+import LinkedNotesWidget from '../notes/LinkedNotesWidget'
 
 interface EditStoreModalProps {
     store: StoreResponse
@@ -136,6 +137,14 @@ export default function EditStoreModal({ store, onClose, onSuccess }: EditStoreM
                             </label>
                         </div>
                     </form>
+
+                    {/* Linked Notes Widget */}
+                    <div className="px-6 pb-6 mt-4">
+                        <LinkedNotesWidget
+                            entityType="STORE"
+                            entityId={store.id}
+                        />
+                    </div>
                 </div>
 
                 {/* Footer */}

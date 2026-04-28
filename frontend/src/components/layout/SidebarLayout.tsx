@@ -19,12 +19,17 @@ import {
     Bell,
     UserCircle,
     MessageSquare,
-    Info
+    Info,
+    Repeat,
+    Wallet,
+    ClipboardEdit,
+    MessageSquarePlus,
 } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '../../hooks/useAuth'
 import { logout, setUser } from '../../store/authSlice'
 import { useGetUserProfileQuery } from '../../services/userApi'
 import { TopbarProvider, useTopbar } from '../../context/TopbarContext'
+import FloatingFeedbackButton from '../feedback/FloatingFeedbackButton'
 import { useUi } from '../../context/UiContext'
 import { getRoleDisplayName } from '../../constants/roles'
 import NotificationBell from '../notifications/NotificationBell'
@@ -64,10 +69,22 @@ const menuItems: MenuItem[] = [
         roles: ['ADMIN', 'MANAGER', 'DIRECTOR', 'OPERATIONS_MANAGER', 'LOGISTICS_MANAGER', 'STORE_MANAGER', 'STORE_EMPLOYEE']
     },
     {
+        name: 'Çapraz Dönüştürme',
+        icon: Repeat,
+        path: '/cross-conversions',
+        roles: ['ADMIN', 'MANAGER', 'DIRECTOR', 'OPERATIONS_MANAGER', 'LOGISTICS_MANAGER', 'STORE_MANAGER', 'STORE_EMPLOYEE']
+    },
+    {
         name: 'Müşteriler',
         icon: UserCircle,
         path: '/customers',
         roles: ['ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER']
+    },
+    {
+        name: 'Bakiye Defteri',
+        icon: Wallet,
+        path: '/balance-ledger',
+        roles: ['ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE']
     },
     {
         name: 'Kullanıcılar',
@@ -98,6 +115,11 @@ const menuItems: MenuItem[] = [
         icon: FileText,
         path: '/reports',
         roles: ['ADMIN', 'MANAGER']
+    },
+    {
+        name: 'Not Defteri',
+        icon: ClipboardEdit,
+        path: '/notes',
     },
 ]
 
@@ -180,14 +202,16 @@ function SidebarLayoutContent({ children }: SidebarLayoutProps) {
                     </div>
 
                     {/* Navigation */}
-                    <nav className="flex-1 p-4 overflow-y-auto">
-                        <div className="space-y-2">
+                    <nav
+                        className="flex-1 px-3 py-2 overflow-hidden flex flex-col min-h-0"
+                    >
+                        <div className="flex-1 flex flex-col justify-evenly">
                             {filteredMenuItems.map((item) => (
                                 <NavLink
                                     key={item.path}
                                     to={item.path}
                                     className={({ isActive }) => `
-                                        group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300
+                                        group flex items-center gap-3 px-3 py-1.5 rounded-xl transition-all duration-300
                                         ${isActive
                                             ? 'bg-gradient-to-r from-amber-700/50 to-orange-700/50 text-white shadow-lg border border-amber-600/40'
                                             : 'text-amber-100 hover:bg-amber-800/40 hover:text-white'
@@ -195,9 +219,9 @@ function SidebarLayoutContent({ children }: SidebarLayoutProps) {
                                         ${isCollapsed ? 'justify-center' : ''}
                                     `}
                                 >
-                                    <item.icon className="w-5 h-5 flex-shrink-0" />
+                                    <item.icon className="w-4 h-4 xl:w-[18px] xl:h-[18px] flex-shrink-0" />
                                     {!isCollapsed && (
-                                        <span className="font-medium animate-fade-in">{item.name}</span>
+                                        <span className="font-medium text-[13px] xl:text-sm truncate animate-fade-in">{item.name}</span>
                                     )}
                                 </NavLink>
                             ))}
@@ -254,6 +278,13 @@ function SidebarLayoutContent({ children }: SidebarLayoutProps) {
                                         <span className="text-sm font-medium">Talepler</span>
                                     </button>
                                     <button
+                                        onClick={() => handleUserMenuClick('/feedback')}
+                                        className="w-full flex items-center gap-3 px-4 py-3 text-amber-200 hover:bg-amber-800/50 hover:text-amber-50 transition-all duration-300 border-t border-amber-600/40"
+                                    >
+                                        <MessageSquarePlus className="w-4 h-4" />
+                                        <span className="text-sm font-medium">Geri Bildirim</span>
+                                    </button>
+                                    <button
                                         onClick={() => handleUserMenuClick('/settings')}
                                         className="w-full flex items-center gap-3 px-4 py-3 text-amber-200 hover:bg-amber-800/50 hover:text-amber-50 transition-all duration-300 border-t border-amber-600/40"
                                     >
@@ -282,7 +313,7 @@ function SidebarLayoutContent({ children }: SidebarLayoutProps) {
                     {/* Version Tag - Below User Section */}
                     {!isCollapsed && (
                         <div className="text-center py-1">
-                            <span className="text-[10px] text-amber-500/50 font-mono">v1-b2.4.31</span>
+                            <span className="text-[10px] text-amber-500/50 font-mono">v1-b2.8.232</span>
                         </div>
                     )}
 
@@ -342,6 +373,8 @@ function SidebarLayoutContent({ children }: SidebarLayoutProps) {
                     {children}
                 </div>
             </main>
+
+            <FloatingFeedbackButton />
         </div>
     )
 }

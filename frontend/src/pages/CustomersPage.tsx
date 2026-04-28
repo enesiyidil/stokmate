@@ -2,26 +2,44 @@ import { useState, useEffect } from 'react'
 import { Users, Plus, Edit, Trash2, Search, AlertCircle } from 'lucide-react'
 import { useTopbar } from '../context/TopbarContext'
 import {
-    useListCustomersQuery,
+    useListCustomersPagedQuery,
     useDeleteCustomerMutation
 } from '../services/customerApi'
 import type { CustomerResponse } from '../services/customerApi'
 import CustomerModal from '../components/customers/CustomerModal'
 import OtpVerificationModal from '../components/common/OtpVerificationModal'
 import ConfirmModal from '../components/common/ConfirmModal'
+import Pagination from '../components/common/Pagination'
 import { useAppSelector } from '../hooks/useAuth'
 import { useToast } from '../context/ToastContext'
 
 export default function CustomersPage() {
     const { setTopbarContent } = useTopbar()
-    const { data: customers = [], isLoading } = useListCustomersQuery()
     const [deleteCustomer] = useDeleteCustomerMutation()
     const { user } = useAppSelector((state) => state.auth)
     const { success, error } = useToast()
 
     const [searchQuery, setSearchQuery] = useState('')
+    const [debouncedSearch, setDebouncedSearch] = useState('')
+    const [page, setPage] = useState(0)
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [editingCustomer, setEditingCustomer] = useState<CustomerResponse | null>(null)
+
+    // Debounce
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearch(searchQuery)
+            setPage(0)
+        }, 400)
+        return () => clearTimeout(timer)
+    }, [searchQuery])
+
+    const { data: pagedData, isLoading } = useListCustomersPagedQuery({
+        page,
+        size: 50,
+        search: debouncedSearch || undefined,
+    })
+    const customers = pagedData?.content || []
 
     // 2FA & Modal States
     const [showOtpModal, setShowOtpModal] = useState(false)
@@ -91,10 +109,7 @@ export default function CustomersPage() {
         })
     }
 
-    const filteredCustomers = customers.filter(customer => {
-        const fullName = `${customer.firstName} ${customer.lastName}`.toLowerCase()
-        return fullName.includes(searchQuery.toLowerCase())
-    })
+
 
     return (
         <div className="p-6 space-y-6">
@@ -118,7 +133,7 @@ export default function CustomersPage() {
             <div className="backdrop-blur-sm bg-white/95 border border-amber-200 rounded-2xl overflow-hidden shadow-xl">
                 {isLoading ? (
                     <div className="p-12 text-center text-amber-700">Yükleniyor...</div>
-                ) : filteredCustomers.length === 0 ? (
+                ) : customers.length === 0 ? (
                     <div className="flex flex-col items-center justify-center p-12 text-center">
                         <AlertCircle className="w-16 h-16 text-amber-600 mb-4" />
                         <h3 className="text-xl font-semibold text-amber-900 mb-2">
@@ -155,7 +170,7 @@ export default function CustomersPage() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {filteredCustomers.map((customer) => (
+                                {customers.map((customer) => (
                                     <tr key={customer.id} className="border-b border-amber-100 hover:bg-amber-50 transition-colors">
                                         <td className="px-6 py-4">
                                             <span className="text-amber-900 font-medium">
@@ -196,6 +211,16 @@ export default function CustomersPage() {
                     </div>
                 )}
             </div>
+
+            {/* Pagination */}
+            {pagedData && pagedData.totalPages > 1 && (
+                <Pagination
+                    page={page}
+                    totalPages={pagedData.totalPages}
+                    totalElements={pagedData.totalElements}
+                    onPageChange={setPage}
+                />
+            )}
 
             {/* Modal */}
             {isModalOpen && (

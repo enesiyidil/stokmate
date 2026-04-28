@@ -2,7 +2,7 @@ import React, { useRef, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
     User, FileText, CheckCircle, Clock, XCircle,
-    Download, Upload, ArrowLeft, Package, Activity, Eye
+    Download, Upload, ArrowLeft, Package, Activity, Eye, Truck
 } from 'lucide-react'
 import {
     useGetSaleQuery,
@@ -109,6 +109,17 @@ const SaleDetailsPage: React.FC = () => {
                                 <span className="hidden lg:inline">İptal Et</span>
                             </button>
                         )}
+
+                        {/* Navigate to Shipments filtered by this sale */}
+                        <button
+                            onClick={() => navigate(`/shipment?search=${encodeURIComponent(sale.saleNo)}`)}
+                            title="Bu satışın sevkiyatlarını gör"
+                            className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-lg transition-colors text-sm"
+                        >
+                            <Truck className="w-4 h-4" />
+                            <span className="hidden lg:inline">Sevkiyatlar</span>
+                        </button>
+
                     </div>
                 ),
                 filters: (

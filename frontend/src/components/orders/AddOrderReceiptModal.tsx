@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { X, Search, Package, ChevronRight, Truck, User, FileText, Upload, AlertCircle, ArrowLeft } from 'lucide-react'
 import { useListOrdersQuery } from '../../services/orderApi'
 import { useCreateOrderReceiptMutation } from '../../services/orderReceiptApi'
@@ -18,6 +18,14 @@ export default function AddOrderReceiptModal({ isOpen, onClose, onSuccess }: Add
     const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
     const [selectedProduct, setSelectedProduct] = useState<any | null>(null)
     const [searchQuery, setSearchQuery] = useState('')
+    const [debouncedSearch, setDebouncedSearch] = useState('')
+
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearch(searchQuery)
+        }, 400)
+        return () => clearTimeout(timer)
+    }, [searchQuery])
 
     // Form State
     const [receivedQuantity, setReceivedQuantity] = useState('')
@@ -33,7 +41,11 @@ export default function AddOrderReceiptModal({ isOpen, onClose, onSuccess }: Add
     const { data: vehicles = [] } = useListVehiclesQuery()
 
     // Fetch all orders including hidden (SSH) ones
-    const { data: orders = [], isLoading: isLoadingOrders } = useListOrdersQuery({ includeHidden: true })
+    const { data: pagedOrders, isLoading: isLoadingOrders } = useListOrdersQuery({
+        includeHidden: true,
+        size: 50,
+        search: debouncedSearch || undefined
+    })
 
     const activeOrders = useMemo(() => {
         const activeStatuses = [
@@ -46,7 +58,8 @@ export default function AddOrderReceiptModal({ isOpen, onClose, onSuccess }: Add
             'PARTIALLY_SHIPPED',
             'DEVAM_EDIYOR'
         ]
-        return orders.filter(order => activeStatuses.includes(order.status))
+        const ordersList = pagedOrders?.content || []
+        return ordersList.filter(order => activeStatuses.includes(order.status))
             .filter(order =>
                 order.orderNo.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 order.prosapContractNameSurname?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -55,11 +68,12 @@ export default function AddOrderReceiptModal({ isOpen, onClose, onSuccess }: Add
             .filter(order =>
                 order.products.some(product => (product.remainingQuantity ?? product.quantity) > 0)
             )
-    }, [orders, searchQuery])
+    }, [pagedOrders, searchQuery])
 
-    const selectedOrder = useMemo(() =>
-        orders.find(o => o.id === selectedOrderId),
-        [orders, selectedOrderId])
+    const selectedOrder = useMemo(() => {
+        const ordersList = pagedOrders?.content || []
+        return ordersList.find(o => o.id === selectedOrderId)
+    }, [pagedOrders, selectedOrderId])
 
     const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files) {
@@ -176,8 +190,8 @@ export default function AddOrderReceiptModal({ isOpen, onClose, onSuccess }: Add
                                                             {order.products.length} Ürün
                                                         </span>
                                                         <span className={`text-xs px-2 py-0.5 rounded-lg border ${order.orderType === 'STOCK' && order.convertedFromCustomer
-                                                                ? 'bg-red-100 text-red-800 border-red-300'
-                                                                : 'bg-blue-100 text-blue-800 border-blue-300'
+                                                            ? 'bg-red-100 text-red-800 border-red-300'
+                                                            : 'bg-blue-100 text-blue-800 border-blue-300'
                                                             }`}>
                                                             {order.orderType === 'STOCK' ? (order.convertedFromCustomer ? '📦 İptal Stoğu' : '📦 Stok') :
                                                                 order.orderType === 'CUSTOMER_SPECIFIC' ? '👤 Müşteriye Özel' :

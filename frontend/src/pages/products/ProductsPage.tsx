@@ -11,6 +11,7 @@ import { useAppSelector } from '../../hooks/useAuth'
 import { useToast } from '../../context/ToastContext'
 import BrandBadge from '../../components/common/BrandBadge'
 import FilterSearchBar from '../../components/common/FilterSearchBar'
+import Pagination from '../../components/common/Pagination'
 import ConfirmModal from '../../components/common/ConfirmModal'
 import OtpVerificationModal from '../../components/common/OtpVerificationModal'
 
@@ -21,6 +22,7 @@ export default function ProductsPage() {
     const [showAddModal, setShowAddModal] = useState(false)
     const [editingProduct, setEditingProduct] = useState<ProductResponse | null>(null)
     const [searchQuery, setSearchQuery] = useState('')
+    const [debouncedSearch, setDebouncedSearch] = useState('')
     const [page, setPage] = useState(0)
     const { success, error } = useToast()
 
@@ -58,8 +60,24 @@ export default function ProductsPage() {
     // Image preview states
     const [previewImage, setPreviewImage] = useState<string | null>(null)
 
+    // Debounce search
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearch(searchQuery)
+            setPage(0)
+        }, 400)
+        return () => clearTimeout(timer)
+    }, [searchQuery])
+
     const { setTopbarContent } = useTopbar()
-    const { data, isLoading, refetch } = useGetProductsQuery({ page, size: 20 })
+    const { data, isLoading, refetch } = useGetProductsQuery({
+        page,
+        size: 50,
+        search: debouncedSearch || undefined,
+        brand: brandFilter !== 'ALL' ? brandFilter : undefined,
+        activeForSale: statusFilter === 'ACTIVE' ? true : statusFilter === 'INACTIVE' ? false : undefined,
+        stockFilter: stockFilter !== 'ALL' ? stockFilter : undefined,
+    })
     const [deleteProduct] = useDeleteProductMutation()
     const [uploadImage] = useUploadProductImageMutation()
 
@@ -140,39 +158,12 @@ export default function ProductsPage() {
         }
     }
 
-    const filteredProducts = data?.content.filter(product => {
-        // Search filter
-        if (searchQuery.trim()) {
-            const query = searchQuery.toLocaleLowerCase('tr-TR')
-            const matchesName = product.name.toLocaleLowerCase('tr-TR').includes(query)
-            const matchesCode = product.code.toLocaleLowerCase('tr-TR').includes(query)
-            const matchesBrand = product.brand?.toLocaleLowerCase('tr-TR').includes(query)
-            if (!matchesName && !matchesCode && !matchesBrand) return false
-        }
+    const products = data?.content || []
 
-        // Status filter
-        if (statusFilter !== 'ALL') {
-            if (statusFilter === 'ACTIVE' && !product.activeForSale) return false
-            if (statusFilter === 'INACTIVE' && product.activeForSale) return false
-        }
-
-        // Stock filter
-        if (stockFilter !== 'ALL') {
-            if (stockFilter === 'IN_STOCK' && product.stockQuantity <= 0) return false
-            if (stockFilter === 'OUT_OF_STOCK' && product.stockQuantity > 0) return false
-        }
-
-        // Brand filter
-        if (brandFilter !== 'ALL') {
-            if (brandFilter === 'MARKASIZ') {
-                if (product.brand && product.brand !== '') return false
-            } else {
-                if (product.brand !== brandFilter) return false
-            }
-        }
-
-        return true
-    }) || []
+    // Reset page on filter changes
+    const handleStatusChange = (v: any) => { setStatusFilter(v); setPage(0); }
+    const handleBrandChange = (v: any) => { setBrandFilter(v); setPage(0); }
+    const handleStockChange = (v: any) => { setStockFilter(v); setPage(0); }
 
     return (
         <div className="p-6 space-y-6">
@@ -182,7 +173,7 @@ export default function ProductsPage() {
                     {
                         label: 'Durum',
                         value: statusFilter,
-                        onChange: setStatusFilter,
+                        onChange: handleStatusChange,
                         options: [
                             { key: 'ALL', label: 'Tümü' },
                             { key: 'ACTIVE', label: 'Aktif', activeColor: 'bg-green-600' },
@@ -192,7 +183,7 @@ export default function ProductsPage() {
                     {
                         label: 'Stok',
                         value: stockFilter,
-                        onChange: setStockFilter,
+                        onChange: handleStockChange,
                         options: [
                             { key: 'ALL', label: 'Tümü' },
                             { key: 'IN_STOCK', label: 'Var', activeColor: 'bg-green-600' },
@@ -202,7 +193,7 @@ export default function ProductsPage() {
                     {
                         label: 'Marka',
                         value: brandFilter,
-                        onChange: setBrandFilter,
+                        onChange: handleBrandChange,
                         options: [
                             { key: 'ALL', label: 'Tümü' },
                             { key: 'OAK', label: 'Doğtaş', activeColor: 'bg-red-600' },
@@ -223,7 +214,7 @@ export default function ProductsPage() {
                     <div className="flex items-center justify-center p-12">
                         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-400"></div>
                     </div>
-                ) : filteredProducts.length === 0 ? (
+                ) : products.length === 0 ? (
                     <div className="flex flex-col items-center justify-center p-12 text-center">
                         <AlertCircle className="w-16 h-16 text-amber-600 mb-4" />
                         <h3 className="text-xl font-semibold text-amber-900 mb-2">Ürün Bulunamadı</h3>
@@ -253,7 +244,7 @@ export default function ProductsPage() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {filteredProducts.map((product) => (
+                                {products.map((product) => (
                                     <tr
                                         key={product.id}
                                         className="border-b border-amber-100 hover:bg-amber-50 transition-colors"
@@ -359,33 +350,6 @@ export default function ProductsPage() {
                     </div>
                 )}
 
-                {/* Pagination */}
-                {data && data.totalPages > 1 && (
-                    <div className="flex items-center justify-between p-4 border-t border-white/10">
-                        <p className="text-sm text-amber-700">
-                            Toplam {data.totalElements} ürün
-                        </p>
-                        <div className="flex gap-2">
-                            <button
-                                onClick={() => setPage(Math.max(0, page - 1))}
-                                disabled={page === 0}
-                                className="px-4 py-2 bg-amber-100 text-amber-800 rounded-lg hover:bg-amber-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                Önceki
-                            </button>
-                            <span className="px-4 py-2 text-amber-900">
-                                {page + 1} / {data.totalPages}
-                            </span>
-                            <button
-                                onClick={() => setPage(Math.min(data.totalPages - 1, page + 1))}
-                                disabled={page >= data.totalPages - 1}
-                                className="px-4 py-2 bg-amber-100 text-amber-800 rounded-lg hover:bg-amber-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                Sonraki
-                            </button>
-                        </div>
-                    </div>
-                )}
             </div>
 
             {/* Add/Edit Product Modal */}
@@ -404,6 +368,15 @@ export default function ProductsPage() {
                 />
             )}
 
+            {/* Pagination */}
+            {data && data.totalPages > 1 && (
+                <Pagination
+                    page={page}
+                    totalPages={data.totalPages}
+                    totalElements={data.totalElements}
+                    onPageChange={setPage}
+                />
+            )}
             {/* Hidden File Input for Image Upload */}
             <input
                 ref={fileInputRef}

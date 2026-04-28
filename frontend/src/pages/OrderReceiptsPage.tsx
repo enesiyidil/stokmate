@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { CheckCircle, XCircle, Clock, Package, Truck, User, ClipboardCheck, Plus, Eye } from 'lucide-react'
 import { useListOrderReceiptsQuery, useApproveOrderReceiptMutation, useRejectOrderReceiptMutation, type OrderReceiptStatus, type OrderReceiptResponse } from '../services/orderReceiptApi'
@@ -12,6 +12,7 @@ import { useGetUserSummariesQuery } from '../services/userApi'
 import OrderReceiptDetailModal from '../components/orders/OrderReceiptDetailModal'
 import OtpVerificationModal from '../components/common/OtpVerificationModal'
 import ConfirmModal from '../components/common/ConfirmModal'
+import Pagination from '../components/common/Pagination'
 
 export default function OrderReceiptsPage() {
     const [searchParams] = useSearchParams()
@@ -22,6 +23,19 @@ export default function OrderReceiptsPage() {
     const [acceptedByFilter, setAcceptedByFilter] = useState<string>('ALL')
     const [approvedByFilter, setApprovedByFilter] = useState<string>('ALL')
     const [searchQuery, setSearchQuery] = useState('')
+    const [debouncedSearch, setDebouncedSearch] = useState('')
+    const [page, setPage] = useState(0)
+
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearch(searchQuery)
+        }, 400)
+        return () => clearTimeout(timer)
+    }, [searchQuery])
+
+    useEffect(() => {
+        setPage(0)
+    }, [statusFilter, acceptedByFilter, approvedByFilter, debouncedSearch])
 
     const [selectedReceiptId, setSelectedReceiptId] = useState<string | null>(null)
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
@@ -57,50 +71,21 @@ export default function OrderReceiptsPage() {
     const canApprove = currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER' || currentUser?.role === 'DIRECTOR'
     const { setTopbarContent } = useTopbar()
 
-    // Fetch ALL receipts to filter client-side
-    const { data: allReceipts = [], isLoading, refetch } = useListOrderReceiptsQuery({})
+    // Fetch paginated receipts
+    const { data: pagedData, isLoading, refetch } = useListOrderReceiptsQuery({
+        page,
+        size: 50,
+        search: debouncedSearch || undefined,
+        status: statusFilter,
+        receivedBy: acceptedByFilter,
+        approvedBy: approvedByFilter
+    })
+    const receipts = pagedData?.content || []
+
     const { data: users = [] } = useGetUserSummariesQuery()
 
     const [approveReceipt] = useApproveOrderReceiptMutation()
     const [rejectReceipt] = useRejectOrderReceiptMutation()
-
-    // Derive filter options
-    const acceptors = useMemo(() => {
-        const uniqueIds = [...new Set(allReceipts.map((r) => r.receivedBy?.id).filter(Boolean))]
-        return users.filter((u) => uniqueIds.includes(u.id))
-    }, [allReceipts, users])
-
-    const approvers = useMemo(() => {
-        const uniqueIds = [...new Set(allReceipts.map((r) => r.approvedBy?.id).filter(Boolean))]
-        return users.filter((u) => uniqueIds.includes(u.id))
-    }, [allReceipts, users])
-
-    // Filter Logic
-    const filteredReceipts = useMemo(() => {
-        return allReceipts.filter((receipt) => {
-            // Status
-            if (statusFilter !== 'ALL' && receipt.status !== statusFilter) return false
-
-            // Accepted By
-            if (acceptedByFilter !== 'ALL' && receipt.receivedBy?.id !== acceptedByFilter) return false
-
-            // Approved By
-            if (approvedByFilter !== 'ALL' && receipt.approvedBy?.id !== approvedByFilter) return false
-
-            // Search
-            if (searchQuery.trim()) {
-                const query = searchQuery.toLocaleLowerCase('tr-TR')
-                const matchOrder = receipt.orderNo?.toLocaleLowerCase('tr-TR').includes(query)
-                const matchProduct = receipt.productName?.toLocaleLowerCase('tr-TR').includes(query) ||
-                    receipt.productCode?.toLocaleLowerCase('tr-TR').includes(query)
-                const matchDriver = receipt.driverName?.toLocaleLowerCase('tr-TR').includes(query)
-
-                if (!matchOrder && !matchProduct && !matchDriver) return false
-            }
-
-            return true
-        })
-    }, [allReceipts, statusFilter, acceptedByFilter, approvedByFilter, searchQuery])
 
 
     // Update Topbar
@@ -209,7 +194,7 @@ export default function OrderReceiptsPage() {
                         type: 'dropdown',
                         options: [
                             { key: 'ALL', label: 'Tümü' },
-                            ...acceptors.map(u => ({ key: u.id, label: u.displayName || `${u.firstName} ${u.lastName}` }))
+                            ...users.map(u => ({ key: u.id, label: u.displayName || `${u.firstName} ${u.lastName}` }))
                         ]
                     },
                     {
@@ -219,7 +204,7 @@ export default function OrderReceiptsPage() {
                         type: 'dropdown',
                         options: [
                             { key: 'ALL', label: 'Tümü' },
-                            ...approvers.map(u => ({ key: u.id, label: u.displayName || `${u.firstName} ${u.lastName}` }))
+                            ...users.map(u => ({ key: u.id, label: u.displayName || `${u.firstName} ${u.lastName}` }))
                         ]
                     }
                 ]}
@@ -235,7 +220,7 @@ export default function OrderReceiptsPage() {
                     setIsDetailModalOpen(false)
                     setSelectedReceiptId(null)
                 }}
-                receipt={allReceipts.find(r => r.id === selectedReceiptId) || null}
+                receipt={receipts.find(r => r.id === selectedReceiptId) || null}
             />
 
             {/* Table View */}
@@ -266,7 +251,7 @@ export default function OrderReceiptsPage() {
                                 <tr>
                                     <td colSpan={8} className="px-6 py-12 text-center text-amber-700">Yükleniyor...</td>
                                 </tr>
-                            ) : filteredReceipts.length === 0 ? (
+                            ) : receipts.length === 0 ? (
                                 <tr>
                                     <td colSpan={8} className="px-6 py-12 text-center text-amber-700">
                                         <div className="flex flex-col items-center justify-center gap-2">
@@ -276,7 +261,7 @@ export default function OrderReceiptsPage() {
                                     </td>
                                 </tr>
                             ) : (
-                                filteredReceipts.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map((receipt) => (
+                                receipts.map((receipt) => (
                                     <tr key={receipt.id} className="border-b border-amber-100 hover:bg-amber-50 transition-colors">
                                         <td className="px-6 py-4 text-amber-900 font-medium whitespace-nowrap">
                                             {new Date(receipt.createdAt).toLocaleDateString('tr-TR')}
@@ -382,6 +367,17 @@ export default function OrderReceiptsPage() {
                         </tbody>
                     </table>
                 </div>
+
+                {pagedData && pagedData.totalPages > 1 && (
+                    <div className="p-4 border-t border-amber-200/50 bg-amber-50/30">
+                        <Pagination
+                            page={page}
+                            totalPages={pagedData.totalPages}
+                            totalElements={pagedData.totalElements}
+                            onPageChange={setPage}
+                        />
+                    </div>
+                )}
             </div>
 
             {/* OTP Modal */}

@@ -55,7 +55,23 @@ export const userApi = api.injectEndpoints({
             providesTags: ['Auth'],
         }),
         getAllUsers: builder.query<UserResponse[], void>({
-            query: () => '/users',
+            query: () => '/users?size=1000',
+            transformResponse: (response: any) => {
+                return response.content || []
+            },
+            providesTags: ['Users'],
+        }),
+        getAllUsersPaged: builder.query<import('../types/common').PageResponse<UserResponse>, {
+            page?: number; size?: number; search?: string
+        }>({
+            query: (params) => ({
+                url: '/users',
+                params: {
+                    page: params?.page ?? 0,
+                    size: params?.size ?? 50,
+                    ...(params?.search && { search: params.search }),
+                }
+            }),
             providesTags: ['Users'],
         }),
         getUserSummaries: builder.query<UserSummaryResponse[], void>({
@@ -146,6 +162,7 @@ export const userApi = api.injectEndpoints({
 export const {
     useGetUserProfileQuery,
     useGetAllUsersQuery,
+    useGetAllUsersPagedQuery,
     useGetUserSummariesQuery,
     useCreateUserMutation,
     useUpdateProfileMutation,

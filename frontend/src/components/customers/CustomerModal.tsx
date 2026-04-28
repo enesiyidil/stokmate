@@ -3,6 +3,7 @@ import { X, Save, Users } from 'lucide-react'
 import { useCreateCustomerMutation, useUpdateCustomerMutation } from '../../services/customerApi'
 import type { CustomerRequest, CustomerResponse } from '../../services/customerApi'
 import { useToast } from '../../context/ToastContext'
+import LinkedNotesWidget from '../notes/LinkedNotesWidget'
 
 interface CustomerModalProps {
     isOpen: boolean
@@ -256,6 +257,16 @@ export default function CustomerModal({ isOpen, onClose, customer }: CustomerMod
                             </div>
                         </div>
                     </form>
+
+                    {/* Linked Notes Widget (Only shown when editing an existing customer) */}
+                    {customer && (
+                        <div className="px-6 pb-6">
+                            <LinkedNotesWidget
+                                entityType="CUSTOMER"
+                                entityId={customer.id}
+                            />
+                        </div>
+                    )}
                 </div>
 
                 {/* Footer */}

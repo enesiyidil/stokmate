@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
-import { Users, Plus, Trash2, Mail, User, AlertCircle, Power, Shield, Lock } from 'lucide-react'
-import { useGetAllUsersQuery, useDeleteUserMutation, useToggleUserActiveMutation, useToggle2FAMutation } from '../services/userApi'
+import { Users, Plus, Trash2, Mail, User, AlertCircle, Power, Shield, Lock, Search } from 'lucide-react'
+import { useGetAllUsersPagedQuery, useDeleteUserMutation, useToggleUserActiveMutation, useToggle2FAMutation } from '../services/userApi'
 import AddUserModal from '../components/users/AddUserModal'
 import EditUserRoleModal from '../components/users/EditUserRoleModal'
 import DeleteUserModal from '../components/users/DeleteUserModal'
 import ConfirmToggleActiveModal from '../components/users/ConfirmToggleActiveModal'
 import OtpVerificationModal from '../components/common/OtpVerificationModal'
+import Pagination from '../components/common/Pagination'
 import { useTopbar } from '../context/TopbarContext'
 import { useAppSelector } from '../hooks/useAuth'
 import { useToast } from '../context/ToastContext'
@@ -16,9 +17,27 @@ export default function UsersPage() {
     const [showDeleteModal, setShowDeleteModal] = useState(false)
     const [showToggleActiveModal, setShowToggleActiveModal] = useState(false)
     const [selectedUser, setSelectedUser] = useState<any>(null)
+    const [searchQuery, setSearchQuery] = useState('')
+    const [debouncedSearch, setDebouncedSearch] = useState('')
+    const [page, setPage] = useState(0)
 
     const { setTopbarContent } = useTopbar()
-    const { data: users = [], isLoading } = useGetAllUsersQuery()
+
+    // Debounce
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearch(searchQuery)
+            setPage(0)
+        }, 400)
+        return () => clearTimeout(timer)
+    }, [searchQuery])
+
+    const { data: pagedData, isLoading } = useGetAllUsersPagedQuery({
+        page,
+        size: 50,
+        search: debouncedSearch || undefined,
+    })
+    const users = pagedData?.content || []
     const [deleteUser] = useDeleteUserMutation()
     const [toggleUserActive] = useToggleUserActiveMutation()
     const [toggle2FA] = useToggle2FAMutation()
@@ -153,6 +172,20 @@ export default function UsersPage() {
     return (
         <div className="p-6 space-y-6">
 
+            {/* Search */}
+            <div className="backdrop-blur-sm bg-white/95 border border-amber-200 rounded-2xl p-4 shadow-lg">
+                <div className="relative">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-amber-600" />
+                    <input
+                        type="text"
+                        placeholder="Kullanıcı ara (ad, soyad, email)..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-12 pr-4 py-3 bg-white border border-amber-300 rounded-xl text-amber-900 placeholder-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                </div>
+            </div>
+
             {/* Users Table */}
             <div className="backdrop-blur-sm bg-white/95 border border-amber-200 rounded-2xl overflow-hidden shadow-xl">
                 {isLoading ? (
@@ -285,6 +318,16 @@ export default function UsersPage() {
                     </div>
                 )}
             </div>
+
+            {/* Pagination */}
+            {pagedData && pagedData.totalPages > 1 && (
+                <Pagination
+                    page={page}
+                    totalPages={pagedData.totalPages}
+                    totalElements={pagedData.totalElements}
+                    onPageChange={setPage}
+                />
+            )}
 
             {/* Add User Modal */}
             {showAddModal && (

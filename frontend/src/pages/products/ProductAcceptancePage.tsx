@@ -2,11 +2,12 @@ import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 // Force HMR update
 import { CheckSquare, Package, Calendar, Truck, User, Trash2 } from 'lucide-react'
-import { useGetOrderAcceptancesQuery, useDeleteAcceptanceMutation } from '../../services/productAcceptanceApi'
+import { useListAllAcceptancesQuery, useDeleteAcceptanceMutation } from '../../services/productAcceptanceApi'
 import { useGetUserSummariesQuery } from '../../services/userApi'
 import { useTopbar } from '../../context/TopbarContext'
 import ProductAcceptanceModal from '../../components/orders/ProductAcceptanceModal'
 import FilterSearchBar from '../../components/common/FilterSearchBar'
+import Pagination from '../../components/common/Pagination'
 import ConfirmModal from '../../components/common/ConfirmModal'
 import { useToast } from '../../context/ToastContext'
 import { useAppSelector } from '../../hooks/useAuth'
@@ -21,13 +22,30 @@ export default function ProductAcceptancePage() {
         (searchParams.get('status') as 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED') || 'ALL'
     )
     const [acceptedByFilter, setAcceptedByFilter] = useState<string>('ALL')
-    const [approvedByFilter, setApprovedByFilter] = useState<string>('ALL')
     const [brandFilter, setBrandFilter] = useState<'ALL' | 'OAK' | 'MAPLE' | 'PINE' | 'MARKASIZ'>('ALL')
     const [searchQuery, setSearchQuery] = useState('')
+    const [debouncedSearch, setDebouncedSearch] = useState('')
+    const [page, setPage] = useState(0)
+
+    // Debounce search
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearch(searchQuery)
+            setPage(0)
+        }, 400)
+        return () => clearTimeout(timer)
+    }, [searchQuery])
 
     // Queries
-    // Passing empty string to get all acceptances (assuming endpoint supports this or returns all if empty)
-    const { data: allAcceptances = [], refetch, isLoading } = useGetOrderAcceptancesQuery('')
+    const { data: pagedData, refetch, isLoading } = useListAllAcceptancesQuery({
+        page,
+        size: 50,
+        search: debouncedSearch || undefined,
+        status: statusFilter === 'ALL' ? undefined : statusFilter,
+        brand: brandFilter === 'ALL' ? undefined : brandFilter,
+        acceptedBy: acceptedByFilter === 'ALL' ? undefined : acceptedByFilter,
+    })
+    const acceptances = pagedData?.content || []
     const { data: users = [] } = useGetUserSummariesQuery()
     const [deleteAcceptance, { isLoading: isDeleting }] = useDeleteAcceptanceMutation()
     const { success, error } = useToast()
@@ -52,59 +70,20 @@ export default function ProductAcceptancePage() {
         }
     }
 
-    // Get unique users who have accepted/approved products
+    // Build acceptor options from the full user summary list so filters are not tied
+    // to the current page content.
     const acceptors = useMemo(() => {
-        const uniqueIds = [...new Set(allAcceptances.map((a: any) => a.acceptedById).filter(Boolean))]
-        return users.filter((u) => uniqueIds.includes(u.id))
-    }, [allAcceptances, users])
-
-    const approvers = useMemo(() => {
-        const uniqueIds = [...new Set(allAcceptances.map((a: any) => a.approvedById).filter(Boolean))]
-        return users.filter((u) => uniqueIds.includes(u.id))
-    }, [allAcceptances, users])
-
-    // Filter acceptances
-    const acceptances = useMemo(() => {
-        return allAcceptances.filter((acceptance: any) => {
-            // Status filter
-            if (statusFilter !== 'ALL') {
-                if (statusFilter === 'PENDING' && acceptance.status !== 'PENDING') return false
-                if (statusFilter === 'APPROVED' && acceptance.status !== 'APPROVED') return false
-                if (statusFilter === 'REJECTED' && acceptance.status !== 'REJECTED') return false
-            }
-
-            // Accepted by filter
-            if (acceptedByFilter !== 'ALL') {
-                if (acceptance.acceptedById !== acceptedByFilter) return false
-            }
-
-            // Approved by filter
-            if (approvedByFilter !== 'ALL') {
-                if (acceptance.approvedById !== approvedByFilter) return false
-            }
-
-            // Brand filter
-            if (brandFilter !== 'ALL') {
-                if (brandFilter === 'MARKASIZ') {
-                    if (acceptance.brand && acceptance.brand !== '') return false
-                } else {
-                    if (acceptance.brand !== brandFilter) return false
-                }
-            }
-
-            // Search
-            if (searchQuery.trim()) {
-                const query = searchQuery.toLocaleLowerCase('tr-TR')
-                const matchesProduct = acceptance.productName?.toLocaleLowerCase('tr-TR').includes(query) ||
-                    acceptance.productCode?.toLocaleLowerCase('tr-TR').includes(query)
-                const matchesOrder = acceptance.orderNumber?.toLocaleLowerCase('tr-TR').includes(query)
-
-                if (!matchesProduct && !matchesOrder) return false
-            }
-
-            return true
+        return [...users].sort((a: any, b: any) => {
+            const aName = a.displayName || `${a.firstName} ${a.lastName}`
+            const bName = b.displayName || `${b.firstName} ${b.lastName}`
+            return aName.localeCompare(bName, 'tr')
         })
-    }, [allAcceptances, statusFilter, acceptedByFilter, approvedByFilter, brandFilter, searchQuery])
+    }, [users])
+
+    // Reset page on filter change
+    const handleStatusChange = (v: any) => { setStatusFilter(v); setPage(0); }
+    const handleBrandChange = (v: any) => { setBrandFilter(v); setPage(0); }
+    const handleAcceptedByChange = (v: string) => { setAcceptedByFilter(v); setPage(0); }
 
     useEffect(() => {
         setTopbarContent({
@@ -131,7 +110,7 @@ export default function ProductAcceptancePage() {
                     {
                         label: 'Durum',
                         value: statusFilter,
-                        onChange: setStatusFilter,
+                        onChange: handleStatusChange,
                         options: [
                             { key: 'ALL', label: 'Tümü' },
                             { key: 'PENDING', label: 'Onay Bekleyen', activeColor: 'bg-yellow-600' },
@@ -142,7 +121,7 @@ export default function ProductAcceptancePage() {
                     {
                         label: 'Kabul Eden',
                         value: acceptedByFilter,
-                        onChange: setAcceptedByFilter,
+                        onChange: handleAcceptedByChange,
                         type: 'dropdown',
                         options: [
                             { key: 'ALL', label: 'Tümü' },
@@ -150,19 +129,9 @@ export default function ProductAcceptancePage() {
                         ]
                     },
                     {
-                        label: 'Onaylayan',
-                        value: approvedByFilter,
-                        onChange: setApprovedByFilter,
-                        type: 'dropdown',
-                        options: [
-                            { key: 'ALL', label: 'Tümü' },
-                            ...approvers.map((u: any) => ({ key: u.id, label: u.displayName || `${u.firstName} ${u.lastName}` }))
-                        ]
-                    },
-                    {
                         label: 'Marka',
                         value: brandFilter,
-                        onChange: setBrandFilter,
+                        onChange: handleBrandChange,
                         options: [
                             { key: 'ALL', label: 'Tümü' },
                             { key: 'OAK', label: 'Doğtaş', activeColor: 'bg-red-600' },
@@ -187,7 +156,7 @@ export default function ProductAcceptancePage() {
                         <div>
                             <p className="text-sm text-amber-600 font-medium">Toplam Kabul (Bekleyen)</p>
                             <p className="text-3xl font-bold text-amber-900">
-                                {allAcceptances.filter((a: any) => a.status === 'PENDING').length}
+                                {acceptances.filter((a: any) => a.status === 'PENDING').length}
                             </p>
                         </div>
                     </div>
@@ -201,7 +170,7 @@ export default function ProductAcceptancePage() {
                         <div>
                             <p className="text-sm text-amber-600 font-medium">Bugün Onaylanan</p>
                             <p className="text-3xl font-bold text-amber-900">
-                                {allAcceptances.filter((a: any) => {
+                                {acceptances.filter((a: any) => {
                                     if (a.status !== 'APPROVED') return false
                                     const today = new Date().toISOString().split('T')[0]
                                     return a.acceptanceDate?.startsWith(today)
@@ -219,7 +188,7 @@ export default function ProductAcceptancePage() {
                         <div>
                             <p className="text-sm text-amber-600 font-medium">Bu Ay Toplam</p>
                             <p className="text-3xl font-bold text-amber-900">
-                                {allAcceptances.length}
+                                {acceptances.length}
                             </p>
                         </div>
                     </div>
@@ -352,6 +321,16 @@ export default function ProductAcceptancePage() {
                     </table>
                 </div>
             </div>
+
+            {/* Pagination */}
+            {pagedData && pagedData.totalPages > 1 && (
+                <Pagination
+                    page={page}
+                    totalPages={pagedData.totalPages}
+                    totalElements={pagedData.totalElements}
+                    onPageChange={setPage}
+                />
+            )}
 
             {/* Product Acceptance Modal */}
             {showAcceptanceModal && (

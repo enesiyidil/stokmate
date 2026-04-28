@@ -77,10 +77,19 @@ export interface SaleEventResponse {
 
 export const saleApi = baseApi.injectEndpoints({
     endpoints: (builder) => ({
-        getSales: builder.query<SaleResponse[], { status?: SaleStatus; consultantId?: string }>({
+        getSales: builder.query<import('../types/common').PageResponse<SaleResponse>, {
+            page?: number; size?: number; search?: string;
+            statusGroup?: string; consultantId?: string
+        }>({
             query: (params) => ({
                 url: '/sales',
-                params
+                params: {
+                    page: params.page ?? 0,
+                    size: params.size ?? 50,
+                    ...(params.search && { search: params.search }),
+                    ...(params.statusGroup && { statusGroup: params.statusGroup }),
+                    ...(params.consultantId && { consultantId: params.consultantId }),
+                }
             }),
             providesTags: ['Sales']
         }),

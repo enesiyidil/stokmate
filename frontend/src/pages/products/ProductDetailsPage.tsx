@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Package, Tag, DollarSign, TrendingUp, Clock, User } from 'lucide-react'
 import { useTopbar } from '../../context/TopbarContext'
 import { useGetProductDetailsQuery } from '../../services/productApi'
+import LinkedNotesWidget from '../../components/notes/LinkedNotesWidget'
 
 // Type definitions (will move to productApi.ts)
 interface ProductDetailsResponse {
@@ -199,6 +200,12 @@ export default function ProductDetailsPage() {
                         </div>
                     </div>
                 </div>
+
+                {/* Linked Notes Widget */}
+                <LinkedNotesWidget
+                    entityType="PRODUCT"
+                    entityId={product.id}
+                />
 
                 {/* Price History */}
                 <div className="backdrop-blur-sm bg-white/95 border border-amber-200 rounded-2xl overflow-hidden shadow-lg">

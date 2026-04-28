@@ -1,5 +1,7 @@
 import { api } from '../api/base.api'
 
+import type { PageResponse } from '../types/common'
+
 export type OrderReceiptStatus = 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED'
 
 export interface OrderReceiptPhotoResponse {
@@ -81,12 +83,23 @@ export const orderReceiptApi = api.injectEndpoints({
         }),
 
         // List all receipts with optional filters
-        listOrderReceipts: builder.query<OrderReceiptResponse[], { orderId?: string; status?: OrderReceiptStatus }>({
-            query: ({ orderId, status }) => ({
+        listOrderReceipts: builder.query<PageResponse<OrderReceiptResponse>, {
+            page?: number;
+            size?: number;
+            search?: string;
+            status?: OrderReceiptStatus | 'ALL';
+            receivedBy?: string;
+            approvedBy?: string;
+        }>({
+            query: (params) => ({
                 url: '/order-receipts',
                 params: {
-                    ...(orderId && { orderId }),
-                    ...(status && { status }),
+                    page: params.page || 0,
+                    size: params.size || 50,
+                    ...(params.search && { search: params.search }),
+                    ...(params.status && params.status !== 'ALL' && { status: params.status }),
+                    ...(params.receivedBy && params.receivedBy !== 'ALL' && { receivedBy: params.receivedBy }),
+                    ...(params.approvedBy && params.approvedBy !== 'ALL' && { approvedBy: params.approvedBy }),
                 },
             }),
             providesTags: ['OrderReceipts'],

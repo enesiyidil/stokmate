@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { ShoppingCart, Plus, CheckCircle, XCircle, Clock, Upload, FileText } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useListOrdersQuery } from '../services/orderApi'
@@ -9,6 +9,7 @@ import AddOrderModal from '../components/orders/AddOrderModal'
 import BulkUploadModal from '../components/orders/BulkUploadModal'
 import OtpVerificationModal from '../components/common/OtpVerificationModal'
 import FilterSearchBar from '../components/common/FilterSearchBar'
+import Pagination from '../components/common/Pagination'
 import type { Brand } from '../constants/brandConstants'
 import { useAppSelector } from '../hooks/useAuth'
 
@@ -20,12 +21,29 @@ export default function OrdersPage() {
     const [consultantFilter, setConsultantFilter] = useState('ALL')
     const [brandFilter, setBrandFilter] = useState('ALL')
     const [searchQuery, setSearchQuery] = useState('')
+    const [debouncedSearch, setDebouncedSearch] = useState('')
+    const [page, setPage] = useState(0)
     const [showAddMenu, setShowAddMenu] = useState(false)
     const [showManualModal, setShowManualModal] = useState(false)
     const [showBulkModal, setShowBulkModal] = useState(false)
     const [showOtpModal, setShowOtpModal] = useState(false)
     const [pendingAction, setPendingAction] = useState<(() => void) | null>(null)
     const user = useAppSelector(state => state.auth.user)
+
+    // Debounce search
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearch(searchQuery)
+            setPage(0)
+        }, 300)
+        return () => clearTimeout(timer)
+    }, [searchQuery])
+
+    // Reset page when filters change
+    const handleStatusFilter = useCallback((val: string) => { setStatusFilter(val); setPage(0) }, [])
+    const handleTypeFilter = useCallback((val: string) => { setTypeFilter(val); setPage(0) }, [])
+    const handleConsultantFilter = useCallback((val: string) => { setConsultantFilter(val); setPage(0) }, [])
+    const handleBrandFilter = useCallback((val: string) => { setBrandFilter(val); setPage(0) }, [])
 
     const verifyGate = (action: () => void) => {
         if (user?.totpEnabled) {
@@ -36,104 +54,24 @@ export default function OrdersPage() {
         }
     }
 
-    const { data: allOrders = [], isLoading } = useListOrdersQuery({ includeHidden: true })
+    const { data: ordersData, isLoading } = useListOrdersQuery({
+        page,
+        size: 50,
+        search: debouncedSearch || undefined,
+        statusGroup: statusFilter !== 'ALL' ? statusFilter : undefined,
+        orderType: typeFilter !== 'ALL' && typeFilter !== 'HAS_SSH' ? typeFilter : undefined,
+        brand: brandFilter !== 'ALL' ? brandFilter : undefined,
+        consultantId: consultantFilter !== 'ALL' ? consultantFilter : undefined,
+        includeHidden: true,
+    })
+
+    const orders = ordersData?.content ?? []
     const { data: users = [] } = useGetUserSummariesQuery()
 
     // Get sales consultants (users with role STORE_EMPLOYEE)
     const salesConsultants = useMemo(() => {
         return users.filter((user) => user.role === 'STORE_EMPLOYEE')
     }, [users])
-
-    // Filter and sort orders
-    const orders = useMemo(() => {
-        const filtered = allOrders.filter(order => {
-            // Status filter
-            if (statusFilter !== 'ALL') {
-                if (statusFilter === 'DEVAM_EDIYOR') {
-                    // Include all in-progress statuses
-                    const inProgressStatuses = [
-                        'DEVAM_EDIYOR', 'IN_PROGRESS', 'CREATED', 'PENDING_ACCEPTANCE',
-                        'PARTIALLY_ACCEPTED', 'ACCEPTED', 'PENDING_SHIPMENT_APPROVAL',
-                        'SHIPMENT_APPROVED', 'IN_SHIPMENT', 'PARTIALLY_SHIPPED'
-                    ]
-                    if (!inProgressStatuses.includes(order.status)) return false
-                } else if (statusFilter === 'TAMAMLANDI') {
-                    const completedStatuses = ['TAMAMLANDI', 'COMPLETED', 'DELIVERED']
-                    if (!completedStatuses.includes(order.status)) return false
-                } else if (statusFilter === 'IPTAL_EDILDI') {
-                    const cancelledStatuses = ['IPTAL_EDILDI', 'CANCELLED']
-                    if (!cancelledStatuses.includes(order.status)) return false
-                }
-            }
-
-            // Type filter
-            if (typeFilter !== 'ALL') {
-                if (typeFilter === 'HAS_SSH') {
-                    if (!order.childSshOrders || order.childSshOrders.length === 0) return false
-                } else {
-                    if (order.orderType !== typeFilter) return false
-                }
-            } else {
-                // Default view (ALL): Hide hidden orders (including SSH)
-                if (order.hidden) return false
-            }
-
-            // Consultant filter
-            if (consultantFilter !== 'ALL') {
-                if (!order.salesConsultant || order.salesConsultant.id !== consultantFilter) return false
-            }
-
-            // Search query (Turkish locale-aware) - includes product name/code
-            if (searchQuery.trim()) {
-                const query = searchQuery.toLocaleLowerCase('tr-TR')
-                const matchesOrderNo = order.orderNo?.toLocaleLowerCase('tr-TR').includes(query)
-                const matchesContractNo = order.prosapContractNo?.toLocaleLowerCase('tr-TR').includes(query)
-                const matchesCustomerName = order.customer
-                    ? `${order.customer.firstName} ${order.customer.lastName}`.toLocaleLowerCase('tr-TR').includes(query)
-                    : order.prosapContractNameSurname?.toLocaleLowerCase('tr-TR').includes(query)
-                const matchesConsultant = order.salesConsultant
-                    ? `${order.salesConsultant.firstName} ${order.salesConsultant.lastName}`.toLocaleLowerCase('tr-TR').includes(query)
-                    : false
-                const matchesProduct = order.products?.some((p: any) =>
-                    p.productName?.toLocaleLowerCase('tr-TR').includes(query) ||
-                    p.productCode?.toLocaleLowerCase('tr-TR').includes(query)
-                )
-
-                if (!matchesOrderNo && !matchesContractNo && !matchesCustomerName && !matchesConsultant && !matchesProduct) return false
-            }
-
-            // Brand filter
-            if (brandFilter !== 'ALL') {
-                const brandMap: Record<string, string> = {
-                    'OAK': 'OAK',
-                    'MAPLE': 'MAPLE',
-                    'PINE': 'PINE',
-                    'MARKASIZ': ''
-                }
-                if (brandFilter === 'MARKASIZ') {
-                    if (order.brand && order.brand !== '') return false
-                } else {
-                    if (order.brand !== brandMap[brandFilter]) return false
-                }
-            }
-
-            return true
-        })
-
-        // Split and sort logic
-        const completedStatuses = ['TAMAMLANDI', 'COMPLETED', 'DELIVERED', 'IPTAL_EDILDI', 'CANCELLED']
-
-        const ongoing = filtered.filter(o => !completedStatuses.includes(o.status))
-        const completed = filtered.filter(o => completedStatuses.includes(o.status))
-
-        // Ongoing: Oldest first (Date ASC)
-        ongoing.sort((a, b) => new Date(a.orderDate).getTime() - new Date(b.orderDate).getTime())
-
-        // Completed: Newest first (Date DESC)
-        completed.sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime())
-
-        return [...ongoing, ...completed]
-    }, [allOrders, statusFilter, typeFilter, consultantFilter, brandFilter, searchQuery])
 
     // Set topbar content
     useEffect(() => {
@@ -233,7 +171,7 @@ export default function OrdersPage() {
                     {
                         label: 'Durum',
                         value: statusFilter,
-                        onChange: setStatusFilter,
+                        onChange: handleStatusFilter,
                         options: [
                             { key: 'ALL', label: 'Tümü' },
                             { key: 'DEVAM_EDIYOR', label: 'Devam Ediyor', activeColor: 'bg-yellow-600' },
@@ -244,19 +182,18 @@ export default function OrdersPage() {
                     {
                         label: 'Tür',
                         value: typeFilter,
-                        onChange: setTypeFilter,
+                        onChange: handleTypeFilter,
                         options: [
                             { key: 'ALL', label: 'Tümü' },
                             { key: 'CUSTOMER_SPECIFIC', label: 'Müşteriye Özel', activeColor: 'bg-blue-600' },
                             { key: 'STOCK', label: 'Stok', activeColor: 'bg-green-600' },
                             { key: 'AFTER_SALES_SERVICE', label: 'SSH', activeColor: 'bg-orange-600' },
-                            { key: 'HAS_SSH', label: 'SSH İçeren', activeColor: 'bg-red-600' }
                         ]
                     },
                     {
                         label: 'Danışman',
                         value: consultantFilter,
-                        onChange: setConsultantFilter,
+                        onChange: handleConsultantFilter,
                         type: 'dropdown',
                         options: [
                             { key: 'ALL', label: 'Tümü' },
@@ -266,17 +203,16 @@ export default function OrdersPage() {
                     {
                         label: 'Marka',
                         value: brandFilter,
-                        onChange: setBrandFilter,
+                        onChange: handleBrandFilter,
                         options: [
                             { key: 'ALL', label: 'Tümü' },
                             { key: 'OAK', label: 'Doğtaş', activeColor: 'bg-red-600' },
                             { key: 'MAPLE', label: 'Maple', activeColor: 'bg-blue-600' },
                             { key: 'PINE', label: 'Pine', activeColor: 'bg-purple-600' },
-                            { key: 'MARKASIZ', label: 'Markasız', activeColor: 'bg-gray-600' }
                         ]
                     }
                 ]}
-                searchPlaceholder="Sipariş no, sözleşme no, müşteri adı, danışman adı, ürün adı veya kodu..."
+                searchPlaceholder="Sipariş no, sözleşme no, müşteri adı, danışman adı..."
                 searchValue={searchQuery}
                 onSearchChange={setSearchQuery}
             />
@@ -306,7 +242,7 @@ export default function OrdersPage() {
                                 {orders.length === 0 ? (
                                     <tr>
                                         <td colSpan={10} className="px-6 py-12 text-center text-amber-700">
-                                            {statusFilter ? 'Bu durumda sipariş bulunamadı' : 'Henüz sipariş bulunmuyor'}
+                                            {statusFilter !== 'ALL' ? 'Bu durumda sipariş bulunamadı' : 'Henüz sipariş bulunmuyor'}
                                         </td>
                                     </tr>
                                 ) : (
@@ -415,6 +351,17 @@ export default function OrdersPage() {
                             </tbody>
                         </table>
                     </div>
+                )}
+
+                {/* Pagination */}
+                {ordersData && (
+                    <Pagination
+                        page={page}
+                        totalPages={ordersData.totalPages}
+                        totalElements={ordersData.totalElements}
+                        onPageChange={setPage}
+                        itemLabel="sipariş"
+                    />
                 )}
             </div>
 
