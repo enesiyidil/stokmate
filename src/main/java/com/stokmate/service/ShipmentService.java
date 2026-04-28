@@ -17,10 +17,12 @@ import com.stokmate.domain.ShipmentItemType;
 import com.stokmate.domain.ShipmentStatus;
 import com.stokmate.domain.User;
 import com.stokmate.domain.Vehicle;
+import com.stokmate.domain.ProblemResolutionType;
 import com.stokmate.dto.shipment.DeliveryDetailsUpdateRequest;
 import com.stokmate.dto.shipment.PartialShipmentRequest;
 import com.stokmate.dto.shipment.PlannedShipmentRequest;
 import com.stokmate.dto.shipment.ProductShipmentRequest;
+import com.stokmate.dto.shipment.ResolveProblemRequest;
 import com.stokmate.dto.shipment.SaleProductShipmentRequest;
 import com.stokmate.dto.shipment.SaleShipmentRequest;
 import com.stokmate.dto.shipment.ShipmentDetailsResponse;
@@ -271,6 +273,17 @@ public class ShipmentService {
                                         .collect(Collectors.toList());
                 }
 
+                // Build linked SSH order info
+                String linkedSshOrderId = null;
+                String linkedSshOrderNo = null;
+                String linkedSshOrderStatus = null;
+                if (shipment != null && shipment.getLinkedSshOrder() != null) {
+                        Order sshOrder = shipment.getLinkedSshOrder();
+                        linkedSshOrderId = sshOrder.getId().toString();
+                        linkedSshOrderNo = sshOrder.getOrderNo();
+                        linkedSshOrderStatus = sshOrder.getStatus().getDisplayName();
+                }
+
                 return ShipmentDetailsResponse.builder()
                                 .orderId(order.getId().toString())
                                 .shipmentId(shipment != null ? shipment.getId().toString() : null)
@@ -294,11 +307,35 @@ public class ShipmentService {
                                                                 + shipment.getApprovedBy().getLastName()
                                                 : null)
                                 .shipmentNote(order.getShipmentNote())
+                                .deliveryStatus(shipment != null && shipment.getDeliveryStatus() != null
+                                                ? shipment.getDeliveryStatus().toString()
+                                                : null)
+                                .problemType(shipment != null && shipment.getProblemType() != null
+                                                ? shipment.getProblemType().toString()
+                                                : null)
                                 .deliveryNotes(shipment != null ? shipment.getDeliveryNotes() : null)
                                 .signedDocumentUrl(shipment != null ? shipment.getSignedDocumentPath() : null)
                                 .deliveryPhotoUrls(shipment != null && shipment.getDeliveryPhotoPaths() != null
                                                 ? new ArrayList<>(shipment.getDeliveryPhotoPaths())
                                                 : null)
+                                .problemResolved(shipment != null && shipment.isProblemResolved())
+                                .resolutionType(shipment != null && shipment.getResolutionType() != null
+                                                ? shipment.getResolutionType().toString()
+                                                : null)
+                                .resolutionDescription(
+                                                shipment != null ? shipment.getResolutionDescription() : null)
+                                .resolutionPhotoUrls(
+                                                shipment != null && shipment.getResolutionPhotoPaths() != null
+                                                                ? new ArrayList<>(shipment.getResolutionPhotoPaths())
+                                                                : null)
+                                .resolvedAt(shipment != null ? shipment.getResolvedAt() : null)
+                                .resolvedByName(shipment != null && shipment.getResolvedBy() != null
+                                                ? shipment.getResolvedBy().getFirstName() + " "
+                                                                + shipment.getResolvedBy().getLastName()
+                                                : null)
+                                .linkedSshOrderId(linkedSshOrderId)
+                                .linkedSshOrderNo(linkedSshOrderNo)
+                                .linkedSshOrderStatus(linkedSshOrderStatus)
                                 .build();
         }
 
@@ -432,6 +469,17 @@ public class ShipmentService {
                                 .filter(java.util.Objects::nonNull)
                                 .collect(Collectors.toList());
 
+                // Build linked SSH order info
+                String linkedSshOrderId = null;
+                String linkedSshOrderNo = null;
+                String linkedSshOrderStatus = null;
+                if (shipment.getLinkedSshOrder() != null) {
+                        Order sshOrder = shipment.getLinkedSshOrder();
+                        linkedSshOrderId = sshOrder.getId().toString();
+                        linkedSshOrderNo = sshOrder.getOrderNo();
+                        linkedSshOrderStatus = sshOrder.getStatus().getDisplayName();
+                }
+
                 return ShipmentDetailsResponse.builder()
                                 .orderId(order != null ? order.getId().toString()
                                                 : (sale != null ? sale.getId().toString() : null))
@@ -439,7 +487,7 @@ public class ShipmentService {
                                 .shipmentId(shipment.getId().toString())
                                 .orderNo(orderNoVal)
                                 .saleNo(saleNoVal)
-                                .orderType(shipmentTypeVal) // Use shipmentType logic
+                                .orderType(shipmentTypeVal)
                                 .shipmentType(shipmentTypeVal)
                                 .orderDate(dateVal)
                                 .contractNo(contractNoVal)
@@ -465,6 +513,22 @@ public class ShipmentService {
                                 .deliveryPhotoUrls(shipment.getDeliveryPhotoPaths() != null
                                                 ? new ArrayList<>(shipment.getDeliveryPhotoPaths())
                                                 : null)
+                                .problemResolved(shipment.isProblemResolved())
+                                .resolutionType(shipment.getResolutionType() != null
+                                                ? shipment.getResolutionType().toString()
+                                                : null)
+                                .resolutionDescription(shipment.getResolutionDescription())
+                                .resolutionPhotoUrls(shipment.getResolutionPhotoPaths() != null
+                                                ? new ArrayList<>(shipment.getResolutionPhotoPaths())
+                                                : null)
+                                .resolvedAt(shipment.getResolvedAt())
+                                .resolvedByName(shipment.getResolvedBy() != null
+                                                ? shipment.getResolvedBy().getFirstName() + " "
+                                                                + shipment.getResolvedBy().getLastName()
+                                                : null)
+                                .linkedSshOrderId(linkedSshOrderId)
+                                .linkedSshOrderNo(linkedSshOrderNo)
+                                .linkedSshOrderStatus(linkedSshOrderStatus)
                                 .build();
         }
 
@@ -1206,6 +1270,32 @@ public class ShipmentService {
                 shipmentRepository.save(shipment);
         }
 
+        /**
+         * List all shipments (paginated) with status group, search and delivery status
+         */
+        @Transactional
+        public org.springframework.data.domain.Page<ShipmentResponse> listPaged(
+                        String statusGroup, String search, String deliveryFilter, String brand,
+                        String problemResolved,
+                        org.springframework.data.domain.Pageable pageable) {
+                String searchParam = null;
+                if (search != null && !search.isBlank()) {
+                        searchParam = "%" + search.toLowerCase() + "%";
+                }
+                String brandParam = (brand != null && !brand.isBlank()) ? brand : null;
+
+                Boolean problemResolvedParam = null;
+                if ("RESOLVED".equals(problemResolved)) {
+                        problemResolvedParam = true;
+                } else if ("UNRESOLVED".equals(problemResolved)) {
+                        problemResolvedParam = false;
+                }
+
+                return shipmentRepository.findPagedWithFilters(statusGroup, searchParam, deliveryFilter, brandParam,
+                                problemResolvedParam, pageable)
+                                .map(this::toShipmentResponse);
+        }
+
         private ShipmentResponse toShipmentResponse(Shipment shipment) {
                 log.debug("toShipmentResponse: Processing shipment {}", shipment.getId());
                 UUID orderId = null;
@@ -1329,6 +1419,7 @@ public class ShipmentService {
                                 .shipmentType(shipment.getOrder() != null ? "ORDER"
                                                 : (shipment.getSale() != null ? "SALE" : "UNKNOWN"))
                                 .brand(brandStr)
+                                .problemResolved(shipment.isProblemResolved())
                                 .build();
         }
 
@@ -1400,6 +1491,86 @@ public class ShipmentService {
                 response.setType("SHIPMENT");
 
                 return response;
+        }
+
+        // =============== PROBLEM RESOLUTION METHODS ===============
+
+        /**
+         * Manually resolve a problematic shipment with description and photos
+         */
+        @Transactional
+        public void resolveShipmentProblem(ResolveProblemRequest request, UUID userId) throws Exception {
+                Shipment shipment = shipmentRepository.findById(request.getShipmentId())
+                                .orElseThrow(() -> new NotFoundException("Shipment not found"));
+
+                if (shipment.getDeliveryStatus() == null
+                                || shipment.getDeliveryStatus() != com.stokmate.domain.DeliveryStatus.PROBLEMATIC) {
+                        throw new BadRequestException("Bu sevkiyat sorunlu olarak işaretlenmemiş");
+                }
+
+                if (shipment.isProblemResolved()) {
+                        throw new BadRequestException("Bu sevkiyatın sorunu zaten çözülmüş");
+                }
+
+                User resolver = userRepository.findById(userId)
+                                .orElseThrow(() -> new NotFoundException("User not found"));
+
+                shipment.setProblemResolved(true);
+                shipment.setResolutionType(ProblemResolutionType.MANUAL);
+                shipment.setResolutionDescription(request.getDescription());
+                shipment.setResolvedAt(LocalDateTime.now());
+                shipment.setResolvedBy(resolver);
+
+                if (request.getPhotos() != null && !request.getPhotos().isEmpty()) {
+                        java.util.Set<String> photoPaths = new java.util.HashSet<>();
+                        for (MultipartFile photo : request.getPhotos()) {
+                                if (!photo.isEmpty()) {
+                                        String photoPath = storageService.store(photo, "resolution-photos");
+                                        photoPaths.add(photoPath);
+                                }
+                        }
+                        shipment.setResolutionPhotoPaths(photoPaths);
+                }
+
+                shipmentRepository.save(shipment);
+
+                if (shipment.getOrder() != null) {
+                        orderActivityService.logActivity(shipment.getOrder(), ActivityType.SHIPMENT_UPDATED,
+                                        "[Sevk #" + shipment.getId().toString().substring(0, 8)
+                                                        + "] Sorun manuel olarak çözüldü - Çözen: "
+                                                        + resolver.getFirstName() + " " + resolver.getLastName());
+                }
+
+                log.info("Shipment {} problem resolved manually by user {}", request.getShipmentId(), userId);
+        }
+
+        /**
+         * Auto-resolve a problematic shipment when its linked SSH order is completed
+         */
+        @Transactional
+        public void autoResolveBySSH(UUID sshOrderId) {
+                List<Shipment> shipments = shipmentRepository.findByLinkedSshOrderId(sshOrderId);
+
+                for (Shipment shipment : shipments) {
+                        if (shipment.getDeliveryStatus() == com.stokmate.domain.DeliveryStatus.PROBLEMATIC
+                                        && !shipment.isProblemResolved()) {
+                                shipment.setProblemResolved(true);
+                                shipment.setResolutionType(ProblemResolutionType.SSH_ORDER);
+                                shipment.setResolutionDescription(
+                                                "SSH siparişi tamamlandığında otomatik olarak çözüldü");
+                                shipment.setResolvedAt(LocalDateTime.now());
+                                shipmentRepository.save(shipment);
+
+                                if (shipment.getOrder() != null) {
+                                        orderActivityService.logActivity(shipment.getOrder(),
+                                                        ActivityType.SHIPMENT_UPDATED,
+                                                        "[Sevk #" + shipment.getId().toString().substring(0, 8)
+                                                                        + "] Sorun SSH siparişi ile otomatik çözüldü");
+                                }
+
+                                log.info("Shipment {} auto-resolved via SSH order {}", shipment.getId(), sshOrderId);
+                        }
+                }
         }
 
         // =============== ADMIN/MANAGER SHIPMENT MANAGEMENT METHODS ===============

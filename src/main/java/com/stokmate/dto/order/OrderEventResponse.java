@@ -21,6 +21,7 @@ public class OrderEventResponse {
     private UUID id;
     private UUID orderId;
     private String eventType;
+    private String description;
     private Map<String, Object> eventData;
     private UserBasicResponse createdBy;
     private LocalDateTime createdAt;

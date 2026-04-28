@@ -101,8 +101,13 @@ public class ProductService {
         log.info("Product soft deleted: {}", product.getCode());
     }
 
-    public Page<ProductResponse> list(String name, String brand, Boolean activeForSale, Pageable pageable) {
-        Specification<Product> spec = ProductSpecification.filter(name, brand, activeForSale);
+    public Page<ProductResponse> list(
+            String search,
+            String brand,
+            Boolean activeForSale,
+            String stockFilter,
+            Pageable pageable) {
+        Specification<Product> spec = ProductSpecification.filter(search, brand, activeForSale, stockFilter);
         return productRepository.findAll(spec, pageable).map(this::toResponseWithPresignedUrl);
     }
 

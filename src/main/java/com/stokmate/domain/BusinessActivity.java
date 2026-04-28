@@ -36,7 +36,21 @@ import org.hibernate.annotations.Subselect;
         "       s.sale_no as reference_no " +
         "FROM sale_events se " +
         "LEFT JOIN users u ON se.user_id = u.id " +
-        "JOIN sales s ON se.sale_id = s.id")
+        "JOIN sales s ON se.sale_id = s.id " +
+        "UNION ALL " +
+        "SELECT CAST(ba.id AS varchar) as id, " +
+        "       'BALANCE' as domain, " +
+        "       CAST(ba.activity_type AS varchar) as activity_type, " +
+        "       ba.description as description, " +
+        "       ba.created_at as created_at, " +
+        "       ba.user_id as user_id, " +
+        "       u.first_name || ' ' || u.last_name as user_full_name, " +
+        "       u.email as user_email, " +
+        "       CAST(ba.balance_ledger_id AS varchar) as reference_id, " +
+        "       bl.contract_no as reference_no " +
+        "FROM balance_activities ba " +
+        "JOIN users u ON ba.user_id = u.id " +
+        "JOIN balance_ledgers bl ON ba.balance_ledger_id = bl.id")
 @Getter
 public class BusinessActivity {
 

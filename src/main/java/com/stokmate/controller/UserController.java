@@ -54,8 +54,10 @@ public class UserController {
     // Admin user management endpoints - MANAGER and ADMIN only
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR')")
-    public ResponseEntity<List<UserResponse>> getAllUsers() {
-        return ResponseEntity.ok(userService.getAllUsers());
+    public ResponseEntity<org.springframework.data.domain.Page<UserResponse>> getAllUsers(
+            @RequestParam(name = "search", required = false) String search,
+            org.springframework.data.domain.Pageable pageable) {
+        return ResponseEntity.ok(userService.getAllUsersPaged(search, pageable));
     }
 
     @GetMapping("/summary")

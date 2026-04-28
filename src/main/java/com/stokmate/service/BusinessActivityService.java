@@ -14,13 +14,15 @@ public class BusinessActivityService {
     private final BusinessActivityRepository businessActivityRepository;
 
     public Page<BusinessActivity> getAllActivities(Pageable pageable, String category, String search) {
-        // category here maps to 'domain' (ORDER or SALE)
-        // If category is "ALL" or empty, we pass null to repo
-
         String domainFilter = null;
+        String activityTypePrefix = null;
+
         if (category != null && !category.isEmpty() && !category.equalsIgnoreCase("ALL")) {
-            if (category.equalsIgnoreCase("ORDER") || category.equalsIgnoreCase("SALE")) {
+            if (category.equalsIgnoreCase("ORDER") || category.equalsIgnoreCase("SALE")
+                    || category.equalsIgnoreCase("BALANCE")) {
                 domainFilter = category.toUpperCase();
+            } else if (category.equalsIgnoreCase("CROSS_CONVERSION")) {
+                activityTypePrefix = "CROSS_CONVERSION%";
             }
         }
 
@@ -29,6 +31,6 @@ public class BusinessActivityService {
             searchPattern = "%" + search.trim().toLowerCase() + "%";
         }
 
-        return businessActivityRepository.findAllWithFilters(domainFilter, searchPattern, pageable);
+        return businessActivityRepository.findAllWithFilters(domainFilter, activityTypePrefix, searchPattern, pageable);
     }
 }

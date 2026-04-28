@@ -85,8 +85,10 @@ public class CustomerController {
     }
 
     @GetMapping
-    public Page<CustomerResponse> list(Pageable pageable) {
-        return customerService.list(pageable);
+    public Page<CustomerResponse> list(
+            @org.springframework.web.bind.annotation.RequestParam(value = "search", required = false) String search,
+            Pageable pageable) {
+        return customerService.listPaged(search, pageable);
     }
 
     @GetMapping("/search")
