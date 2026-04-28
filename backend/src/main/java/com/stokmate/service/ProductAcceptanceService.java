@@ -293,6 +293,32 @@ public class ProductAcceptanceService {
                 .collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
+    public org.springframework.data.domain.Page<ProductAcceptanceResponse> getAllPaged(
+            String search,
+            ProductAcceptance.AcceptanceStatus status,
+            String brand,
+            String acceptedBy,
+            org.springframework.data.domain.Pageable pageable) {
+        String searchParam = (search != null && !search.isBlank()) ? search.trim() : null;
+
+        // Convert "ALL" defaults to null for the query
+        ProductAcceptance.AcceptanceStatus parsedStatus = status;
+        String parsedBrand = ("ALL".equals(brand)) ? null : brand;
+
+        // Handle "MARKASIZ" brand case -> we treat it as empty string or null in DB,
+        // but for now let's just use the parameter as is. If we want we could map it.
+        if ("MARKASIZ".equals(parsedBrand)) {
+            parsedBrand = "";
+        }
+
+        String parsedAcceptedBy = ("ALL".equals(acceptedBy)) ? null : acceptedBy;
+
+        return productAcceptanceRepository.findAllPaged(
+                searchParam, parsedStatus, parsedBrand, parsedAcceptedBy, pageable)
+                .map(productAcceptanceMapper::toResponse);
+    }
+
     private void checkAndCompleteOrder(Order orderArg, User user) {
         log.info("Checking order completion for order: {}", orderArg.getOrderNo());
 

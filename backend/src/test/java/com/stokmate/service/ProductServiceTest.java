@@ -566,7 +566,7 @@ class ProductServiceTest {
             when(productMapper.toResponse(product)).thenReturn(response);
 
             // Act
-            Page<ProductResponse> result = productService.list(null, null, null, Pageable.unpaged());
+            Page<ProductResponse> result = productService.list(null, null, null, null, Pageable.unpaged());
 
             // Assert
             assertThat(result.getContent()).hasSize(1);

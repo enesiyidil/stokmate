@@ -39,4 +39,7 @@ public class ShipmentResponse {
 
     // Brand info
     private String brand; // OAK, PINE, MAPLE
+
+    // Problem resolution
+    private boolean problemResolved;
 }

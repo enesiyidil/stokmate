@@ -53,6 +53,14 @@ public class CustomerService {
         return customerRepository.findByIsDeleted(false, pageable).map(customerMapper::toResponse);
     }
 
+    public Page<CustomerResponse> listPaged(String search, Pageable pageable) {
+        String searchParam = null;
+        if (search != null && !search.isBlank()) {
+            searchParam = "%" + search.toLowerCase() + "%";
+        }
+        return customerRepository.findPagedWithSearch(searchParam, pageable).map(customerMapper::toResponse);
+    }
+
     public Customer getEntity(java.util.UUID id) {
         return customerRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Customer not found"));

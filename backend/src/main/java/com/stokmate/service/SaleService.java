@@ -123,6 +123,18 @@ public class SaleService {
                 .collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
+    public org.springframework.data.domain.Page<SaleResponse> listPaged(
+            String statusGroup, UUID consultantId, String search,
+            org.springframework.data.domain.Pageable pageable) {
+        String searchParam = null;
+        if (search != null && !search.isBlank()) {
+            searchParam = "%" + search.toLowerCase() + "%";
+        }
+        return saleRepository.findPagedWithFilters(statusGroup, consultantId, searchParam, pageable)
+                .map(saleMapper::toResponse);
+    }
+
     @Transactional
     public SaleResponse updateStatus(UUID id, SaleStatus status, User user) {
         Sale sale = saleRepository.findById(id)

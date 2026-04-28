@@ -73,6 +73,10 @@ public class OrderService {
     private final ShipmentRepository shipmentRepository;
     private final com.stokmate.repository.ProductStockHistoryRepository productStockHistoryRepository;
 
+    @org.springframework.context.annotation.Lazy
+    @org.springframework.beans.factory.annotation.Autowired
+    private ShipmentService shipmentService;
+
     private static final DateTimeFormatter EXCEL_DATE_FORMATTER = DateTimeFormatter.ofPattern("d.M.yyyy",
             Locale.forLanguageTag("tr"));
 
@@ -387,6 +391,30 @@ public class OrderService {
             responses.add(orderMapper.toResponse(o));
         }
         return responses;
+    }
+
+    /**
+     * Paginated list of orders with server-side filtering, searching, and custom
+     * sorting.
+     */
+    public org.springframework.data.domain.Page<OrderResponse> listOrdersPaged(
+            String statusGroup,
+            com.stokmate.domain.OrderType orderType,
+            String brand,
+            UUID consultantId,
+            String search,
+            boolean includeHidden,
+            org.springframework.data.domain.Pageable pageable) {
+
+        String searchParam = null;
+        if (search != null && !search.isBlank()) {
+            searchParam = "%" + search.toLowerCase() + "%";
+        }
+
+        org.springframework.data.domain.Page<Order> orderPage = orderRepository.findPagedWithFilters(
+                statusGroup, orderType, brand, consultantId, searchParam, includeHidden, pageable);
+
+        return orderPage.map(orderMapper::toResponse);
     }
 
     /**
@@ -1371,6 +1399,15 @@ public class OrderService {
                     "Sipariş tamamlandı - Tüm ürünler sevk edildi");
 
             log.info("Order {} marked as COMPLETED - all products shipped", orderId);
+
+            // Auto-resolve problematic shipments when linked SSH order completes
+            if (order.getOrderType() == com.stokmate.domain.OrderType.AFTER_SALES_SERVICE) {
+                try {
+                    shipmentService.autoResolveBySSH(orderId);
+                } catch (Exception e) {
+                    log.warn("Failed to auto-resolve shipments for SSH order {}: {}", orderId, e.getMessage());
+                }
+            }
         } else {
             // Ensure order is IN_PROGRESS if not completed
             if (order.getStatus() != OrderStatus.IN_PROGRESS &&

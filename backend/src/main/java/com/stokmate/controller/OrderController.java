@@ -5,7 +5,6 @@ import com.stokmate.dto.order.ExcelExtractionResponse;
 import com.stokmate.dto.order.OrderCreateRequest;
 import com.stokmate.dto.order.OrderResponse;
 import com.stokmate.dto.order.InvoiceUrlResponse;
-import com.stokmate.domain.OrderStatus;
 import com.stokmate.security.UserPrincipal;
 import com.stokmate.service.OrderService;
 import com.stokmate.service.PendingActionService;
@@ -83,19 +82,17 @@ public class OrderController {
 
         @PreAuthorize("hasAnyRole('ADMIN','MANAGER','DIRECTOR','STORE_MANAGER','STORE_EMPLOYEE','OPERATIONS_MANAGER')")
         @GetMapping
-        @Operation(summary = "List orders (optionally filter by status)", description = "Returns list of orders; optional query param `status` filters by order status. `includeHidden` includes SSH orders.")
-        public java.util.List<OrderResponse> listOrders(
-                        @org.springframework.web.bind.annotation.RequestParam(value = "status", required = false) String status,
-                        @org.springframework.web.bind.annotation.RequestParam(value = "includeHidden", defaultValue = "false") boolean includeHidden) {
-                OrderStatus s = null;
-                if (status != null && !status.isBlank()) {
-                        try {
-                                s = OrderStatus.valueOf(status);
-                        } catch (IllegalArgumentException e) {
-                                throw new IllegalArgumentException("Invalid status: " + status);
-                        }
-                }
-                return orderService.listOrdersByStatus(s, includeHidden);
+        @Operation(summary = "List orders (paginated)", description = "Returns paginated list of orders with optional filters and search.")
+        public org.springframework.data.domain.Page<OrderResponse> listOrders(
+                        @org.springframework.web.bind.annotation.RequestParam(value = "statusGroup", required = false) String statusGroup,
+                        @org.springframework.web.bind.annotation.RequestParam(value = "orderType", required = false) com.stokmate.domain.OrderType orderType,
+                        @org.springframework.web.bind.annotation.RequestParam(value = "brand", required = false) String brand,
+                        @org.springframework.web.bind.annotation.RequestParam(value = "consultantId", required = false) UUID consultantId,
+                        @org.springframework.web.bind.annotation.RequestParam(value = "search", required = false) String search,
+                        @org.springframework.web.bind.annotation.RequestParam(value = "includeHidden", defaultValue = "true") boolean includeHidden,
+                        org.springframework.data.domain.Pageable pageable) {
+                return orderService.listOrdersPaged(statusGroup, orderType, brand, consultantId, search, includeHidden,
+                                pageable);
         }
 
         @PreAuthorize("hasAnyRole('ADMIN','MANAGER','DIRECTOR','OPERATIONS_MANAGER')")

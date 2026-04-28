@@ -42,6 +42,18 @@ public class ShipmentDetailsResponse {
     private String signedDocumentUrl;
     private List<String> deliveryPhotoUrls;
 
+    // Problem resolution fields
+    private boolean problemResolved;
+    private String resolutionType; // MANUAL or SSH_ORDER
+    private String resolutionDescription;
+    private List<String> resolutionPhotoUrls;
+    private LocalDateTime resolvedAt;
+    private String resolvedByName;
+    // SSH order info for SSH_ORDER resolution
+    private String linkedSshOrderId;
+    private String linkedSshOrderNo;
+    private String linkedSshOrderStatus;
+
     @Data
     @Builder
     @NoArgsConstructor

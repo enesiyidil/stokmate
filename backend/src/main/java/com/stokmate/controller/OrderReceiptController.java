@@ -60,10 +60,13 @@ public class OrderReceiptController {
     @PreAuthorize("hasAnyRole('ADMIN','MANAGER','MUDUR','DIRECTOR','OPERATIONS_MANAGER','STORE_MANAGER')")
     @GetMapping
     @Operation(summary = "List all receipts", description = "List receipts with optional filters")
-    public List<OrderReceiptResponse> listReceipts(
-            @Parameter(description = "Filter by order ID") @RequestParam(value = "orderId", required = false) UUID orderId,
-            @Parameter(description = "Filter by status") @RequestParam(value = "status", required = false) OrderReceiptStatus status) {
-        return orderReceiptService.listReceipts(orderId, status);
+    public org.springframework.data.domain.Page<OrderReceiptResponse> listReceipts(
+            @Parameter(description = "Search term") @RequestParam(value = "search", required = false) String search,
+            @Parameter(description = "Filter by status") @RequestParam(value = "status", required = false) OrderReceiptStatus status,
+            @Parameter(description = "Filter by receivedBy") @RequestParam(value = "receivedBy", required = false) UUID receivedBy,
+            @Parameter(description = "Filter by approvedBy") @RequestParam(value = "approvedBy", required = false) UUID approvedBy,
+            @org.springdoc.core.annotations.ParameterObject org.springframework.data.domain.Pageable pageable) {
+        return orderReceiptService.listAllPaged(search, status, receivedBy, approvedBy, pageable);
     }
 
     @PreAuthorize("hasAnyRole('ADMIN','MANAGER','MUDUR','DIRECTOR','OPERATIONS_MANAGER','STORE_MANAGER')")
