@@ -9,6 +9,7 @@ import { useGetUserSummariesQuery } from '../../services/userApi';
 import AddSaleModal from './AddSaleModal';
 import { useTopbar } from '../../context/TopbarContext';
 import FilterSearchBar from '../../components/common/FilterSearchBar';
+import Pagination from '../../components/common/Pagination';
 import OtpVerificationModal from '../../components/common/OtpVerificationModal';
 import { useAppSelector } from '../../hooks/useAuth';
 
@@ -31,15 +32,29 @@ const SalesPage: React.FC = () => {
     };
 
     // State
-    const [statusFilter, setStatusFilter] = useState<SaleStatus | 'ALL'>('ALL');
+    const [statusFilter, setStatusFilter] = useState<string>('ALL');
     const [consultantFilter, setConsultantFilter] = useState<string>('ALL');
-    const [brandFilter, setBrandFilter] = useState<'ALL' | 'OAK' | 'MAPLE' | 'PINE' | 'MARKASIZ'>('ALL');
     const [searchTerm, setSearchTerm] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
+    const [page, setPage] = useState(0);
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+
+    // Debounce search
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearch(searchTerm);
+            setPage(0);
+        }, 400);
+        return () => clearTimeout(timer);
+    }, [searchTerm]);
+
     // Queries
     const { data: users } = useGetUserSummariesQuery();
-    const { data: allSales, isLoading } = useGetSalesQuery({
-        status: statusFilter === 'ALL' ? undefined : statusFilter,
+    const { data: salesData, isLoading } = useGetSalesQuery({
+        page,
+        size: 50,
+        search: debouncedSearch || undefined,
+        statusGroup: statusFilter === 'ALL' ? undefined : statusFilter,
         consultantId: consultantFilter === 'ALL' ? undefined : consultantFilter
     });
 
@@ -48,38 +63,11 @@ const SalesPage: React.FC = () => {
         ['STORE_EMPLOYEE', 'STORE_MANAGER', 'MANAGER', 'ADMIN'].includes(u.role)
     ) || [], [users]);
 
-    const filteredSales = useMemo(() => {
-        if (!allSales) return [];
-        return allSales.filter(sale => {
-            // Search filter - includes product name/code, consultant name
-            if (searchTerm.trim()) {
-                const query = searchTerm.toLocaleLowerCase('tr-TR');
-                const matchesSaleNo = sale.saleNo.toLocaleLowerCase('tr-TR').includes(query);
-                const matchesContractNo = sale.contractNo?.toLocaleLowerCase('tr-TR').includes(query);
-                const matchesCustomer = sale.customerName.toLocaleLowerCase('tr-TR').includes(query);
-                const matchesConsultant = sale.salesConsultantName?.toLocaleLowerCase('tr-TR').includes(query);
-                const matchesProduct = sale.products?.some((p) =>
-                    p.productName?.toLocaleLowerCase('tr-TR').includes(query) ||
-                    p.productCode?.toLocaleLowerCase('tr-TR').includes(query) ||
-                    p.brand?.toLocaleLowerCase('tr-TR').includes(query)
-                );
-                if (!matchesSaleNo && !matchesContractNo && !matchesCustomer && !matchesConsultant && !matchesProduct) return false;
-            }
+    const sales = salesData?.content || [];
 
-            // Brand filter - filter by products' brands
-            if (brandFilter !== 'ALL') {
-                const hasMatchingBrand = sale.products?.some((p) => {
-                    if (brandFilter === 'MARKASIZ') {
-                        return !p.brand || p.brand === '';
-                    }
-                    return p.brand === brandFilter;
-                });
-                if (!hasMatchingBrand) return false;
-            }
-
-            return true;
-        });
-    }, [allSales, searchTerm, brandFilter]);
+    // Reset page on filter change
+    const handleStatusChange = (v: string) => { setStatusFilter(v); setPage(0); };
+    const handleConsultantChange = (v: string) => { setConsultantFilter(v); setPage(0); };
 
     // Topbar Configuration
     useEffect(() => {
@@ -130,7 +118,7 @@ const SalesPage: React.FC = () => {
                     {
                         label: 'Durum',
                         value: statusFilter,
-                        onChange: setStatusFilter,
+                        onChange: handleStatusChange,
                         options: [
                             { key: 'ALL', label: 'Tümü' },
                             { key: 'DEVAM_EDIYOR', label: 'Devam Edenler', activeColor: 'bg-blue-600' },
@@ -141,27 +129,15 @@ const SalesPage: React.FC = () => {
                     {
                         label: 'Danışman',
                         value: consultantFilter,
-                        onChange: setConsultantFilter,
+                        onChange: handleConsultantChange,
                         type: 'dropdown',
                         options: [
                             { key: 'ALL', label: 'Tümü' },
                             ...consultants.map(c => ({ key: c.id, label: `${c.firstName} ${c.lastName}` }))
                         ]
-                    },
-                    {
-                        label: 'Marka',
-                        value: brandFilter,
-                        onChange: setBrandFilter,
-                        options: [
-                            { key: 'ALL', label: 'Tümü' },
-                            { key: 'OAK', label: 'Doğtaş', activeColor: 'bg-red-600' },
-                            { key: 'MAPLE', label: 'Maple', activeColor: 'bg-blue-600' },
-                            { key: 'PINE', label: 'Pine', activeColor: 'bg-purple-600' },
-                            { key: 'MARKASIZ', label: 'Markasız', activeColor: 'bg-gray-600' }
-                        ]
                     }
                 ]}
-                searchPlaceholder="Satış no, sözleşme no, müşteri adı, danışman adı, ürün adı veya kodu..."
+                searchPlaceholder="Satış no, sözleşme no, müşteri adı, danışman adı..."
                 searchValue={searchTerm}
                 onSearchChange={setSearchTerm}
             />
@@ -185,16 +161,16 @@ const SalesPage: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {filteredSales.length === 0 ? (
+                                {sales.length === 0 ? (
                                     <tr>
                                         <td colSpan={7} className="px-6 py-12 text-center text-amber-700">
-                                            {searchTerm || statusFilter !== 'ALL' || consultantFilter !== 'ALL'
+                                            {debouncedSearch || statusFilter !== 'ALL' || consultantFilter !== 'ALL'
                                                 ? 'Bu kriterlere uygun satış bulunamadı'
                                                 : 'Henüz satış bulunmuyor'}
                                         </td>
                                     </tr>
                                 ) : (
-                                    filteredSales.map((sale) => {
+                                    sales.map((sale) => {
                                         const statusBadge = getStatusBadge(sale.status);
                                         const StatusIcon = statusBadge.icon;
 
@@ -246,6 +222,16 @@ const SalesPage: React.FC = () => {
                     </div>
                 )}
             </div>
+
+            {/* Pagination */}
+            {salesData && salesData.totalPages > 1 && (
+                <Pagination
+                    page={page}
+                    totalPages={salesData.totalPages}
+                    totalElements={salesData.totalElements}
+                    onPageChange={setPage}
+                />
+            )}
 
             {/* Modal */}
             <AddSaleModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} />

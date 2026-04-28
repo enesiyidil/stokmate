@@ -1,6 +1,6 @@
-import { ArrowLeft, Package, User, FileText, Calendar, Truck, Activity, Clock, CheckCircle, AlertTriangle, XCircle, RotateCcw, Edit3 } from 'lucide-react'
+import { ArrowLeft, Package, User, FileText, Calendar, Truck, Activity, Clock, CheckCircle, AlertTriangle, XCircle, RotateCcw, Edit3, Wrench, ExternalLink } from 'lucide-react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { useGetShipmentDetailsQuery, useGetShipmentDetailsByIdQuery, usePlanShipmentMutation, useListVehiclesQuery, useDownloadShipmentReportMutation, useDownloadShipmentReportByShipmentIdMutation, useCompleteShipmentMutation, useFinalizeShipmentMutation, useDownloadSignedDocumentMutation, useCancelShipmentMutation, useWithdrawShipmentMutation, useUpdatePlannedDateMutation, useUpdateShipmentVehicleMutation, useUpdateShipmentDriverByIdMutation } from '../../services/shipmentApi'
+import { useGetShipmentDetailsQuery, useGetShipmentDetailsByIdQuery, usePlanShipmentMutation, useListVehiclesQuery, useDownloadShipmentReportMutation, useDownloadShipmentReportByShipmentIdMutation, useCompleteShipmentMutation, useFinalizeShipmentMutation, useDownloadSignedDocumentMutation, useCancelShipmentMutation, useWithdrawShipmentMutation, useUpdatePlannedDateMutation, useUpdateShipmentVehicleMutation, useUpdateShipmentDriverByIdMutation, useResolveShipmentProblemMutation } from '../../services/shipmentApi'
 import { useAddOrderNoteMutation } from '../../services/orderApi'
 import { useGetUserSummariesQuery } from '../../services/userApi'
 import { useGetOrderActivitiesQuery } from '../../services/orderActivityApi'
@@ -9,6 +9,7 @@ import { tr } from 'date-fns/locale'
 import { useTopbar } from '../../context/TopbarContext'
 import { useEffect, useState, useMemo } from 'react'
 import CompleteShipmentModal from '../../components/shipment/CompleteShipmentModal'
+import ResolveProblemModal from '../../components/shipment/ResolveProblemModal'
 import { useAppSelector } from '../../hooks/useAuth'
 import { useToast } from '../../context/ToastContext'
 import ConfirmModal from '../../components/common/ConfirmModal'
@@ -27,7 +28,8 @@ export default function ShipmentDetailsPage() {
     const canPlan = ['ADMIN', 'MANAGER', 'DIRECTOR', 'LOGISTICS_MANAGER', 'OPERATIONS_MANAGER'].includes(user?.role || '')
     const canComplete = ['ADMIN', 'MANAGER', 'DIRECTOR', 'LOGISTICS_MANAGER', 'OPERATIONS_MANAGER'].includes(user?.role || '')
     const canFinalize = ['ADMIN', 'MANAGER', 'DIRECTOR'].includes(user?.role || '')
-    const canModifyShipment = ['ADMIN', 'MANAGER'].includes(user?.role || '') // Admin/Manager can cancel, withdraw, update date
+    const canModifyShipment = ['ADMIN', 'MANAGER'].includes(user?.role || '')
+    const canResolveProblem = ['ADMIN', 'MANAGER', 'DIRECTOR', 'LOGISTICS_MANAGER', 'OPERATIONS_MANAGER'].includes(user?.role || '')
 
     // Conditional query based on ID type
     const orderQuery = useGetShipmentDetailsQuery(orderId!, { skip: isShipmentId })
@@ -65,8 +67,10 @@ export default function ShipmentDetailsPage() {
     const [updatePlannedDateMutation, { isLoading: isUpdatingDate }] = useUpdatePlannedDateMutation()
     const [updateVehicleMutation, { isLoading: isUpdatingVehicle }] = useUpdateShipmentVehicleMutation()
     const [updateDriverMutation, { isLoading: isUpdatingDriver }] = useUpdateShipmentDriverByIdMutation()
+    const [resolveShipmentProblem, { isLoading: isResolvingProblem }] = useResolveShipmentProblemMutation()
 
     const [showPlanningModal, setShowPlanningModal] = useState(false)
+    const [showResolveProblemModal, setShowResolveProblemModal] = useState(false)
     const [showCompleteModal, setShowCompleteModal] = useState(false)
     const [showDocumentModal, setShowDocumentModal] = useState(false)
     const [showGallery, setShowGallery] = useState(false)
@@ -93,6 +97,8 @@ export default function ShipmentDetailsPage() {
         }
     }
     const [galleryStartIndex, setGalleryStartIndex] = useState(0)
+    const [showResolutionGallery, setShowResolutionGallery] = useState(false)
+    const [resolutionGalleryStartIndex, setResolutionGalleryStartIndex] = useState(0)
     const [documentUrl, setDocumentUrl] = useState<string | null>(null)
     const [documentType, setDocumentType] = useState<'pdf' | 'image' | null>(null)
     const { success, error } = useToast()
@@ -240,10 +246,6 @@ export default function ShipmentDetailsPage() {
             })
 
             // Add signed document
-            if (data.signedDocument) {
-                formData.append('signedDocument', data.signedDocument)
-            }
-
             if (data.signedDocument) {
                 formData.append('signedDocument', data.signedDocument)
             }
@@ -437,6 +439,30 @@ export default function ShipmentDetailsPage() {
         setDocumentType(null)
     }
 
+    const handleResolveProblem = async (data: { description: string; photos: File[] }) => {
+        if (!shipmentDetails?.shipmentId) return
+
+        const formData = new FormData()
+        formData.append('description', data.description)
+        data.photos.forEach((photo) => {
+            formData.append('photos', photo)
+        })
+
+        verifyGate(async () => {
+            try {
+                await resolveShipmentProblem({
+                    shipmentId: shipmentDetails.shipmentId!,
+                    formData
+                }).unwrap()
+                success('Sorun başarıyla çözüldü olarak işaretlendi!')
+                setShowResolveProblemModal(false)
+                refetch()
+            } catch (err: any) {
+                error('Hata: ' + (err.data?.message || err.message || 'Bir hata oluştu'))
+            }
+        })
+    }
+
     const handleReportMissingInfo = async () => {
         if (!realOrderId) return
 
@@ -562,6 +588,97 @@ export default function ShipmentDetailsPage() {
                                             <p className="text-amber-900 font-medium">
                                                 {shipmentDetails.problemType === 'FACTORY_DEFECT' ? 'Fabrika Hatası' : 'Teslimat/Montaj Hatası'}
                                             </p>
+                                        </div>
+                                    )}
+
+                                    {/* Problem Resolution Status */}
+                                    {shipmentDetails.deliveryStatus === 'PROBLEMATIC' && (
+                                        <div className="pt-2 border-t border-amber-100">
+                                            {shipmentDetails.problemResolved ? (
+                                                <div className="p-3 bg-green-50 border border-green-200 rounded-lg space-y-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <CheckCircle className="w-4 h-4 text-green-600" />
+                                                        <p className="text-green-800 font-semibold text-sm">Sorun Çözüldü</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-xs text-green-700 mb-0.5">Çözüm Yöntemi</p>
+                                                        <p className="text-green-900 text-sm font-medium">
+                                                            {shipmentDetails.resolutionType === 'MANUAL' ? 'Manuel Çözüm' : 'SSH Siparişi ile Çözüm'}
+                                                        </p>
+                                                    </div>
+                                                    {shipmentDetails.resolutionDescription && (
+                                                        <div>
+                                                            <p className="text-xs text-green-700 mb-0.5">Açıklama</p>
+                                                            <p className="text-green-900 text-sm whitespace-pre-wrap">{shipmentDetails.resolutionDescription}</p>
+                                                        </div>
+                                                    )}
+                                                    <div>
+                                                        <p className="text-xs text-green-700 mb-0.5">Çözen</p>
+                                                        <p className="text-green-900 text-sm">
+                                                            {shipmentDetails.resolvedByName || (shipmentDetails.resolutionType === 'SSH_ORDER' ? 'Sistem (Otomatik)' : '-')}
+                                                        </p>
+                                                    </div>
+                                                    {shipmentDetails.resolvedAt && (
+                                                        <div>
+                                                            <p className="text-xs text-green-700 mb-0.5">Çözüm Tarihi</p>
+                                                            <p className="text-green-900 text-sm">{new Date(shipmentDetails.resolvedAt).toLocaleDateString('tr-TR')} - {new Date(shipmentDetails.resolvedAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</p>
+                                                        </div>
+                                                    )}
+                                                    {/* SSH Order Link */}
+                                                    {shipmentDetails.resolutionType === 'SSH_ORDER' && shipmentDetails.linkedSshOrderNo && (
+                                                        <div>
+                                                            <p className="text-xs text-green-700 mb-0.5">SSH Siparişi</p>
+                                                            <button
+                                                                onClick={() => navigate(`/orders/${shipmentDetails.linkedSshOrderId}`)}
+                                                                className="flex items-center gap-1 text-green-700 hover:text-green-900 text-sm font-medium underline"
+                                                            >
+                                                                {shipmentDetails.linkedSshOrderNo}
+                                                                <ExternalLink className="w-3 h-3" />
+                                                            </button>
+                                                            <p className="text-xs text-green-600 mt-0.5">Durum: {shipmentDetails.linkedSshOrderStatus}</p>
+                                                        </div>
+                                                    )}
+                                                    {/* Resolution Photos */}
+                                                    {shipmentDetails.resolutionPhotoUrls && shipmentDetails.resolutionPhotoUrls.length > 0 && (
+                                                        <div>
+                                                            <p className="text-xs text-green-700 mb-1">Çözüm Fotoğrafları ({shipmentDetails.resolutionPhotoUrls.length})</p>
+                                                            <div className="grid grid-cols-3 gap-2">
+                                                                {shipmentDetails.resolutionPhotoUrls.map((url, idx) => (
+                                                                    <div
+                                                                        key={idx}
+                                                                        onClick={() => {
+                                                                            setResolutionGalleryStartIndex(idx)
+                                                                            setShowResolutionGallery(true)
+                                                                        }}
+                                                                        className="aspect-square rounded-lg overflow-hidden border-2 border-green-300 hover:border-green-500 transition-colors cursor-pointer"
+                                                                    >
+                                                                        <img
+                                                                            src={`/api/files/view?path=${encodeURIComponent(url)}`}
+                                                                            alt={`Çözüm ${idx + 1}`}
+                                                                            className="w-full h-full object-cover"
+                                                                        />
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ) : canResolveProblem ? (
+                                                <button
+                                                    onClick={() => setShowResolveProblemModal(true)}
+                                                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:from-green-600 hover:to-emerald-700 transition-all shadow-md font-medium"
+                                                >
+                                                    <Wrench className="w-4 h-4" />
+                                                    Sorun Gider
+                                                </button>
+                                            ) : (
+                                                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                                                    <p className="text-red-700 text-sm font-medium flex items-center gap-2">
+                                                        <AlertTriangle className="w-4 h-4" />
+                                                        Sorun henüz çözülmedi
+                                                    </p>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
 
@@ -926,6 +1043,20 @@ export default function ShipmentDetailsPage() {
                     </div>
                 )
             }
+
+            <ResolveProblemModal
+                isOpen={showResolveProblemModal}
+                onClose={() => setShowResolveProblemModal(false)}
+                onResolve={handleResolveProblem}
+                isLoading={isResolvingProblem}
+            />
+
+            <ImageGalleryModal
+                isOpen={showResolutionGallery}
+                onClose={() => setShowResolutionGallery(false)}
+                images={shipmentDetails?.resolutionPhotoUrls || []}
+                initialIndex={resolutionGalleryStartIndex}
+            />
 
             <OtpVerificationModal
                 isOpen={showOtpModal}

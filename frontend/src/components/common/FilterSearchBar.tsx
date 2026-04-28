@@ -56,7 +56,7 @@ const FilterSearchBar: React.FC<FilterSearchBarProps> = ({
 
                 {/* Filters Section */}
                 <div className="space-y-6">
-                    <div className="flex flex-wrap gap-y-6 gap-x-8">
+                    <div className="flex flex-wrap items-start gap-y-6 gap-x-8">
                         {filters.map((group) => (
                             <div key={group.label} className="flex flex-col gap-2">
                                 <span className="text-amber-800 text-xs font-bold uppercase tracking-wider pl-1 flex items-center gap-1.5">
@@ -98,8 +98,8 @@ const FilterSearchBar: React.FC<FilterSearchBarProps> = ({
                                                     key={option.key}
                                                     onClick={() => group.onChange(option.key)}
                                                     className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-300 border ${isActive
-                                                            ? `${activeColorClass} text-white border-transparent transform scale-105 shadow-md shadow-amber-900/10`
-                                                            : 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50 hover:border-amber-300 hover:text-amber-900 shadow-sm'
+                                                        ? `${activeColorClass} text-white border-transparent transform scale-105 shadow-md shadow-amber-900/10`
+                                                        : 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50 hover:border-amber-300 hover:text-amber-900 shadow-sm'
                                                         }`}
                                                 >
                                                     {option.label}
@@ -110,14 +110,13 @@ const FilterSearchBar: React.FC<FilterSearchBarProps> = ({
                                 </div>
                             </div>
                         ))}
+                        {extraContent && (
+                            <div className="flex-1 min-w-fit">
+                                {extraContent}
+                            </div>
+                        )}
                     </div>
                 </div>
-
-                {extraContent && (
-                    <div className="mt-8 pt-6 border-t border-amber-200/60">
-                        {extraContent}
-                    </div>
-                )}
             </div>
         </div>
     )

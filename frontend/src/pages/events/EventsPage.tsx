@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useGetBusinessActivitiesQuery } from '../../services/orderApi';
 import { useTopbar } from '../../context/TopbarContext';
 import { useEffect } from 'react';
-import { Bell, ChevronLeft, ChevronRight, Package, Truck, AlertTriangle, FileText } from 'lucide-react';
+import { Bell, ChevronLeft, ChevronRight, Package, Truck, AlertTriangle, FileText, Repeat, Wallet } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import FilterSearchBar from '../../components/common/FilterSearchBar';
@@ -44,8 +44,10 @@ export function EventsPage() {
 
         if (type.includes('ORDER')) return { icon: Package, color: 'text-blue-600 bg-blue-50 border-blue-200', label: 'Sipariş' };
         if (type.includes('SHIPMENT')) return { icon: Truck, color: 'text-green-600 bg-green-50 border-green-200', label: 'Sevkiyat' };
+        if (type.includes('CROSS_CONVERSION')) return { icon: Repeat, color: 'text-orange-600 bg-orange-50 border-orange-200', label: 'Çapraz Dönüştürme' };
         if (type.includes('NOTE')) return { icon: FileText, color: 'text-amber-600 bg-amber-50 border-amber-200', label: 'Not' };
         if (type.includes('ALERT')) return { icon: AlertTriangle, color: 'text-red-600 bg-red-50 border-red-200', label: 'Uyarı' };
+        if (domain === 'BALANCE') return { icon: Wallet, color: 'text-emerald-600 bg-emerald-50 border-emerald-200', label: 'Bakiye İşlemi' };
         return { icon: Bell, color: 'text-gray-600 bg-gray-50 border-gray-200', label: 'Sistem' };
     };
 
@@ -64,7 +66,9 @@ export function EventsPage() {
                         options: [
                             { key: '', label: 'Tümü' },
                             { key: 'ORDER', label: 'Siparişler' },
-                            { key: 'SALE', label: 'Satışlar' }
+                            { key: 'SALE', label: 'Satışlar' },
+                            { key: 'CROSS_CONVERSION', label: 'Çapraz Dönüştürme' },
+                            { key: 'BALANCE', label: 'Bakiye Defteri' }
                         ]
                     }
                 ]}

@@ -26,6 +26,8 @@ import ShipmentDetailsPage from './pages/shipment/ShipmentDetailsPage'
 
 import SaleDetailsPage from './pages/sales/SaleDetailsPage';
 import VehiclesPage from './pages/VehiclesPage'
+import CrossConversionsPage from './pages/CrossConversionsPage'
+import BalanceLedgerPage from './pages/BalanceLedgerPage'
 import { EventsPage } from './pages/events/EventsPage'
 import { ProtectedRoute as RoleProtectedRoute } from './components/auth/ProtectedRoute'
 import NotFoundPage from './pages/NotFoundPage'
@@ -34,6 +36,8 @@ import SessionExpiredModal from './components/auth/SessionExpiredModal'
 
 import DeliveryConfirmPage from './pages/delivery/DeliveryConfirmPage'
 import ReportsPageReal from './pages/reports/ReportsPage'
+import NotesPage from './pages/notes/NotesPage'
+import FeedbackPage from './pages/FeedbackPage'
 
 
 
@@ -78,12 +82,16 @@ function App() {
               <Route path="/sales/:id" element={<SaleDetailsPage />} />
               <Route path="/shipment" element={<ShipmentOperationsPage />} />
               <Route path="/shipment/:orderId" element={<ShipmentDetailsPage />} />
+              <Route path="/cross-conversions" element={<CrossConversionsPage />} />
+              <Route path="/balance-ledger" element={<BalanceLedgerPage />} />
               <Route path="/requests" element={<SupportRequestsPage />} />
               <Route path="/customers" element={<CustomersPage />} />
               <Route path="/reports" element={<ReportsPageReal />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/support-requests" element={<SupportRequestsPage />} />
               <Route path="/about" element={<AboutPage />} />
+              <Route path="/notes" element={<NotesPage />} />
+              <Route path="/feedback" element={<FeedbackPage />} />
 
               <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'MANAGER', 'DIRECTOR']} />}>
                 <Route path="/stores" element={<StoresPage />} />

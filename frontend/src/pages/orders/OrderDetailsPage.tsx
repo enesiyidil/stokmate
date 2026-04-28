@@ -1,4 +1,4 @@
-import { ArrowLeft, Package, User, FileText, CheckCircle, XCircle, Clock, Upload, Download, Activity, Edit, Eye, Pencil, StickyNote, Plus, Strikethrough, AlertTriangle, Check } from 'lucide-react'
+import { ArrowLeft, Package, User, FileText, CheckCircle, XCircle, Clock, Upload, Download, Activity, Edit, Eye, Pencil, StickyNote, Plus, Strikethrough, AlertTriangle, Check, Truck } from 'lucide-react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useCancelOrderMutation, useApproveCancellationMutation, useUploadInvoiceMutation, useGetInvoiceUrlQuery, useGetOrderQuery, useUpdateSalesConsultantMutation, useUpdateBrandMutation, useGetOrderNotesQuery, useAddOrderNoteMutation, useStrikeOrderNoteMutation, useDeleteOrderMutation, useUpdateOrderMutation } from '../../services/orderApi'
 import { useCreatePartialShipmentMutation } from '../../services/shipmentApi'
@@ -20,6 +20,7 @@ import { useToast } from '../../context/ToastContext'
 import ConfirmModal from '../../components/common/ConfirmModal'
 import OtpVerificationModal from '../../components/common/OtpVerificationModal'
 import type { ProblemShipmentSummary } from '../../services/orderApi'
+import LinkedNotesWidget from '../../components/notes/LinkedNotesWidget'
 
 export default function OrderDetailsPage() {
     const { id } = useParams<{ id: string }>()
@@ -367,6 +368,16 @@ export default function OrderDetailsPage() {
                             </button>
                         )}
 
+                        {/* Navigate to Shipments filtered by this order */}
+                        <button
+                            onClick={() => navigate(`/shipment?search=${encodeURIComponent(order.orderNo)}`)}
+                            title="Bu siparişin sevkiyatlarını gör"
+                            className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-lg transition-colors text-sm"
+                        >
+                            <Truck className="w-4 h-4" />
+                            <span className="hidden lg:inline">Sevkiyatlar</span>
+                        </button>
+
                     </div>
                 ),
                 filters: (
@@ -675,84 +686,12 @@ export default function OrderDetailsPage() {
                             )}
                         </div>
 
-                        {/* Order Notes / Not Defteri */}
-                        <div className="flex-1 backdrop-blur-xl bg-white border border-amber-200 rounded-2xl shadow-2xl p-6 flex flex-col">
-                            <h3 className="text-lg font-semibold text-amber-900 flex items-center gap-2 mb-4">
-                                <StickyNote className="w-5 h-5" />
-                                Not Defteri ({orderNotes.length})
-                            </h3>
-
-                            {/* Add Note Input */}
-                            <div className="flex gap-2 mb-4">
-                                <input
-                                    type="text"
-                                    value={newNoteContent}
-                                    onChange={(e) => setNewNoteContent(e.target.value)}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleAddNote()}
-                                    placeholder="Yeni not ekle..."
-                                    className="flex-1 px-4 py-2 bg-white border border-amber-300 rounded-lg text-amber-900 placeholder-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm"
-                                    maxLength={1000}
-                                />
-                                <button
-                                    onClick={handleAddNote}
-                                    disabled={isAddingNote || !newNoteContent.trim()}
-                                    className="px-4 py-2 bg-gradient-to-r from-amber-600 to-orange-600 text-white rounded-lg hover:from-amber-700 hover:to-orange-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                                >
-                                    <Plus className="w-4 h-4" />
-                                    Ekle
-                                </button>
-                            </div>
-
-                            {/* Notes List */}
-                            <div className="space-y-2 flex-1 overflow-y-auto pr-2">
-                                {orderNotes.length > 0 ? (
-                                    orderNotes.map((note) => (
-                                        <div
-                                            key={note.id}
-                                            className={`p-3 border rounded-lg flex items-start justify-between gap-3 ${note.strikethrough
-                                                ? 'bg-gray-100 border-gray-300'
-                                                : 'bg-amber-50 border-amber-200'
-                                                }`}
-                                        >
-                                            <div className="flex-1">
-                                                <p className={`text-sm ${note.strikethrough
-                                                    ? 'text-gray-500 line-through'
-                                                    : 'text-amber-900'
-                                                    }`}>
-                                                    {note.content}
-                                                </p>
-                                                <div className="flex items-center gap-3 mt-1 text-xs text-amber-700">
-                                                    <span className="flex items-center gap-1">
-                                                        <User className="w-3 h-3" />
-                                                        {note.createdByName}
-                                                    </span>
-                                                    <span className="flex items-center gap-1">
-                                                        <Clock className="w-3 h-3" />
-                                                        {formatDistanceToNow(new Date(note.createdAt), { addSuffix: true, locale: tr })}
-                                                    </span>
-                                                    {note.strikethrough && note.strikethroughByName && (
-                                                        <span className="text-gray-500">
-                                                            (Çizen: {note.strikethroughByName})
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            {!note.strikethrough && (
-                                                <button
-                                                    onClick={() => handleStrikeNote(note.id)}
-                                                    title="Üstünü Çiz"
-                                                    className="p-1.5 text-amber-600 hover:text-amber-800 hover:bg-amber-200 rounded transition-colors"
-                                                >
-                                                    <Strikethrough className="w-4 h-4" />
-                                                </button>
-                                            )}
-                                        </div>
-                                    ))
-                                ) : (
-                                    <p className="text-center text-amber-700 py-8">Henüz not bulunmuyor</p>
-                                )}
-                            </div>
-                        </div>
+                        {/* Linked Notes Widget */}
+                        <LinkedNotesWidget
+                            entityType="ORDER"
+                            entityId={order.id}
+                            className="flex-1"
+                        />
                     </div>
 
                     {/* Right Column - Scrollable */}

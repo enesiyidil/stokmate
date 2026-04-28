@@ -34,9 +34,10 @@ export interface ProductResponse {
 }
 
 export interface ProductListParams {
-    name?: string
+    search?: string
     brand?: string
     activeForSale?: boolean
+    stockFilter?: string
     page?: number
     size?: number
 }
@@ -51,7 +52,7 @@ const productApi = api.injectEndpoints({
                 params: {
                     ...params,
                     page: params.page || 0,
-                    size: params.size || 20
+                    size: params.size || 50
                 }
             }),
             providesTags: ['Product']

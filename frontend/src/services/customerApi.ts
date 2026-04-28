@@ -37,6 +37,19 @@ export const customerApi = api.injectEndpoints({
             },
             providesTags: ['Customers'],
         }),
+        listCustomersPaged: builder.query<import('../types/common').PageResponse<CustomerResponse>, {
+            page?: number; size?: number; search?: string
+        }>({
+            query: (params) => ({
+                url: '/customers',
+                params: {
+                    page: params?.page ?? 0,
+                    size: params?.size ?? 50,
+                    ...(params?.search && { search: params.search }),
+                }
+            }),
+            providesTags: ['Customers'],
+        }),
         searchCustomers: builder.query<CustomerResponse[], string>({
             query: (query) => `/customers/search?query=${encodeURIComponent(query)}`,
             providesTags: ['Customers'],
@@ -69,6 +82,7 @@ export const customerApi = api.injectEndpoints({
 
 export const {
     useListCustomersQuery,
+    useListCustomersPagedQuery,
     useSearchCustomersQuery,
     useCreateCustomerMutation,
     useUpdateCustomerMutation,

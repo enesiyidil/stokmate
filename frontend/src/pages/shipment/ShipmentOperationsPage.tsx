@@ -1,12 +1,13 @@
-import { Package, Truck, CheckCircle, Clock, Calendar, List, Eye } from 'lucide-react'
-import { useState, useEffect, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useListReadyShipmentsQuery, useListPendingShipmentsQuery, useListAwaitingPlanningShipmentsQuery, useGetCompletedAwaitingApprovalQuery, useGetApprovedShipmentsQuery, useFinalizeShipmentMutation, useApproveInitialShipmentMutation, useCompleteShipmentMutation, usePlanShipmentMutation } from '../../services/shipmentApi'
+import { Package, Truck, CheckCircle, Calendar, Eye } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useListShipmentsQuery, useFinalizeShipmentMutation, useApproveInitialShipmentMutation, useCompleteShipmentMutation, usePlanShipmentMutation } from '../../services/shipmentApi'
 import { useTopbar } from '../../context/TopbarContext'
 import CompleteShipmentModal from '../../components/shipment/CompleteShipmentModal'
 import PlanShipmentModal from '../../components/shipment/PlanShipmentModal'
 import OtpVerificationModal from '../../components/common/OtpVerificationModal'
 import FilterSearchBar from '../../components/common/FilterSearchBar'
+import Pagination from '../../components/common/Pagination'
 import ConfirmModal from '../../components/common/ConfirmModal'
 import BrandBadge from '../../components/common/BrandBadge'
 import { useAppSelector } from '../../hooks/useAuth'
@@ -54,16 +55,42 @@ const ShipmentOperationsPage: React.FC = () => {
     }
 
     // Filter states
-    const [searchQuery, setSearchQuery] = useState('')
+    const [searchParams] = useSearchParams()
+    const [searchQuery, setSearchQuery] = useState(() => searchParams.get('search') || '')
+    const [debouncedSearch, setDebouncedSearch] = useState(() => searchParams.get('search') || '')
     const [deliveryFilter, setDeliveryFilter] = useState<'ALL' | 'PROBLEM_FREE' | 'PROBLEMATIC' | 'NOT_DELIVERED'>('ALL')
     const [brandFilter, setBrandFilter] = useState<'ALL' | 'OAK' | 'PINE' | 'MAPLE' | 'MARKASIZ'>('ALL')
+    const [problemResolvedFilter, setProblemResolvedFilter] = useState<'ALL' | 'RESOLVED' | 'UNRESOLVED'>('ALL')
+    const [page, setPage] = useState(0)
 
-    // Queries
-    const { data: pendingShipments = [], isLoading: loadingPending, refetch: refetchPending } = useListPendingShipmentsQuery()
-    const { data: awaitingShipments = [], isLoading: loadingAwaiting, refetch: refetchAwaiting } = useListAwaitingPlanningShipmentsQuery()
-    const { data: readyShipments = [], isLoading: loadingReady } = useListReadyShipmentsQuery()
-    const { data: completedShipments = [], isLoading: loadingCompleted, refetch: refetchCompleted } = useGetCompletedAwaitingApprovalQuery()
-    const { data: finalizedShipments = [], isLoading: loadingFinalized, refetch: refetchFinalized } = useGetApprovedShipmentsQuery()
+    // Debounce search
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearch(searchQuery)
+            setPage(0)
+        }, 400)
+        return () => clearTimeout(timer)
+    }, [searchQuery])
+
+    // Map tab to statusGroup for backend
+    const statusGroupMap: Record<TabKey, string | undefined> = {
+        all: undefined,
+        pending: 'PENDING',
+        awaiting: 'AWAITING',
+        ready: 'READY',
+        completed: 'COMPLETED',
+    }
+
+    // Paginated query
+    const { data: pagedData, isLoading: loading, refetch } = useListShipmentsQuery({
+        page,
+        size: 50,
+        search: debouncedSearch || undefined,
+        statusGroup: statusGroupMap[activeTab],
+        deliveryStatus: deliveryFilter !== 'ALL' ? deliveryFilter : undefined,
+        brand: brandFilter !== 'ALL' ? brandFilter : undefined,
+        problemResolved: problemResolvedFilter !== 'ALL' ? problemResolvedFilter : undefined,
+    })
 
     // Mutations
     const [approveInitialMutation] = useApproveInitialShipmentMutation()
@@ -71,92 +98,13 @@ const ShipmentOperationsPage: React.FC = () => {
     const [completeShipmentMutation, { isLoading: isCompletingShipment }] = useCompleteShipmentMutation()
     const [planShipmentMutation, { isLoading: isPlanningShipment }] = usePlanShipmentMutation()
 
-    const dataMap = useMemo(() => {
-        const pending = Array.isArray(pendingShipments) ? pendingShipments : []
-        const awaiting = Array.isArray(awaitingShipments) ? awaitingShipments : []
-        const ready = Array.isArray(readyShipments) ? readyShipments : []
-        const completed = [...(Array.isArray(completedShipments) ? completedShipments : []), ...(Array.isArray(finalizedShipments) ? finalizedShipments : [])]
+    const shipments = pagedData?.content || []
 
-        // Sort function: oldest first by orderDate
-        const sortOldestFirst = (a: any, b: any) => {
-            const dateA = new Date(a.orderDate || a.createdAt || 0).getTime()
-            const dateB = new Date(b.orderDate || b.createdAt || 0).getTime()
-            return dateA - dateB
-        }
-
-        // Sort function: newest first by actualShipmentDate or completedAt
-        const sortNewestFirst = (a: any, b: any) => {
-            const dateA = new Date(a.actualShipmentDate || a.completedAt || a.orderDate || 0).getTime()
-            const dateB = new Date(b.actualShipmentDate || b.completedAt || b.orderDate || 0).getTime()
-            return dateB - dateA
-        }
-
-        // Incomplete shipments: sorted oldest first
-        const incompleteShipments = [...pending, ...awaiting, ...ready].sort(sortOldestFirst)
-
-        // Completed shipments: sorted newest first
-        const completedSorted = [...completed].sort(sortNewestFirst)
-
-        // All: incomplete first (oldest-newest), then completed (newest-oldest)
-        const all = [...incompleteShipments, ...completedSorted]
-
-        // Filter function for search and delivery status
-        const filterShipments = (shipments: any[]) => {
-            return shipments.filter((s: any) => {
-                // Search filter
-                if (searchQuery.trim()) {
-                    const query = searchQuery.toLocaleLowerCase('tr-TR')
-                    const matchesShipmentNo = s.shipmentNo?.toLocaleLowerCase('tr-TR').includes(query)
-                    const matchesOrderNo = s.orderNo?.toLocaleLowerCase('tr-TR').includes(query)
-                    const matchesSaleNo = s.saleNo?.toLocaleLowerCase('tr-TR').includes(query)
-                    const matchesCustomer = s.customerName?.toLocaleLowerCase('tr-TR').includes(query)
-                    const matchesProduct = s.products?.some((p: any) =>
-                        p.name?.toLocaleLowerCase('tr-TR').includes(query) ||
-                        p.code?.toLocaleLowerCase('tr-TR').includes(query)
-                    )
-                    if (!matchesShipmentNo && !matchesOrderNo && !matchesSaleNo && !matchesCustomer && !matchesProduct) return false
-                }
-
-                // Delivery filter (only applies to completed shipments)
-                if (deliveryFilter !== 'ALL') {
-                    if (deliveryFilter === 'NOT_DELIVERED') {
-                        if (s.status === 'COMPLETED' || s.status === 'FINALIZED') return false
-                    } else if (deliveryFilter === 'PROBLEM_FREE') {
-                        if (s.deliveryStatus !== 'PROBLEM_FREE') return false
-                    } else if (deliveryFilter === 'PROBLEMATIC') {
-                        if (s.deliveryStatus !== 'PROBLEMATIC') return false
-                    }
-                }
-
-                // Brand filter
-                if (brandFilter !== 'ALL') {
-                    if (brandFilter === 'MARKASIZ') {
-                        if (s.brand && s.brand !== '') return false
-                    } else {
-                        if (s.brand !== brandFilter) return false
-                    }
-                }
-
-                return true
-            })
-        }
-
-        return {
-            all: filterShipments(all),
-            pending: filterShipments([...pending].sort(sortOldestFirst)),
-            awaiting: filterShipments([...awaiting].sort(sortOldestFirst)),
-            ready: filterShipments([...ready].sort(sortOldestFirst)),
-            completed: filterShipments(completedSorted)
-        }
-    }, [pendingShipments, awaitingShipments, readyShipments, completedShipments, finalizedShipments, searchQuery, deliveryFilter, brandFilter])
-
-    const activeData = dataMap[activeTab]
-
-    const loading = activeTab === 'all' ? (loadingPending || loadingAwaiting || loadingReady || loadingCompleted || loadingFinalized)
-        : activeTab === 'pending' ? loadingPending
-            : activeTab === 'awaiting' ? loadingAwaiting
-                : activeTab === 'ready' ? loadingReady
-                    : (loadingCompleted || loadingFinalized)
+    // Reset page on tab/filter change
+    const handleTabChange = (val: string) => { setActiveTab(val as TabKey); setPage(0); }
+    const handleDeliveryChange = (val: string) => { setDeliveryFilter(val as any); setPage(0); }
+    const handleBrandChange = (val: string) => { setBrandFilter(val as any); setPage(0); }
+    const handleProblemResolvedChange = (val: string) => { setProblemResolvedFilter(val as any); setPage(0); }
 
     // First approval: PENDING -> APPROVED
     const handleApproveClick = (shipmentId: string) => {
@@ -177,13 +125,11 @@ const ShipmentOperationsPage: React.FC = () => {
                 if (type === 'APPROVE') {
                     await approveInitialMutation(shipmentId).unwrap()
                     success('Sevkiyat başarıyla onaylandı')
-                    refetchPending()
-                    refetchAwaiting()
+                    refetch()
                 } else if (type === 'FINALIZE') {
                     await finalizeShipmentMutation(shipmentId).unwrap()
                     success('Sevkiyat final onayı verildi')
-                    refetchCompleted()
-                    refetchFinalized()
+                    refetch()
                 }
                 setConfirmModalState({ isOpen: false, type: null, shipmentId: null })
             } catch (err: any) {
@@ -206,7 +152,7 @@ const ShipmentOperationsPage: React.FC = () => {
                     }
                 }).unwrap()
                 setSelectedShipmentId(null)
-                refetchAwaiting()
+                refetch()
                 success('Sevkiyat başarıyla planlandı')
             } catch (err: any) {
                 error('Hata: ' + (err.data?.message || 'Planlama başarısız'))
@@ -228,10 +174,8 @@ const ShipmentOperationsPage: React.FC = () => {
             formData.append('shipmentId', selectedShipmentId)
             formData.append('deliveryStatus', data.deliveryStatus)
             if (data.problemType) formData.append('problemType', data.problemType)
-            if (data.notes) formData.append('notes', data.notes)
+            if (data.notes) formData.append('deliveryNotes', data.notes)
             data.deliveryPhotos.forEach(photo => formData.append('deliveryPhotos', photo))
-            if (data.signedDocument) formData.append('signedDocument', data.signedDocument)
-
             if (data.signedDocument) formData.append('signedDocument', data.signedDocument)
 
             verifyGate(async () => {
@@ -239,7 +183,7 @@ const ShipmentOperationsPage: React.FC = () => {
                     await completeShipmentMutation(formData).unwrap()
                     setShowCompleteModal(false)
                     setSelectedShipmentId(null)
-                    refetchCompleted()
+                    refetch()
                     success('Sevkiyat başarıyla tamamlandı')
                 } catch (err: any) {
                     error('Hata: ' + (err.data?.message || 'Tamamlama başarısız'))
@@ -439,21 +383,32 @@ const ShipmentOperationsPage: React.FC = () => {
                             </td>
                             {(activeTab === 'completed' || activeTab === 'all') && (
                                 <td className="py-4 px-6">
-                                    <span className={`px-2 py-1 rounded text-xs font-medium border whitespace-nowrap ${shipment.status === 'FINALIZED'
-                                        ? 'bg-green-100 text-green-800 border-green-200'
-                                        : shipment.status === 'COMPLETED'
-                                            ? 'bg-blue-100 text-blue-800 border-blue-200'
-                                            : shipment.status === 'APPROVED' || shipment.status === 'PLANNED'
-                                                ? 'bg-yellow-100 text-yellow-800 border-yellow-200'
-                                                : 'bg-amber-100 text-amber-800 border-amber-200'
-                                        }`}>
-                                        {shipment.status === 'FINALIZED' ? 'Onaylandı'
-                                            : shipment.status === 'COMPLETED' ? 'Onay Bekliyor'
-                                                : shipment.status === 'APPROVED' ? 'Planlanıyor'
-                                                    : shipment.status === 'PLANNED' ? 'Sevke Hazır'
-                                                        : shipment.status === 'PENDING' ? 'Onay Bekliyor'
-                                                            : shipment.status}
-                                    </span>
+                                    <div className="flex flex-col gap-1">
+                                        <span className={`px-2 py-1 rounded text-xs font-medium border whitespace-nowrap w-fit ${shipment.status === 'FINALIZED'
+                                            ? 'bg-green-100 text-green-800 border-green-200'
+                                            : shipment.status === 'COMPLETED'
+                                                ? 'bg-blue-100 text-blue-800 border-blue-200'
+                                                : shipment.status === 'APPROVED' || shipment.status === 'PLANNED'
+                                                    ? 'bg-yellow-100 text-yellow-800 border-yellow-200'
+                                                    : 'bg-amber-100 text-amber-800 border-amber-200'
+                                            }`}>
+                                            {shipment.status === 'FINALIZED' ? 'Onaylandı'
+                                                : shipment.status === 'COMPLETED' ? 'Onay Bekliyor'
+                                                    : shipment.status === 'APPROVED' ? 'Planlanıyor'
+                                                        : shipment.status === 'PLANNED' ? 'Sevke Hazır'
+                                                            : shipment.status === 'PENDING' ? 'Onay Bekliyor'
+                                                                : shipment.status}
+                                        </span>
+                                        {shipment.deliveryStatus === 'PROBLEMATIC' && (
+                                            <span className={`px-2 py-0.5 rounded text-[10px] font-medium border whitespace-nowrap w-fit ${
+                                                shipment.problemResolved
+                                                    ? 'bg-green-50 text-green-700 border-green-200'
+                                                    : 'bg-red-50 text-red-700 border-red-200'
+                                            }`}>
+                                                {shipment.problemResolved ? '✓ Sorun Çözüldü' : '⚠ Sorunlu'}
+                                            </span>
+                                        )}
+                                    </div>
                                 </td>
                             )}
                             <td className="py-4 px-6 text-right">
@@ -529,7 +484,7 @@ const ShipmentOperationsPage: React.FC = () => {
                     {
                         label: 'Aşama',
                         value: activeTab,
-                        onChange: (val) => setActiveTab(val as TabKey),
+                        onChange: handleTabChange,
                         options: [
                             { key: 'all', label: 'Tümü' },
                             { key: 'pending', label: 'Onay Bekleyenler', activeColor: 'bg-amber-600' },
@@ -541,7 +496,7 @@ const ShipmentOperationsPage: React.FC = () => {
                     {
                         label: 'Teslimat',
                         value: deliveryFilter,
-                        onChange: setDeliveryFilter,
+                        onChange: handleDeliveryChange,
                         options: [
                             { key: 'ALL', label: 'Tümü' },
                             { key: 'PROBLEM_FREE', label: 'Sorunsuz', activeColor: 'bg-green-600' },
@@ -552,13 +507,23 @@ const ShipmentOperationsPage: React.FC = () => {
                     {
                         label: 'Marka',
                         value: brandFilter,
-                        onChange: (val) => setBrandFilter(val as 'ALL' | 'OAK' | 'PINE' | 'MAPLE' | 'MARKASIZ'),
+                        onChange: handleBrandChange,
                         options: [
                             { key: 'ALL', label: 'Tümü' },
                             { key: 'OAK', label: 'Doğtaş', activeColor: 'bg-red-600' },
                             { key: 'MAPLE', label: 'Maple', activeColor: 'bg-blue-600' },
                             { key: 'PINE', label: 'Pine', activeColor: 'bg-purple-600' },
                             { key: 'MARKASIZ', label: 'Markasız', activeColor: 'bg-gray-600' }
+                        ]
+                    },
+                    {
+                        label: 'Sorun Durumu',
+                        value: problemResolvedFilter,
+                        onChange: handleProblemResolvedChange,
+                        options: [
+                            { key: 'ALL', label: 'Tümü' },
+                            { key: 'UNRESOLVED', label: 'Çözülmemiş', activeColor: 'bg-red-600' },
+                            { key: 'RESOLVED', label: 'Çözülmüş', activeColor: 'bg-green-600' }
                         ]
                     }
                 ]}
@@ -577,7 +542,7 @@ const ShipmentOperationsPage: React.FC = () => {
                                 activeTab === 'awaiting' ? 'Planlanmayı Bekleyenler' :
                                     activeTab === 'ready' ? 'Sevke Hazır Olanlar' : 'Tamamlanan Sevkiyatlar'}
                         <span className="ml-2 text-sm font-normal text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">
-                            {activeData.length} Kayıt
+                            {pagedData?.totalElements ?? 0} Kayıt
                         </span>
                     </h2>
                 </div>
@@ -586,7 +551,7 @@ const ShipmentOperationsPage: React.FC = () => {
                     <div className="flex items-center justify-center p-12">
                         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-600"></div>
                     </div>
-                ) : activeData.length === 0 ? (
+                ) : shipments.length === 0 ? (
                     <div className="flex flex-col items-center justify-center p-12 text-center">
                         <div className="w-16 h-16 rounded-full bg-amber-50 border border-amber-100 flex items-center justify-center mb-4">
                             <Package className="w-8 h-8 text-amber-300" />
@@ -595,11 +560,21 @@ const ShipmentOperationsPage: React.FC = () => {
                     </div>
                 ) : (
                     <>
-                        {renderTable(activeData)}
-                        {renderMobileList(activeData)}
+                        {renderTable(shipments)}
+                        {renderMobileList(shipments)}
                     </>
                 )}
             </div>
+
+            {/* Pagination */}
+            {pagedData && pagedData.totalPages > 1 && (
+                <Pagination
+                    page={page}
+                    totalPages={pagedData.totalPages}
+                    totalElements={pagedData.totalElements}
+                    onPageChange={setPage}
+                />
+            )}
 
             {/* Plan Shipment Modal */}
             <PlanShipmentModal

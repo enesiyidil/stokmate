@@ -37,6 +37,7 @@ export interface ShipmentResponse {
     approvedByName?: string
     approvalDate?: string
     brand?: string // OAK, PINE, MAPLE
+    problemResolved?: boolean
 }
 
 export interface ShipmentDetailsResponse {
@@ -78,6 +79,16 @@ export interface ShipmentDetailsResponse {
     signedDocumentUrl?: string
     deliveryPhotoUrls?: string[]
     shipmentNote?: string
+    // Problem resolution fields
+    problemResolved?: boolean
+    resolutionType?: 'MANUAL' | 'SSH_ORDER'
+    resolutionDescription?: string
+    resolutionPhotoUrls?: string[]
+    resolvedAt?: string
+    resolvedByName?: string
+    linkedSshOrderId?: string
+    linkedSshOrderNo?: string
+    linkedSshOrderStatus?: string
 }
 
 export interface ProductShipmentDetail {
@@ -121,6 +132,23 @@ export const shipmentApi = api.injectEndpoints({
                 method: 'POST'
             }),
             invalidatesTags: ['Orders']
+        }),
+        listShipments: builder.query<import('../types/common').PageResponse<ShipmentResponse>, {
+            page?: number; size?: number; search?: string; statusGroup?: string; deliveryStatus?: string; brand?: string; problemResolved?: string
+        }>({
+            query: (params) => ({
+                url: '/shipment',
+                params: {
+                    page: params?.page ?? 0,
+                    size: params?.size ?? 50,
+                    ...(params?.search && { search: params.search }),
+                    ...(params?.statusGroup && { statusGroup: params.statusGroup }),
+                    ...(params?.deliveryStatus && { deliveryStatus: params.deliveryStatus }),
+                    ...(params?.brand && { brand: params.brand }),
+                    ...(params?.problemResolved && { problemResolved: params.problemResolved }),
+                }
+            }),
+            providesTags: ['Orders']
         }),
         listPendingShipments: builder.query<ShipmentResponse[], void>({
             query: () => '/shipment/pending-approval',
@@ -299,12 +327,21 @@ export const shipmentApi = api.injectEndpoints({
             }),
             invalidatesTags: ['Orders', 'Sales']
         }),
+        resolveShipmentProblem: builder.mutation<void, { shipmentId: string; formData: FormData }>({
+            query: ({ shipmentId, formData }) => ({
+                url: `/shipment/${shipmentId}/resolve-problem`,
+                method: 'POST',
+                body: formData
+            }),
+            invalidatesTags: ['Orders']
+        }),
     })
 })
 
 export const {
     useApproveShipmentMutation,
     useApproveInitialShipmentMutation,
+    useListShipmentsQuery,
     useListPendingShipmentsQuery,
     useListAwaitingPlanningShipmentsQuery,
     useListReadyShipmentsQuery,
@@ -328,5 +365,6 @@ export const {
     useUpdatePlannedDateMutation,
     useWithdrawShipmentMutation,
     useUpdateShipmentVehicleMutation,
-    useUpdateShipmentDriverByIdMutation
+    useUpdateShipmentDriverByIdMutation,
+    useResolveShipmentProblemMutation
 } = shipmentApi
