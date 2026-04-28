@@ -189,6 +189,15 @@ public class AuthService {
                 .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "User not found"));
     }
 
+    public User getCurrentUserOrThrow() {
+        Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext()
+                .getAuthentication();
+        if (authentication == null || !(authentication.getPrincipal() instanceof UserPrincipal)) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "Geçerli bir oturum bulunamadı");
+        }
+        return ((UserPrincipal) authentication.getPrincipal()).getUser();
+    }
+
     public boolean sendResetCode(ForgotPasswordRequest request) {
         User user = userRepository.findByEmail(request.getEmail().toLowerCase())
                 .orElseThrow(() -> new BadRequestException("If this email exists, a code will be sent"));

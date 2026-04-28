@@ -39,4 +39,7 @@ public class ShipmentResponse {
 
     // Brand info
     private String brand; // DOGTAS, LOVA, KELEBEK
+
+    // Problem resolution
+    private boolean problemResolved;
 }

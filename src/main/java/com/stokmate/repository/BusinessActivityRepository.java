@@ -14,11 +14,13 @@ public interface BusinessActivityRepository extends JpaRepository<BusinessActivi
 
         @Query("SELECT ba FROM BusinessActivity ba WHERE " +
                         "(:domain IS NULL OR ba.domain = :domain) AND " +
+                        "(:activityTypePrefix IS NULL OR ba.activityType LIKE :activityTypePrefix) AND " +
                         "(:search IS NULL OR LOWER(ba.userFullName) LIKE :search OR " +
                         "LOWER(ba.description) LIKE :search OR " +
                         "LOWER(ba.referenceNo) LIKE :search)")
         Page<BusinessActivity> findAllWithFilters(
                         @Param("domain") String domain,
+                        @Param("activityTypePrefix") String activityTypePrefix,
                         @Param("search") String search,
                         Pageable pageable);
 }

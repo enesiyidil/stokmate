@@ -140,4 +140,67 @@ public enum Role {
         return this == STORE_MANAGER || this == STORE_EMPLOYEE || this == OPERATIONS_MANAGER
                 || this == DIRECTOR || this == MANAGER || this == ADMIN;
     }
+
+    /**
+     * Check if this role can view cross conversions
+     */
+    public boolean canViewCrossConversions() {
+        return true; // All roles can view
+    }
+
+    /**
+     * Check if this role can create cross conversions
+     */
+    public boolean canCreateCrossConversion() {
+        return this == ADMIN || this == MANAGER || this == DIRECTOR || this == STORE_MANAGER || this == STORE_EMPLOYEE;
+    }
+
+    /**
+     * Check if this role can update cross conversions
+     */
+    public boolean canUpdateCrossConversion() {
+        return this == ADMIN || this == MANAGER || this == DIRECTOR;
+    }
+
+    /**
+     * Check if this role can delete cross conversions
+     */
+    public boolean canDeleteCrossConversion() {
+        return this == ADMIN || this == MANAGER;
+    }
+
+    /**
+     * Check if this role can view balance ledger
+     */
+    public boolean canViewBalanceLedger() {
+        return this == ADMIN || this == MANAGER || this == DIRECTOR || this == STORE_MANAGER || this == STORE_EMPLOYEE;
+    }
+
+    /**
+     * Check if this role can create balance ledger entries
+     */
+    public boolean canCreateBalanceLedger() {
+        return this == ADMIN || this == MANAGER || this == DIRECTOR || this == STORE_MANAGER || this == STORE_EMPLOYEE;
+    }
+
+    /**
+     * Check if this role can add payments to balance ledger
+     */
+    public boolean canAddBalancePayment() {
+        return this == ADMIN || this == MANAGER || this == DIRECTOR || this == STORE_MANAGER || this == STORE_EMPLOYEE;
+    }
+
+    /**
+     * Check if this role can update balance ledger entries
+     */
+    public boolean canUpdateBalanceLedger() {
+        return this == ADMIN || this == MANAGER || this == DIRECTOR;
+    }
+
+    /**
+     * Check if this role can delete balance ledger entries
+     */
+    public boolean canDeleteBalanceLedger() {
+        return this == ADMIN || this == MANAGER || this == DIRECTOR;
+    }
 }
