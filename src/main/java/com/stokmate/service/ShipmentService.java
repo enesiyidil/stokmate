@@ -882,8 +882,8 @@ public class ShipmentService {
                 Order order = orderRepository.findById(request.getOrderId())
                                 .orElseThrow(() -> new NotFoundException("Order not found"));
 
-                if (order.getOrderType() != OrderType.CUSTOMER_SPECIFIC) {
-                        throw new BadRequestException("Partial shipment is only allowed for customer-specific orders");
+                if (order.getOrderType() != OrderType.CUSTOMER_SPECIFIC && order.getOrderType() != OrderType.AFTER_SALES_SERVICE) {
+                        throw new BadRequestException("Partial shipment is only allowed for customer-specific and after-sales-service orders");
                 }
 
                 // Find active shipments that candidates for merging (PENDING or APPROVED)
@@ -1311,6 +1311,8 @@ public class ShipmentService {
                                 if (shipment.getOrder().getCustomer() != null) {
                                         customerName = shipment.getOrder().getCustomer().getFirstName() + " "
                                                         + shipment.getOrder().getCustomer().getLastName();
+                                } else if (shipment.getOrder().getProsapContractNameSurname() != null && !shipment.getOrder().getProsapContractNameSurname().isBlank()) {
+                                        customerName = shipment.getOrder().getProsapContractNameSurname();
                                 }
                                 orderDate = shipment.getOrder().getOrderDate();
                                 log.debug("toShipmentResponse: Order loaded - ID: {}, No: {}", orderId, orderNo);

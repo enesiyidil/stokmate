@@ -41,12 +41,17 @@ public class FeedbackService {
         String userName = buildFullName(user);
         String typeLabel = getTypeLabel(request.getType());
 
-        notificationService.createNotificationForRoles(
-                NotificationType.FEEDBACK_CREATED,
-                "Yeni Geri Bildirim: " + typeLabel,
-                userName + " yeni bir geri bildirim gönderdi: " + request.getTitle(),
-                "/feedback",
-                List.of(Role.ADMIN, Role.MANAGER, Role.DIRECTOR));
+        try {
+            notificationService.createNotificationForRoles(
+                    NotificationType.FEEDBACK_CREATED,
+                    "Yeni Geri Bildirim: " + typeLabel,
+                    userName + " yeni bir geri bildirim gönderdi: " + request.getTitle(),
+                    "/feedback",
+                    List.of(Role.ADMIN, Role.MANAGER, Role.DIRECTOR));
+        } catch (Exception e) {
+            // Log warning but allow feedback to be created
+            org.slf4j.LoggerFactory.getLogger(FeedbackService.class).warn("Failed to send feedback creation notification", e);
+        }
 
         return toDetailResponse(saved, List.of());
     }
@@ -106,12 +111,16 @@ public class FeedbackService {
 
         if (request.getStatus() != null) {
             String statusLabel = getStatusLabel(request.getStatus());
-            notificationService.createNotification(
-                    NotificationType.FEEDBACK_STATUS_CHANGED,
-                    "Geri Bildirim Durumu Güncellendi",
-                    "\"" + feedback.getTitle() + "\" geri bildiriminizin durumu \"" + statusLabel + "\" olarak güncellendi.",
-                    "/feedback",
-                    List.of(feedback.getCreatedBy().getId()));
+            try {
+                notificationService.createNotification(
+                        NotificationType.FEEDBACK_STATUS_CHANGED,
+                        "Geri Bildirim Durumu Güncellendi",
+                        "\"" + feedback.getTitle() + "\" geri bildiriminizin durumu \"" + statusLabel + "\" olarak güncellendi.",
+                        "/feedback",
+                        List.of(feedback.getCreatedBy().getId()));
+            } catch (Exception e) {
+                org.slf4j.LoggerFactory.getLogger(FeedbackService.class).warn("Failed to send feedback status update notification", e);
+            }
         }
 
         List<FeedbackResponse> responses = feedbackResponseRepository.findByFeedbackIdOrderByCreatedAtAsc(feedbackId);
@@ -137,20 +146,24 @@ public class FeedbackService {
 
         FeedbackResponse saved = feedbackResponseRepository.save(response);
 
-        if (isManager && !isOwner) {
-            notificationService.createNotification(
-                    NotificationType.FEEDBACK_RESPONSE,
-                    "Geri Bildiriminize Yanıt",
-                    "\"" + feedback.getTitle() + "\" geri bildiriminize yanıt yazıldı.",
-                    "/feedback",
-                    List.of(feedback.getCreatedBy().getId()));
-        } else if (isOwner && !isManager) {
-            notificationService.createNotificationForRoles(
-                    NotificationType.FEEDBACK_RESPONSE,
-                    "Geri Bildirime Kullanıcı Yanıtı",
-                    buildFullName(user) + " \"" + feedback.getTitle() + "\" geri bildirimine yanıt yazdı.",
-                    "/feedback",
-                    List.of(Role.ADMIN, Role.MANAGER, Role.DIRECTOR));
+        try {
+            if (isManager && !isOwner) {
+                notificationService.createNotification(
+                        NotificationType.FEEDBACK_RESPONSE,
+                        "Geri Bildiriminize Yanıt",
+                        "\"" + feedback.getTitle() + "\" geri bildiriminize yanıt yazıldı.",
+                        "/feedback",
+                        List.of(feedback.getCreatedBy().getId()));
+            } else if (isOwner && !isManager) {
+                notificationService.createNotificationForRoles(
+                        NotificationType.FEEDBACK_RESPONSE,
+                        "Geri Bildirime Kullanıcı Yanıtı",
+                        buildFullName(user) + " \"" + feedback.getTitle() + "\" geri bildirimine yanıt yazdı.",
+                        "/feedback",
+                        List.of(Role.ADMIN, Role.MANAGER, Role.DIRECTOR));
+            }
+        } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(FeedbackService.class).warn("Failed to send feedback response notification", e);
         }
 
         return toResponseDto(saved);

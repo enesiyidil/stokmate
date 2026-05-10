@@ -38,7 +38,7 @@ public interface ProductAcceptanceRepository extends JpaRepository<ProductAccept
                         @Param("search") String search,
                         @Param("status") ProductAcceptance.AcceptanceStatus status,
                         @Param("brand") String brand,
-                        @Param("acceptedBy") String acceptedBy,
+                        @Param("acceptedBy") java.util.UUID acceptedBy,
                         Pageable pageable);
 
         @Query("SELECT pa FROM ProductAcceptance pa " +
