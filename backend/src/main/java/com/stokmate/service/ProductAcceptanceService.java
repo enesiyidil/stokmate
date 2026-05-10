@@ -312,7 +312,14 @@ public class ProductAcceptanceService {
             parsedBrand = "";
         }
 
-        String parsedAcceptedBy = ("ALL".equals(acceptedBy)) ? null : acceptedBy;
+        java.util.UUID parsedAcceptedBy = null;
+        if (acceptedBy != null && !acceptedBy.equals("ALL") && !acceptedBy.trim().isEmpty()) {
+            try {
+                parsedAcceptedBy = java.util.UUID.fromString(acceptedBy);
+            } catch (IllegalArgumentException e) {
+                // Ignore invalid UUIDs
+            }
+        }
 
         return productAcceptanceRepository.findAllPaged(
                 searchParam, parsedStatus, parsedBrand, parsedAcceptedBy, pageable)
