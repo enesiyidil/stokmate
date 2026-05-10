@@ -313,7 +313,7 @@ function SidebarLayoutContent({ children }: SidebarLayoutProps) {
                     {/* Version Tag - Below User Section */}
                     {!isCollapsed && (
                         <div className="text-center py-1">
-                            <span className="text-[10px] text-amber-500/50 font-mono">v1-b2.8.232</span>
+                            <span className="text-[10px] text-amber-500/50 font-mono">v1-b2.8.245</span>
                         </div>
                     )}
 
