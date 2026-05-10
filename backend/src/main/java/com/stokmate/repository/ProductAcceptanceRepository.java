@@ -17,9 +17,9 @@ public interface ProductAcceptanceRepository extends JpaRepository<ProductAccept
                         "JOIN pa.orderProduct op " +
                         "JOIN op.order o " +
                         "LEFT JOIN pa.acceptedBy ab " +
-                        "WHERE (:search IS NULL OR LOWER(op.productName) LIKE LOWER(CONCAT('%', :search, '%')) " +
-                        "   OR LOWER(op.productCode) LIKE LOWER(CONCAT('%', :search, '%')) " +
-                        "   OR LOWER(o.orderNo) LIKE LOWER(CONCAT('%', :search, '%'))) " +
+                        "WHERE (:search IS NULL OR LOWER(op.productName) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) " +
+                        "   OR LOWER(op.productCode) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) " +
+                        "   OR LOWER(o.orderNo) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))) " +
                         "AND (:status IS NULL OR pa.status = :status) " +
                         "AND (:brand IS NULL OR CAST(op.brand AS string) = :brand) " +
                         "AND (:acceptedBy IS NULL OR ab.id = :acceptedBy) " +
@@ -27,10 +27,9 @@ public interface ProductAcceptanceRepository extends JpaRepository<ProductAccept
                                         "JOIN pa.orderProduct op " +
                                         "JOIN op.order o " +
                                         "LEFT JOIN pa.acceptedBy ab " +
-                                        "WHERE (:search IS NULL OR LOWER(op.productName) LIKE LOWER(CONCAT('%', :search, '%')) "
-                                        +
-                                        "   OR LOWER(op.productCode) LIKE LOWER(CONCAT('%', :search, '%')) " +
-                                        "   OR LOWER(o.orderNo) LIKE LOWER(CONCAT('%', :search, '%'))) " +
+                                        "WHERE (:search IS NULL OR LOWER(op.productName) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) " +
+                                        "   OR LOWER(op.productCode) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) " +
+                                        "   OR LOWER(o.orderNo) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))) " +
                                         "AND (:status IS NULL OR pa.status = :status) " +
                                         "AND (:brand IS NULL OR CAST(op.brand AS string) = :brand) " +
                                         "AND (:acceptedBy IS NULL OR ab.id = :acceptedBy)")
