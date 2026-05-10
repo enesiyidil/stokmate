@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 @Data
 @Builder
@@ -20,4 +21,6 @@ public class PendingProductResponse {
     private BigDecimal totalQuantity;
     private BigDecimal acceptedQuantity;
     private BigDecimal remainingQuantity;
+    private LocalDate orderDate;
+    private boolean convertedFromCustomer; // İptal stoğu siparişi mi?
 }

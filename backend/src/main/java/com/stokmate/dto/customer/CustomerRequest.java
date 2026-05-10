@@ -13,6 +13,7 @@ public class CustomerRequest {
     @NotBlank
     private String lastName;
     private String phone;
+    private String alternatePhone; // Yedek telefon
     @Email
     private String email;
     private String tcNo;

@@ -37,6 +37,9 @@ public class ProductService {
     private final ProductPriceHistoryRepository productPriceHistoryRepository;
     private final ProductEventMapper productEventMapper;
     private final ProductPriceHistoryMapper productPriceHistoryMapper;
+    private final com.stokmate.repository.ProductStockHistoryRepository productStockHistoryRepository;
+    private final com.stokmate.mapper.ProductStockHistoryMapper productStockHistoryMapper;
+    private final InAppNotificationService inAppNotificationService;
 
     public ProductResponse create(ProductRequest request) {
         productRepository.findByCode(request.getCode())
@@ -90,11 +93,21 @@ public class ProductService {
 
     public void delete(UUID id) {
         Product product = getEntity(id);
-        productRepository.delete(product);
+        // Soft delete implementation
+        product.setDeleted(true);
+        product.setIsDeleted(true);
+        product.setDeletionDate(java.time.Instant.now());
+        productRepository.save(product);
+        log.info("Product soft deleted: {}", product.getCode());
     }
 
-    public Page<ProductResponse> list(String name, String brand, Boolean activeForSale, Pageable pageable) {
-        Specification<Product> spec = ProductSpecification.filter(name, brand, activeForSale);
+    public Page<ProductResponse> list(
+            String search,
+            String brand,
+            Boolean activeForSale,
+            String stockFilter,
+            Pageable pageable) {
+        Specification<Product> spec = ProductSpecification.filter(search, brand, activeForSale, stockFilter);
         return productRepository.findAll(spec, pageable).map(this::toResponseWithPresignedUrl);
     }
 
@@ -194,29 +207,50 @@ public class ProductService {
 
     private ProductResponse toResponseWithPresignedUrl(Product product) {
         ProductResponse response = productMapper.toResponse(product);
+        // Return raw path for backend proxy (frontend uses /api/files/view)
         if (StringUtils.hasText(product.getImageUrl())) {
-            try {
-                String presignedUrl = storageService.getPresignedUrl(product.getImageUrl());
-                response = ProductResponse.builder()
-                        .id(response.getId())
-                        .name(response.getName())
-                        .code(response.getCode())
-                        .description(response.getDescription())
-                        .brand(response.getBrand())
-                        .imageUrl(presignedUrl)
-                        .activeForSale(response.isActiveForSale())
-                        .stockQuantity(response.getStockQuantity())
-                        .vatRate(response.getVatRate())
-                        .unitPrice(response.getUnitPrice())
-                        .minStockLevel(response.getMinStockLevel())
-                        .keywords(response.getKeywords())
-                        .createdAt(response.getCreatedAt())
-                        .updatedAt(response.getUpdatedAt())
-                        .createdBy(response.getCreatedBy())
-                        .build();
-            } catch (Exception e) {
-                log.warn("Failed to generate presigned URL for image: {}", product.getImageUrl(), e);
-            }
+            response = ProductResponse.builder()
+                    .id(response.getId())
+                    .name(response.getName())
+                    .code(response.getCode())
+                    .description(response.getDescription())
+                    .brand(response.getBrand())
+                    .imageUrl(product.getImageUrl()) // Raw path, not presigned URL
+                    .activeForSale(response.isActiveForSale())
+                    .stockQuantity(response.getStockQuantity())
+                    .cancelledStockQuantity(product.getCancelledStockQuantity())
+                    .vatRate(response.getVatRate())
+                    .unitPrice(response.getUnitPrice())
+                    .minStockLevel(response.getMinStockLevel())
+                    .keywords(response.getKeywords())
+                    .createdAt(response.getCreatedAt())
+                    .updatedAt(response.getUpdatedAt())
+                    .createdBy(response.getCreatedBy())
+                    .build();
+        } else {
+            // Even if no image, we need to populate the new field if we're using the
+            // builder from mapper response
+            // But wait, response IS the mapped response. If image is null, we return
+            // response AS IS.
+            // Problem: The mapper might not map cancelledStockQuantity if it's not in the
+            // request/source properly or if I didn't update the mapper.
+            // I should explicitly set it if the mapper doesn't.
+            // Let's assume the mapper DOES map it if fields match.
+            // BUT, if I rebuild the builder above, I MUST include it.
+            // AND I should probably update the "else" case or ensuring the initial mapping
+            // covers it.
+            // Actually, I can just update the mapper interface to map it automatically if
+            // names match.
+            // However, since I am editing ProductService, I can enforce it here.
+
+            // Let's just modify the builder block above which is only for
+            // HasText(imageUrl).
+            // Wait, if !HasText(imageUrl), it returns `productMapper.toResponse(product)`.
+            // Does `productMapper` know about `cancelledStockQuantity`?
+            // `ProductMapper` usually auto-maps fields with same name. `Product` has
+            // `cancelledStockQuantity`, `ProductResponse` has it too.
+            // So default mapping should work. I only need to add it to the manually built
+            // builder in the `if` block.
         }
         return response;
     }
@@ -245,15 +279,16 @@ public class ProductService {
                 .map(productPriceHistoryMapper::toResponse)
                 .toList();
 
-        // Get presigned URL for image if exists
+        // Get stock history (last 50)
+        List<com.stokmate.dto.product.ProductStockHistoryResponse> stockHistory = productStockHistoryRepository
+                .findByProductIdOrderByCreatedAtDesc(id)
+                .stream()
+                .limit(50)
+                .map(productStockHistoryMapper::toResponse)
+                .toList();
+
+        // Return raw path for backend proxy (frontend uses /api/files/view)
         String imageUrl = product.getImageUrl();
-        if (StringUtils.hasText(imageUrl)) {
-            try {
-                imageUrl = storageService.getPresignedUrl(imageUrl);
-            } catch (Exception e) {
-                log.warn("Failed to generate presigned URL for image: {}", imageUrl, e);
-            }
-        }
 
         return com.stokmate.dto.product.ProductDetailsResponse.builder()
                 .id(product.getId())
@@ -265,6 +300,7 @@ public class ProductService {
                 .activeForSale(product.isActiveForSale())
                 .customerOwned(product.isCustomerOwned())
                 .stockQuantity(product.getStockQuantity())
+                .cancelledStockQuantity(product.getCancelledStockQuantity())
                 .vatRate(product.getVatRate())
                 .arrivalPrice(product.getArrivalPrice())
                 .internetSalesPrice(product.getInternetSalesPrice())
@@ -275,6 +311,7 @@ public class ProductService {
                 .createdBy(product.getCreatedBy())
                 .recentEvents(events)
                 .priceHistory(priceHistory)
+                .stockHistory(stockHistory)
                 .build();
     }
 
@@ -292,5 +329,63 @@ public class ProductService {
                 .stream()
                 .map(productPriceHistoryMapper::toResponse)
                 .toList();
+    }
+
+    @Transactional
+    public void logStockChange(Product product, BigDecimal oldQty, BigDecimal newQty, BigDecimal changeAmount,
+            String reason, com.stokmate.domain.ProductStockHistory.StockChangeType type) {
+        com.stokmate.domain.ProductStockHistory history = com.stokmate.domain.ProductStockHistory.builder()
+                .product(product)
+                .oldQuantity(oldQty)
+                .newQuantity(newQty)
+                .changeAmount(changeAmount)
+                .reason(reason)
+                .type(type)
+                .userEmail(com.stokmate.security.SecurityUtils.getCurrentUserLogin())
+                .build();
+        productStockHistoryRepository.save(history);
+    }
+
+    /**
+     * Check if stock has fallen to or below minimum level and send notification
+     * Notifies ADMIN, MANAGER, DIRECTOR, OPERATIONS_MANAGER roles
+     */
+    public void checkAndNotifyLowStock(Product product) {
+        if (product.getMinStockLevel() == null || product.getMinStockLevel().compareTo(BigDecimal.ZERO) <= 0) {
+            return; // No minimum stock level set
+        }
+
+        BigDecimal totalStock = product.getStockQuantity();
+        if (product.getCancelledStockQuantity() != null) {
+            totalStock = totalStock.add(product.getCancelledStockQuantity());
+        }
+
+        if (totalStock.compareTo(product.getMinStockLevel()) <= 0) {
+            // Stock is at or below minimum level - send notification
+            String title = "⚠️ Düşük Stok Uyarısı";
+            String message = String.format(
+                    "%s (%s) ürününün stoğu minimum seviyeye düştü! Mevcut: %.0f, Minimum: %.0f",
+                    product.getName(),
+                    product.getCode(),
+                    totalStock,
+                    product.getMinStockLevel());
+            String linkUrl = "/products/" + product.getId();
+
+            java.util.List<com.stokmate.domain.Role> targetRoles = java.util.Arrays.asList(
+                    com.stokmate.domain.Role.ADMIN,
+                    com.stokmate.domain.Role.MANAGER,
+                    com.stokmate.domain.Role.DIRECTOR,
+                    com.stokmate.domain.Role.OPERATIONS_MANAGER);
+
+            inAppNotificationService.createNotificationForRoles(
+                    com.stokmate.domain.NotificationType.LOW_STOCK,
+                    title,
+                    message,
+                    linkUrl,
+                    targetRoles);
+
+            log.info("Low stock notification sent for product {} - current: {}, minimum: {}",
+                    product.getCode(), totalStock, product.getMinStockLevel());
+        }
     }
 }

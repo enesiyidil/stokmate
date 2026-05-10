@@ -12,10 +12,16 @@ public class SaleEventMapper {
             return null;
         }
 
+        String description = event.getDescription();
+        if (description == null && event.getEventData() != null
+                && event.getEventData().containsKey("description")) {
+            description = (String) event.getEventData().get("description");
+        }
+
         return SaleEventResponse.builder()
                 .id(event.getId())
                 .eventType(event.getEventType())
-                .description(event.getDescription())
+                .description(description)
                 .createdAt(event.getCreatedAt())
                 .createdByName(
                         event.getUser() != null ? event.getUser().getFirstName() + " " + event.getUser().getLastName()

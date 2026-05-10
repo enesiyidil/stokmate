@@ -16,4 +16,5 @@ public class UserProfileResponse {
     private String phone;
     private String address;
     private String displayName;
+    private boolean totpEnabled;
 }

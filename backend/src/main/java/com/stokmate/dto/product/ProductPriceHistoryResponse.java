@@ -24,7 +24,8 @@ public class ProductPriceHistoryResponse {
     private BigDecimal vat;
     private String paymentCondition;
     private String paymentConditionDefinition;
-    private Integer quantity;
+    private BigDecimal quantity;
+    private BigDecimal remainingQuantity;
     private String relatedOrderNo;
     private String createdByName;
     private LocalDateTime createdAt;

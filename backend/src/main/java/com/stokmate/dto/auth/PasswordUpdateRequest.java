@@ -9,5 +9,11 @@ import lombok.Setter;
 public class PasswordUpdateRequest {
 
     @NotBlank
+    private String oldPassword;
+
+    @NotBlank
     private String newPassword;
+
+    // 2FA code - required if user has TOTP enabled
+    private String totpCode;
 }

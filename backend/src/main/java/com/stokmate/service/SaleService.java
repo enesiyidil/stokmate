@@ -33,9 +33,11 @@ public class SaleService {
     private final ProductRepository productRepository;
     private final CustomerRepository customerRepository;
     private final UserRepository userRepository;
+
     private final SaleMapper saleMapper;
     private final SaleEventMapper saleEventMapper;
     private final StorageService storageService;
+    private final ProductAllocationService productAllocationService;
 
     @Transactional
     public SaleResponse create(SaleRequest request, User user) {
@@ -86,8 +88,23 @@ public class SaleService {
 
         Sale savedSale = saleRepository.save(sale);
 
+        // Allocate stock for each product (FIFO)
+        if (savedSale.getProducts() != null) {
+            for (SaleProduct sp : savedSale.getProducts()) {
+                try {
+                    productAllocationService.allocateStock(sp, user);
+                } catch (Exception e) {
+                    log.error("Failed to allocate stock for sale product " + sp.getId(), e);
+                    // Depending on requirements, we might want to fail the whole transaction
+                    // throw new RuntimeException("Stock allocation failed", e);
+                }
+            }
+        }
+
+        // Automatic shipment creation logic removed as per new requirement
+
         // Log event
-        logEvent(savedSale, "CREATED", "Satış oluşturuldu", user);
+        logEvent(savedSale, "CREATED", "Satış oluşturuldu ve sevk talebi açıldı", user);
 
         return saleMapper.toResponse(savedSale);
     }
@@ -104,6 +121,18 @@ public class SaleService {
         return saleRepository.findFiltered(status, consultantId).stream()
                 .map(saleMapper::toResponse)
                 .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public org.springframework.data.domain.Page<SaleResponse> listPaged(
+            String statusGroup, UUID consultantId, String search,
+            org.springframework.data.domain.Pageable pageable) {
+        String searchParam = null;
+        if (search != null && !search.isBlank()) {
+            searchParam = "%" + search.toLowerCase() + "%";
+        }
+        return saleRepository.findPagedWithFilters(statusGroup, consultantId, searchParam, pageable)
+                .map(saleMapper::toResponse);
     }
 
     @Transactional

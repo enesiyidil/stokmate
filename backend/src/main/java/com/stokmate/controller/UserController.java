@@ -1,10 +1,12 @@
 package com.stokmate.controller;
 
 import com.stokmate.dto.user.CreateUserRequest;
+import com.stokmate.dto.user.Toggle2FARequest;
 import com.stokmate.dto.user.UpdateProfileRequest;
 import com.stokmate.dto.user.UserProfileResponse;
 import com.stokmate.dto.user.UserProfileUpdateRequest;
 import com.stokmate.dto.user.UserResponse;
+import com.stokmate.dto.user.UserSummaryResponse;
 import com.stokmate.security.UserPrincipal;
 import com.stokmate.service.UserService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -38,7 +40,9 @@ public class UserController {
     // Profile endpoints - all authenticated users
     @GetMapping("/me")
     public UserProfileResponse me(@AuthenticationPrincipal UserPrincipal principal) {
-        return userService.getProfile(principal.getUser());
+        // Fetch fresh user data from DB to ensure latest status (e.g. 2FA enabled)
+        com.stokmate.domain.User user = userService.getUserById(principal.getUser().getId());
+        return userService.getProfile(user);
     }
 
     @PutMapping("/me")
@@ -49,13 +53,21 @@ public class UserController {
 
     // Admin user management endpoints - MANAGER and ADMIN only
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
-    public ResponseEntity<List<UserResponse>> getAllUsers() {
-        return ResponseEntity.ok(userService.getAllUsers());
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR')")
+    public ResponseEntity<org.springframework.data.domain.Page<UserResponse>> getAllUsers(
+            @RequestParam(name = "search", required = false) String search,
+            org.springframework.data.domain.Pageable pageable) {
+        return ResponseEntity.ok(userService.getAllUsersPaged(search, pageable));
+    }
+
+    @GetMapping("/summary")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'OPERATIONS_MANAGER', 'LOGISTICS_MANAGER', 'STORE_MANAGER', 'STORE_EMPLOYEE')")
+    public ResponseEntity<List<UserSummaryResponse>> getUserSummaries() {
+        return ResponseEntity.ok(userService.getUserSummaries());
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR')")
     public ResponseEntity<UserResponse> createUser(@Valid @RequestBody CreateUserRequest request) {
         UserResponse user = userService.createUser(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(user);
@@ -80,7 +92,7 @@ public class UserController {
     // New user management endpoints
 
     @PutMapping("/{id}/role")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR')")
     public ResponseEntity<UserResponse> updateUserRole(
             @PathVariable("id") UUID id,
             @Valid @RequestBody com.stokmate.dto.user.UpdateUserRoleRequest request) {
@@ -89,11 +101,20 @@ public class UserController {
     }
 
     @PutMapping("/{id}/toggle-active")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR')")
     public ResponseEntity<UserResponse> toggleUserActive(
             @PathVariable("id") UUID id,
             @Valid @RequestBody com.stokmate.dto.user.ToggleUserActiveRequest request) {
         UserResponse updated = userService.toggleUserActive(id, request.getActive());
+        return ResponseEntity.ok(updated);
+    }
+
+    @PutMapping("/{id}/toggle-2fa")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR')")
+    public ResponseEntity<UserResponse> toggle2FA(
+            @PathVariable("id") UUID id,
+            @Valid @RequestBody Toggle2FARequest request) {
+        UserResponse updated = userService.toggle2FA(id, request.getEnabled());
         return ResponseEntity.ok(updated);
     }
 
@@ -107,7 +128,7 @@ public class UserController {
     }
 
     @GetMapping("/sales-consultants")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE', 'OPERATIONS_MANAGER')")
     public ResponseEntity<List<com.stokmate.dto.user.SalesConsultantResponse>> getSalesConsultants(
             @RequestParam(name = "location", required = false) String location,
             @RequestParam(name = "department", required = false) String department,

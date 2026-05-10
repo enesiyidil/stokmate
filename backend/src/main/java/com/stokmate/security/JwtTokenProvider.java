@@ -2,6 +2,7 @@ package com.stokmate.security;
 
 import com.stokmate.domain.User;
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
@@ -40,12 +41,22 @@ public class JwtTokenProvider {
                 .compact();
     }
 
-    public boolean validateToken(String token) {
+    public boolean validateToken(String token) throws ExpiredJwtException {
         try {
             getClaims(token);
             return true;
+        } catch (ExpiredJwtException ex) {
+            throw ex; // Re-throw for filter to handle specifically
         } catch (Exception ex) {
             return false;
+        }
+    }
+
+    public String getUsernameFromExpiredToken(String token) {
+        try {
+            return getClaims(token).getSubject();
+        } catch (ExpiredJwtException ex) {
+            return ex.getClaims().getSubject();
         }
     }
 

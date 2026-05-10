@@ -1,10 +1,7 @@
 package com.stokmate.controller;
 
-import com.stokmate.domain.OrderStatus;
-import com.stokmate.dto.order.OrderResponse;
 import com.stokmate.dto.shipment.*;
 import com.stokmate.security.UserPrincipal;
-import com.stokmate.service.OrderService;
 import com.stokmate.service.ShipmentReportService;
 import com.stokmate.service.ShipmentService;
 import lombok.RequiredArgsConstructor;
@@ -13,7 +10,6 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -23,13 +19,26 @@ import java.util.UUID;
 public class ShipmentController {
 
     private final ShipmentService shipmentService;
-    private final OrderService orderService;
     private final ShipmentReportService shipmentReportService;
 
-    // View/Plan/Complete: LOGISTICS_MANAGER, DIRECTOR, MANAGER, ADMIN; View only:
-    // STORE roles, OPERATIONS_MANAGER
+    // Unified paginated list endpoint
+    @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE', 'OPERATIONS_MANAGER', 'LOGISTICS_MANAGER')")
+    public org.springframework.data.domain.Page<ShipmentResponse> listShipments(
+            @RequestParam(value = "statusGroup", required = false) String statusGroup,
+            @RequestParam(value = "search", required = false) String search,
+            @RequestParam(value = "deliveryStatus", required = false) String deliveryStatus,
+            @RequestParam(value = "brand", required = false) String brand,
+            @RequestParam(value = "problemResolved", required = false) String problemResolved,
+            org.springframework.data.domain.Pageable pageable) {
+        return shipmentService.listPaged(statusGroup, search, deliveryStatus, brand, problemResolved, pageable);
+    }
+
+    // View/Plan/Complete: LOGISTICS_MANAGER, DIRECTOR, MANAGER, ADMIN,
+    // OPERATIONS_MANAGER; View only:
+    // STORE roles
     @PostMapping("/request-approval")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'LOGISTICS_MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'LOGISTICS_MANAGER', 'OPERATIONS_MANAGER')")
     public ResponseEntity<ShipmentApprovalResponse> requestShipmentApproval(
             @RequestBody ShipmentApprovalRequest request,
             @AuthenticationPrincipal UserPrincipal userPrincipal) {
@@ -39,31 +48,37 @@ public class ShipmentController {
     }
 
     @GetMapping("/pending-approval")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
-    public ResponseEntity<List<ShipmentApprovalResponse>> getPendingApprovals() {
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE', 'OPERATIONS_MANAGER', 'LOGISTICS_MANAGER')")
+    public ResponseEntity<List<ShipmentResponse>> getPendingApprovals() {
         return ResponseEntity.ok(shipmentService.getPendingApprovals());
     }
 
-    // Approve: DIRECTOR, MANAGER, ADMIN
-    @PostMapping("/{id}/approve")
+    @GetMapping("/awaiting-planning")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE', 'OPERATIONS_MANAGER', 'LOGISTICS_MANAGER')")
+    public ResponseEntity<List<ShipmentResponse>> getAwaitingPlanningShipments() {
+        return ResponseEntity.ok(shipmentService.getAwaitingPlanningShipments());
+    }
+
+    // First Approval: DIRECTOR, MANAGER, ADMIN, OPERATIONS_MANAGER - changes
+    // PENDING to APPROVED
+    @PostMapping("/{id}/approve-initial")
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR')")
-    public ResponseEntity<ShipmentApprovalResponse> approveShipment(
+    public ResponseEntity<ShipmentResponse> approveInitialShipment(
             @PathVariable UUID id,
             @AuthenticationPrincipal UserPrincipal userPrincipal) {
-        ShipmentApprovalResponse response = shipmentService.approveShipment(id, userPrincipal.getUser().getId());
+        ShipmentResponse response = shipmentService.approveInitialShipment(id, userPrincipal.getUser().getId());
         return ResponseEntity.ok(response);
     }
 
     @GetMapping("/ready")
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE', 'OPERATIONS_MANAGER', 'LOGISTICS_MANAGER')")
-    public ResponseEntity<List<OrderResponse>> getReadyForShipment() {
-        // Get orders with SHIPMENT_APPROVED status
-        List<OrderResponse> orders = orderService.listOrdersByStatus(OrderStatus.SHIPMENT_APPROVED);
-        return ResponseEntity.ok(orders);
+    public ResponseEntity<List<ShipmentResponse>> getReadyForShipment() {
+        // Get shipments with PLANNED status
+        return ResponseEntity.ok(shipmentService.getReadyForShipment());
     }
 
     @PostMapping("/complete")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'LOGISTICS_MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'LOGISTICS_MANAGER', 'OPERATIONS_MANAGER')")
     public ResponseEntity<ShipmentResponse> completeShipment(
             @ModelAttribute ShipmentCompletionRequest request,
             @AuthenticationPrincipal UserPrincipal userPrincipal) throws Exception {
@@ -81,7 +96,7 @@ public class ShipmentController {
     }
 
     @PostMapping("/partial")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE', 'OPERATIONS_MANAGER')")
     public ResponseEntity<Void> createPartialShipment(
             @RequestBody PartialShipmentRequest request,
             @AuthenticationPrincipal UserPrincipal userPrincipal) {
@@ -90,31 +105,31 @@ public class ShipmentController {
     }
 
     @GetMapping("/details/{orderId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'STORE_EMPLOYEE', 'LOGISTICS_MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'STORE_EMPLOYEE', 'LOGISTICS_MANAGER', 'OPERATIONS_MANAGER', 'STORE_MANAGER')")
     public ResponseEntity<ShipmentDetailsResponse> getShipmentDetails(
             @PathVariable("orderId") UUID orderId) {
         return ResponseEntity.ok(shipmentService.getShipmentDetails(orderId));
     }
 
     @GetMapping("/details/shipment/{shipmentId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'STORE_EMPLOYEE', 'LOGISTICS_MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'STORE_EMPLOYEE', 'LOGISTICS_MANAGER', 'OPERATIONS_MANAGER', 'STORE_MANAGER', 'DIRECTOR')")
     public ResponseEntity<ShipmentDetailsResponse> getShipmentDetailsByShipmentId(
             @PathVariable("shipmentId") UUID shipmentId) {
         return ResponseEntity.ok(shipmentService.getShipmentDetailsByShipmentId(shipmentId));
     }
 
-    @PostMapping("/{orderId}/plan")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'LOGISTICS_MANAGER')")
+    @PostMapping("/{shipmentId}/plan")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'LOGISTICS_MANAGER', 'OPERATIONS_MANAGER')")
     public ResponseEntity<Void> planShipment(
-            @PathVariable("orderId") UUID orderId,
+            @PathVariable("shipmentId") UUID shipmentId,
             @RequestBody PlannedShipmentRequest request,
             @AuthenticationPrincipal UserPrincipal userPrincipal) {
-        shipmentService.planShipment(orderId, request, userPrincipal.getUser().getId());
+        shipmentService.planShipment(shipmentId, request, userPrincipal.getUser().getId());
         return ResponseEntity.ok().build();
     }
 
     @PatchMapping("/{orderId}/driver")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'LOGISTICS_MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'LOGISTICS_MANAGER', 'OPERATIONS_MANAGER')")
     public ResponseEntity<Void> updateShipmentDriver(
             @PathVariable("orderId") UUID orderId,
             @RequestBody UpdateDriverRequest request) {
@@ -123,7 +138,7 @@ public class ShipmentController {
     }
 
     @GetMapping("/{orderId}/report")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'STORE_EMPLOYEE', 'LOGISTICS_MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'STORE_EMPLOYEE', 'LOGISTICS_MANAGER', 'OPERATIONS_MANAGER', 'STORE_MANAGER', 'DIRECTOR')")
     public ResponseEntity<byte[]> generateShipmentReport(@PathVariable("orderId") UUID orderId) throws Exception {
         byte[] pdfBytes = shipmentReportService.generateShipmentReport(orderId);
 
@@ -134,10 +149,25 @@ public class ShipmentController {
     }
 
     /**
+     * Generate shipment report by Shipment ID (for sale shipments)
+     */
+    @GetMapping("/by-shipment/{shipmentId}/report")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'STORE_EMPLOYEE', 'LOGISTICS_MANAGER', 'OPERATIONS_MANAGER', 'STORE_MANAGER', 'DIRECTOR')")
+    public ResponseEntity<byte[]> generateShipmentReportByShipmentId(@PathVariable("shipmentId") UUID shipmentId)
+            throws Exception {
+        byte[] pdfBytes = shipmentReportService.generateShipmentReportByShipmentId(shipmentId);
+
+        return ResponseEntity.ok()
+                .header("Content-Type", "application/pdf")
+                .header("Content-Disposition", "attachment; filename=sevk-raporu-" + shipmentId + ".pdf")
+                .body(pdfBytes);
+    }
+
+    /**
      * Create a shipment from a sale
      */
     @PostMapping("/sale/create")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE', 'OPERATIONS_MANAGER')")
     public ResponseEntity<Void> createSaleShipment(
             @RequestBody SaleShipmentRequest request,
             @AuthenticationPrincipal UserPrincipal userPrincipal) {
@@ -149,7 +179,7 @@ public class ShipmentController {
      * Get list of completed shipments awaiting final approval
      */
     @GetMapping("/completed-awaiting")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE', 'OPERATIONS_MANAGER', 'LOGISTICS_MANAGER')")
     public ResponseEntity<List<ShipmentResponse>> getCompletedAwaitingApproval() {
         return ResponseEntity.ok(shipmentService.getCompletedAwaitingApproval());
     }
@@ -158,7 +188,7 @@ public class ShipmentController {
      * Get list of approved/finalized shipments
      */
     @GetMapping("/approved")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'STORE_MANAGER', 'STORE_EMPLOYEE', 'OPERATIONS_MANAGER', 'LOGISTICS_MANAGER')")
     public ResponseEntity<?> getApprovedShipments() {
         try {
             System.out.println("Controller: request received for approved shipments");
@@ -188,7 +218,7 @@ public class ShipmentController {
      * Download signed delivery document
      */
     @GetMapping("/{shipmentId}/signed-document")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'STORE_EMPLOYEE', 'LOGISTICS_MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'STORE_EMPLOYEE', 'LOGISTICS_MANAGER', 'OPERATIONS_MANAGER', 'STORE_MANAGER', 'DIRECTOR')")
     public ResponseEntity<org.springframework.core.io.Resource> getSignedDocument(
             @PathVariable("shipmentId") UUID shipmentId) {
 
@@ -205,7 +235,7 @@ public class ShipmentController {
      * Get shipment progress for an order
      */
     @GetMapping("/progress/{orderId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'STORE_EMPLOYEE', 'WAREHOUSE_STAFF')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'STORE_EMPLOYEE', 'WAREHOUSE_STAFF', 'STORE_MANAGER')")
     public ResponseEntity<ShipmentProgressResponse> getOrderShipmentProgress(@PathVariable UUID orderId) {
         return ResponseEntity.ok(shipmentService.getOrderShipmentProgress(orderId));
     }
@@ -214,7 +244,7 @@ public class ShipmentController {
      * Get shipment progress for a sale
      */
     @GetMapping("/progress/sale/{saleId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'STORE_EMPLOYEE')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'STORE_EMPLOYEE', 'STORE_MANAGER')")
     public ResponseEntity<ShipmentProgressResponse> getSaleShipmentProgress(@PathVariable UUID saleId) {
         return ResponseEntity.ok(shipmentService.getSaleShipmentProgress(saleId));
     }
@@ -223,13 +253,96 @@ public class ShipmentController {
      * Update delivery details (notes and additional photos) before final approval
      */
     @PatchMapping("/{shipmentId}/delivery-details")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'STORE_EMPLOYEE')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'STORE_EMPLOYEE', 'OPERATIONS_MANAGER')")
     public ResponseEntity<Void> updateDeliveryDetails(
             @PathVariable UUID shipmentId,
             @ModelAttribute DeliveryDetailsUpdateRequest request,
             @RequestParam(value = "additionalPhotos", required = false) List<org.springframework.web.multipart.MultipartFile> photos)
             throws Exception {
         shipmentService.updateDeliveryDetails(shipmentId, request, photos);
+        return ResponseEntity.ok().build();
+    }
+
+    // =============== ADMIN/MANAGER SHIPMENT MANAGEMENT ENDPOINTS ===============
+
+    /**
+     * Cancel a shipment (Admin/Manager only)
+     * Cascades updates to order and sale statuses
+     */
+    @DeleteMapping("/{shipmentId}/cancel")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    public ResponseEntity<Void> cancelShipment(
+            @PathVariable UUID shipmentId,
+            @AuthenticationPrincipal UserPrincipal userPrincipal) {
+        shipmentService.cancelShipment(shipmentId, userPrincipal.getUser().getId());
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * Update planned shipment date (Admin/Manager only)
+     * Admin/Manager can set past dates, others cannot
+     */
+    @PatchMapping("/{shipmentId}/planned-date")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    public ResponseEntity<Void> updatePlannedDate(
+            @PathVariable UUID shipmentId,
+            @RequestBody UpdatePlannedDateRequest request,
+            @AuthenticationPrincipal UserPrincipal userPrincipal) {
+        // Parse ISO-8601 datetime with timezone (e.g., 2026-02-20T00:00:00.000Z)
+        java.time.Instant instant = java.time.Instant.parse(request.getNewDate());
+        java.time.LocalDateTime newDate = java.time.LocalDateTime.ofInstant(instant, java.time.ZoneId.systemDefault());
+        shipmentService.updatePlannedDate(shipmentId, newDate, userPrincipal.getUser().getId());
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * Withdraw a shipment request (Admin/Manager only)
+     * Can only withdraw PENDING or APPROVED shipments
+     */
+    @PostMapping("/{shipmentId}/withdraw")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    public ResponseEntity<Void> withdrawShipment(
+            @PathVariable UUID shipmentId,
+            @AuthenticationPrincipal UserPrincipal userPrincipal) {
+        shipmentService.withdrawShipment(shipmentId, userPrincipal.getUser().getId());
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * Update shipment vehicle (Admin/Manager only)
+     */
+    @PatchMapping("/{shipmentId}/vehicle")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    public ResponseEntity<Void> updateShipmentVehicle(
+            @PathVariable UUID shipmentId,
+            @RequestBody UpdateVehicleRequest request) {
+        shipmentService.updateShipmentVehicle(shipmentId, request);
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * Resolve a problematic shipment manually (with description and photos)
+     */
+    @PostMapping("/{shipmentId}/resolve-problem")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'DIRECTOR', 'LOGISTICS_MANAGER', 'OPERATIONS_MANAGER')")
+    public ResponseEntity<Void> resolveShipmentProblem(
+            @PathVariable UUID shipmentId,
+            @ModelAttribute ResolveProblemRequest request,
+            @AuthenticationPrincipal UserPrincipal userPrincipal) throws Exception {
+        request.setShipmentId(shipmentId);
+        shipmentService.resolveShipmentProblem(request, userPrincipal.getUser().getId());
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * Update shipment driver by Shipment ID (Admin/Manager only)
+     */
+    @PatchMapping("/{shipmentId}/update-driver")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    public ResponseEntity<Void> updateShipmentDriverById(
+            @PathVariable UUID shipmentId,
+            @RequestBody UpdateDriverRequest request) {
+        shipmentService.updateShipmentDriverById(shipmentId, request);
         return ResponseEntity.ok().build();
     }
 }

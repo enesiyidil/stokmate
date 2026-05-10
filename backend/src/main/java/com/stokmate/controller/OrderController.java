@@ -5,7 +5,6 @@ import com.stokmate.dto.order.ExcelExtractionResponse;
 import com.stokmate.dto.order.OrderCreateRequest;
 import com.stokmate.dto.order.OrderResponse;
 import com.stokmate.dto.order.InvoiceUrlResponse;
-import com.stokmate.domain.OrderStatus;
 import com.stokmate.security.UserPrincipal;
 import com.stokmate.service.OrderService;
 import com.stokmate.service.PendingActionService;
@@ -44,7 +43,7 @@ public class OrderController {
         private final PendingActionService pendingActionService;
 
         // Create/Extract: STORE_MANAGER, DIRECTOR, MANAGER, ADMIN
-        @PreAuthorize("hasAnyRole('ADMIN','MANAGER','DIRECTOR','STORE_MANAGER')")
+        @PreAuthorize("hasAnyRole('ADMIN','MANAGER','DIRECTOR','STORE_MANAGER', 'OPERATIONS_MANAGER')")
         @PostMapping(value = "/extract-excel", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
         @Operation(summary = "Extract order data from Excel file", description = "Extracts order and product data from Excel file with Turkish column headers")
         public ExcelExtractionResponse extractFromExcel(
@@ -52,7 +51,7 @@ public class OrderController {
                 return orderService.extractFromExcel(file);
         }
 
-        @PreAuthorize("hasAnyRole('ADMIN','MANAGER','DIRECTOR','STORE_MANAGER')")
+        @PreAuthorize("hasAnyRole('ADMIN','MANAGER','DIRECTOR','STORE_MANAGER', 'OPERATIONS_MANAGER')")
         @PostMapping
         @Operation(summary = "Create order with products", description = "Creates a new order with associated products")
         public OrderResponse createOrder(@Valid @RequestBody OrderCreateRequest request) {
@@ -83,18 +82,17 @@ public class OrderController {
 
         @PreAuthorize("hasAnyRole('ADMIN','MANAGER','DIRECTOR','STORE_MANAGER','STORE_EMPLOYEE','OPERATIONS_MANAGER')")
         @GetMapping
-        @Operation(summary = "List orders (optionally filter by status)", description = "Returns list of orders; optional query param `status` filters by order status")
-        public java.util.List<OrderResponse> listOrders(
-                        @org.springframework.web.bind.annotation.RequestParam(value = "status", required = false) String status) {
-                OrderStatus s = null;
-                if (status != null && !status.isBlank()) {
-                        try {
-                                s = OrderStatus.valueOf(status);
-                        } catch (IllegalArgumentException e) {
-                                throw new IllegalArgumentException("Invalid status: " + status);
-                        }
-                }
-                return orderService.listOrdersByStatus(s);
+        @Operation(summary = "List orders (paginated)", description = "Returns paginated list of orders with optional filters and search.")
+        public org.springframework.data.domain.Page<OrderResponse> listOrders(
+                        @org.springframework.web.bind.annotation.RequestParam(value = "statusGroup", required = false) String statusGroup,
+                        @org.springframework.web.bind.annotation.RequestParam(value = "orderType", required = false) com.stokmate.domain.OrderType orderType,
+                        @org.springframework.web.bind.annotation.RequestParam(value = "brand", required = false) String brand,
+                        @org.springframework.web.bind.annotation.RequestParam(value = "consultantId", required = false) UUID consultantId,
+                        @org.springframework.web.bind.annotation.RequestParam(value = "search", required = false) String search,
+                        @org.springframework.web.bind.annotation.RequestParam(value = "includeHidden", defaultValue = "true") boolean includeHidden,
+                        org.springframework.data.domain.Pageable pageable) {
+                return orderService.listOrdersPaged(statusGroup, orderType, brand, consultantId, search, includeHidden,
+                                pageable);
         }
 
         @PreAuthorize("hasAnyRole('ADMIN','MANAGER','DIRECTOR','OPERATIONS_MANAGER')")
@@ -202,9 +200,9 @@ public class OrderController {
                 return orderService.updatePartialDelivery(orderId, request, currentUser);
         }
 
-        @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
+        @PreAuthorize("hasAnyRole('ADMIN','MANAGER','STORE_MANAGER')")
         @org.springframework.web.bind.annotation.PatchMapping("/{orderId}/sales-consultant")
-        @Operation(summary = "Update sales consultant", description = "Assigns or removes a sales consultant for an order. Only admin/manager can perform this action.")
+        @Operation(summary = "Update sales consultant", description = "Assigns or removes a sales consultant for an order. Store Manager, Admin and Manager can perform this action.")
         public OrderResponse updateSalesConsultant(
                         @io.swagger.v3.oas.annotations.Parameter(description = "Order ID (UUID)", required = true) @PathVariable("orderId") UUID orderId,
                         @Valid @RequestBody com.stokmate.dto.order.UpdateSalesConsultantRequest request) {
@@ -226,5 +224,23 @@ public class OrderController {
                         @io.swagger.v3.oas.annotations.Parameter(description = "Order ID (UUID)", required = true) @PathVariable("orderId") UUID orderId,
                         @Valid @RequestBody com.stokmate.dto.order.UpdateBrandRequest request) {
                 return orderService.updateBrand(orderId, request.getBrand());
+        }
+
+        @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
+        @org.springframework.web.bind.annotation.DeleteMapping("/{orderId}")
+        @Operation(summary = "Delete order (Hard Delete)", description = "Permanently deletes an order and its associated shipments. Only admin/manager can perform this action.")
+        public org.springframework.http.ResponseEntity<Void> deleteOrder(
+                        @io.swagger.v3.oas.annotations.Parameter(description = "Order ID (UUID)", required = true) @PathVariable("orderId") UUID orderId) {
+                orderService.deleteOrder(orderId);
+                return org.springframework.http.ResponseEntity.ok().build();
+        }
+
+        @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
+        @org.springframework.web.bind.annotation.PutMapping("/{orderId}")
+        @Operation(summary = "Update order details", description = "Updates order details like date, contract no, notes. Only admin/manager can perform this action.")
+        public OrderResponse updateOrder(
+                        @io.swagger.v3.oas.annotations.Parameter(description = "Order ID (UUID)", required = true) @PathVariable("orderId") UUID orderId,
+                        @Valid @RequestBody com.stokmate.dto.order.UpdateOrderRequest request) {
+                return orderService.updateOrder(orderId, request);
         }
 }

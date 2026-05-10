@@ -36,6 +36,8 @@ public class OrderReceiptService {
         private final ProductArrivalRepository productArrivalRepository;
         private final com.stokmate.repository.ProductEventRepository productEventRepository;
         private final com.stokmate.repository.ProductPriceHistoryRepository productPriceHistoryRepository;
+        private final ShipmentService shipmentService;
+        private final ShipmentRepository shipmentRepository;
 
         @Transactional
         public OrderReceiptResponse createReceipt(
@@ -192,6 +194,20 @@ public class OrderReceiptService {
         }
 
         @Transactional(readOnly = true)
+        public org.springframework.data.domain.Page<OrderReceiptResponse> listAllPaged(
+                        String search,
+                        OrderReceiptStatus status,
+                        UUID receivedBy,
+                        UUID approvedBy,
+                        org.springframework.data.domain.Pageable pageable) {
+
+                org.springframework.data.domain.Page<OrderReceipt> page = orderReceiptRepository.findAllPaged(
+                                search, status, receivedBy, approvedBy, pageable);
+
+                return page.map(this::toResponseWithPhotos);
+        }
+
+        @Transactional(readOnly = true)
         public OrderReceiptResponse getReceiptById(UUID id) {
                 OrderReceipt receipt = orderReceiptRepository.findById(id)
                                 .orElseThrow(() -> new BadRequestException("Receipt not found"));
@@ -253,6 +269,71 @@ public class OrderReceiptService {
                                 orderActivityService.logActivity(order, ActivityType.ORDER_UPDATED,
                                                 "Tüm ürünler kabul edildi, sevk onayı bekleniyor");
                                 log.info("Order {} marked as PENDING_SHIPMENT_APPROVAL", order.getOrderNo());
+
+                                // AUTO-SHIPMENT LOGIC
+                                try {
+                                        // Get pending shipments to avoid double shipping
+                                        List<Shipment> activeShipments = shipmentRepository.findByOrder(order).stream()
+                                                        .filter(s -> s.getStatus() != ShipmentStatus.FINALIZED)
+                                                        .collect(Collectors.toList());
+
+                                        List<com.stokmate.dto.shipment.ProductShipmentRequest> itemsToShip = java.util.Collections
+                                                        .emptyList();
+
+                                        // Calculate items to ship
+                                        itemsToShip = order.getProducts().stream()
+                                                        .map(op -> {
+                                                                BigDecimal pendingQty = activeShipments.stream()
+                                                                                .flatMap(s -> s.getItems().stream())
+                                                                                .filter(item -> item
+                                                                                                .getOrderProduct() != null
+                                                                                                && item.getOrderProduct()
+                                                                                                                .getId()
+                                                                                                                .equals(op.getId()))
+                                                                                .map(item -> BigDecimal.valueOf(item
+                                                                                                .getShippedQuantity()))
+                                                                                .reduce(BigDecimal.ZERO,
+                                                                                                BigDecimal::add);
+
+                                                                BigDecimal availableQty = op.getAcceptedQuantity()
+                                                                                .subtract(op.getShippedQuantity() != null
+                                                                                                ? op.getShippedQuantity()
+                                                                                                : BigDecimal.ZERO)
+                                                                                .subtract(pendingQty);
+                                                                return java.util.Map.entry(op, availableQty);
+                                                        })
+                                                        .filter(entry -> entry.getValue()
+                                                                        .compareTo(BigDecimal.ZERO) > 0)
+                                                        .map(entry -> com.stokmate.dto.shipment.ProductShipmentRequest
+                                                                        .builder()
+                                                                        .orderProductId(entry.getKey().getId())
+                                                                        .quantityToShip(entry.getValue())
+                                                                        .build())
+                                                        .collect(Collectors.toList());
+
+                                        if (!itemsToShip.isEmpty()) {
+                                                log.info("Auto-creating shipment for order {} with {} items",
+                                                                order.getOrderNo(),
+                                                                itemsToShip.size());
+                                                com.stokmate.dto.shipment.PartialShipmentRequest shipmentRequest = com.stokmate.dto.shipment.PartialShipmentRequest
+                                                                .builder()
+                                                                .orderId(order.getId())
+                                                                .productShipments(itemsToShip)
+                                                                .notes(String.format(
+                                                                                "Otomatik oluşturulan sevkiyat (Tüm ürünler kabul edildi) - %s",
+                                                                                java.time.LocalDateTime.now()
+                                                                                                .format(java.time.format.DateTimeFormatter
+                                                                                                                .ofPattern("dd.MM.yyyy HH:mm"))))
+                                                                .build();
+
+                                                shipmentService.createPartialShipment(shipmentRequest,
+                                                                approver.getId());
+                                                log.info("Successfully auto-created shipment for order {}",
+                                                                order.getOrderNo());
+                                        }
+                                } catch (Exception e) {
+                                        log.error("Failed to auto-create shipment for order {}", order.getOrderNo(), e);
+                                }
                         }
 
                 } else if (anyProductAccepted && order.getStatus() != OrderStatus.PARTIALLY_ACCEPTED) {
@@ -302,15 +383,8 @@ public class OrderReceiptService {
                                 .map(photo -> {
                                         OrderReceiptPhotoResponse photoResponse = orderReceiptPhotoMapper
                                                         .toResponse(photo);
-                                        try {
-                                                photoResponse.setDownloadUrl(
-                                                                storageService.getPresignedUrl(photo.getFileKey()));
-                                        } catch (Exception e) {
-                                                // If MinIO access fails, just set null URL
-                                                log.warn("Failed to generate presigned URL for photo {}: {}",
-                                                                photo.getFileKey(), e.getMessage());
-                                                photoResponse.setDownloadUrl(null);
-                                        }
+                                        // Return raw path for backend proxy (frontend uses /api/files/view)
+                                        photoResponse.setDownloadUrl(photo.getFileKey());
                                         return photoResponse;
                                 })
                                 .collect(Collectors.toList());
@@ -359,19 +433,49 @@ public class OrderReceiptService {
                         // Update product's current arrival price and stock
                         product.setArrivalPrice(arrival.getArrivalPrice());
                         product.setVatRate(arrival.getVatRate());
-                        product.setStockQuantity(product.getStockQuantity().add(receipt.getReceivedQuantity()));
-                        productRepository.save(product);
 
-                        log.info("Updated existing product {} stock by {} via receipt. New stock: {}",
-                                        product.getCode(), receipt.getReceivedQuantity(), product.getStockQuantity());
+                        // Check if this is a converted order (iptal stoğu)
+                        boolean isCancelledStock = order.isConvertedFromCustomer();
+
+                        if (isCancelledStock) {
+                                // İptal stoğu - add to cancelledStockQuantity
+                                BigDecimal newCancelledQty = product.getCancelledStockQuantity()
+                                                .add(receipt.getReceivedQuantity());
+                                product.setCancelledStockQuantity(newCancelledQty);
+                                log.info("Updated product {} cancelled stock by {} via receipt. New cancelled stock: {}",
+                                                product.getCode(), receipt.getReceivedQuantity(), newCancelledQty);
+                        } else {
+                                // Normal stok - add to stockQuantity
+                                product.setStockQuantity(product.getStockQuantity().add(receipt.getReceivedQuantity()));
+                                log.info("Updated existing product {} stock by {} via receipt. New stock: {}",
+                                                product.getCode(), receipt.getReceivedQuantity(),
+                                                product.getStockQuantity());
+                        }
+
+                        // Update brand if missing
+                        if (product.getBrand() == null && orderProduct.getBrand() != null) {
+                                product.setBrand(orderProduct.getBrand());
+                        }
+
+                        productRepository.save(product);
 
                         // Create ProductEvent for stock increase
                         com.stokmate.domain.ProductEvent productEvent = new com.stokmate.domain.ProductEvent();
                         productEvent.setProduct(product);
-                        productEvent.setEventType("STOCK_ACCEPTANCE");
-                        productEvent.setQuantityChange(receipt.getReceivedQuantity());
-                        productEvent.setDescription(
-                                        String.format("Ürün kabul edildi - Sipariş: %s", order.getOrderNo()));
+
+                        if (isCancelledStock) {
+                                productEvent.setEventType("CANCELLED_STOCK_ACCEPTANCE");
+                                productEvent.setQuantityChange(receipt.getReceivedQuantity());
+                                productEvent.setDescription(
+                                                String.format("İptal Stoğu Kabulü - Sipariş: %s (Müşteriden iptal edilen)",
+                                                                order.getOrderNo()));
+                        } else {
+                                productEvent.setEventType("STOCK_ACCEPTANCE");
+                                productEvent.setQuantityChange(receipt.getReceivedQuantity());
+                                productEvent.setDescription(
+                                                String.format("Ürün kabul edildi - Sipariş: %s", order.getOrderNo()));
+                        }
+
                         productEvent.setCreatedBy(receipt.getReceivedBy());
                         productEvent.setCreatedAt(java.time.LocalDateTime.now());
                         productEventRepository.save(productEvent);
@@ -416,7 +520,8 @@ public class OrderReceiptService {
                                 priceHistory.setPaymentCondition(orderProduct.getPaymentCondition());
                                 priceHistory.setPaymentConditionDefinition(
                                                 orderProduct.getPaymentConditionDefinition());
-                                priceHistory.setQuantity(receipt.getReceivedQuantity().intValue());
+                                priceHistory.setQuantity(receipt.getReceivedQuantity());
+                                priceHistory.setRemainingQuantity(receipt.getReceivedQuantity());
                                 priceHistory.setRelatedOrder(order);
                                 priceHistory.setCreatedBy(receipt.getReceivedBy());
                                 priceHistory.setCreatedAt(java.time.LocalDateTime.now());
@@ -428,6 +533,7 @@ public class OrderReceiptService {
                         Product newProduct = new Product();
                         newProduct.setCode(orderProduct.getProductCode());
                         newProduct.setName(orderProduct.getProductName());
+                        newProduct.setBrand(orderProduct.getBrand());
                         newProduct.setStockQuantity(receipt.getReceivedQuantity());
 
                         // Fix null arrival price issue

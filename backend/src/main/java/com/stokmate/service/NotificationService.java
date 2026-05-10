@@ -26,7 +26,7 @@ public class NotificationService {
             message.setText("Giriş kodunuz: " + code + "\n\nBu kod 15 dakika süreyle geçerlidir.");
 
             mailSender.send(message);
-            log.info("OTP code sent to {}", email);
+            log.info("OTP code sent to {}: {}", email, code);
         } catch (Exception e) {
             log.error("Failed to send email to {}", email, e);
             // Don't throw exception to avoid breaking the auth flow if mail fails in dev

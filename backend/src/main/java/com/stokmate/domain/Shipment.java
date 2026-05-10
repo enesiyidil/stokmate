@@ -58,16 +58,60 @@ public class Shipment extends AuditableEntity {
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "shipment_delivery_photos", joinColumns = @JoinColumn(name = "shipment_id"))
     @Column(name = "photo_path")
-    private List<String> deliveryPhotoPaths = new ArrayList<>();
+    private java.util.Set<String> deliveryPhotoPaths = new java.util.HashSet<>();
 
     // Final approval
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private ShipmentStatus status = ShipmentStatus.PENDING_COMPLETION;
+    private ShipmentStatus status = ShipmentStatus.PENDING;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "approved_by_id")
     private User approvedBy;
 
     private LocalDateTime approvalDate;
+
+    // Notification flags
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean notified1Day = false;
+
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean notified1Hour = false;
+
+    // Link to SSH order created for this problematic shipment
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "linked_ssh_order_id")
+    private Order linkedSshOrder;
+
+    private String receiverName;
+
+    // Problem resolution fields
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean problemResolved = false;
+
+    @Enumerated(EnumType.STRING)
+    private ProblemResolutionType resolutionType;
+
+    @Lob
+    @Column(columnDefinition = "TEXT")
+    private String resolutionDescription;
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "shipment_resolution_photos", joinColumns = @JoinColumn(name = "shipment_id"))
+    @Column(name = "photo_path")
+    private java.util.Set<String> resolutionPhotoPaths = new java.util.HashSet<>();
+
+    private LocalDateTime resolvedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "resolved_by_id")
+    private User resolvedBy;
+
+    /**
+     * Helper method to add ShipmentItem with proper bidirectional relationship
+     */
+    public void addItem(ShipmentItem item) {
+        items.add(item);
+        item.setShipment(this);
+    }
 }

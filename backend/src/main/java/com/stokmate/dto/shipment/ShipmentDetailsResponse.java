@@ -30,11 +30,29 @@ public class ShipmentDetailsResponse {
     private String shipmentStatus;
     private LocalDateTime plannedShipmentDate;
     private String approvedBy;
+    private String shipmentNote;
+
+    // Sale related
+    private String saleId;
+    private String saleNo;
+    private String shipmentType; // ORDER or SALE
     private String deliveryStatus;
     private String problemType;
     private String deliveryNotes;
     private String signedDocumentUrl;
     private List<String> deliveryPhotoUrls;
+
+    // Problem resolution fields
+    private boolean problemResolved;
+    private String resolutionType; // MANUAL or SSH_ORDER
+    private String resolutionDescription;
+    private List<String> resolutionPhotoUrls;
+    private LocalDateTime resolvedAt;
+    private String resolvedByName;
+    // SSH order info for SSH_ORDER resolution
+    private String linkedSshOrderId;
+    private String linkedSshOrderNo;
+    private String linkedSshOrderStatus;
 
     @Data
     @Builder
@@ -43,6 +61,7 @@ public class ShipmentDetailsResponse {
     public static class CustomerInfo {
         private String name;
         private String phone;
+        private String alternatePhone;
         private String address;
     }
 

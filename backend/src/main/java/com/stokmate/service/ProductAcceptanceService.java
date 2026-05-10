@@ -16,6 +16,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.stokmate.dto.shipment.PartialShipmentRequest;
+import com.stokmate.dto.shipment.ProductShipmentRequest;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -36,6 +39,8 @@ public class ProductAcceptanceService {
     private final com.stokmate.repository.ProductEventRepository productEventRepository;
     private final com.stokmate.repository.ProductPriceHistoryRepository productPriceHistoryRepository;
     private final com.stokmate.repository.ProductRepository productRepository;
+    private final ShipmentService shipmentService;
+    private final com.stokmate.repository.ShipmentRepository shipmentRepository;
 
     @Transactional
     public ProductAcceptanceResponse acceptProduct(
@@ -90,6 +95,7 @@ public class ProductAcceptanceService {
         orderProduct.setAcceptedQuantity(
                 orderProduct.getAcceptedQuantity().add(request.getAcceptedQuantity()));
         orderProductRepository.save(orderProduct);
+        orderProductRepository.flush(); // Ensure visibility
 
         // For STOCK orders, create ProductEvent and ProductPriceHistory
         Order order = orderProduct.getOrder();
@@ -108,12 +114,31 @@ public class ProductAcceptanceService {
                     productRepository.save(product);
                 }
 
+                // Check if this is a converted order (iptal stoğu)
+                boolean isCancelledStock = order.isConvertedFromCustomer();
+
                 // Create ProductEvent for stock increase
                 com.stokmate.domain.ProductEvent productEvent = new com.stokmate.domain.ProductEvent();
                 productEvent.setProduct(product);
-                productEvent.setEventType("STOCK_ACCEPTANCE");
-                productEvent.setQuantityChange(request.getAcceptedQuantity());
-                productEvent.setDescription(String.format("Ürün kabul edildi - Sipariş: %s", order.getOrderNo()));
+
+                if (isCancelledStock) {
+                    // İptal stoğu - add to cancelledStockQuantity
+                    BigDecimal oldCancelledQty = product.getCancelledStockQuantity();
+                    BigDecimal newCancelledQty = oldCancelledQty.add(request.getAcceptedQuantity());
+                    product.setCancelledStockQuantity(newCancelledQty);
+                    productRepository.save(product);
+
+                    productEvent.setEventType("CANCELLED_STOCK_ACCEPTANCE");
+                    productEvent.setQuantityChange(request.getAcceptedQuantity());
+                    productEvent.setDescription(String
+                            .format("İptal Stoğu Kabulü - Sipariş: %s (Müşteriden iptal edilen)", order.getOrderNo()));
+                } else {
+                    // Normal stok
+                    productEvent.setEventType("STOCK_ACCEPTANCE");
+                    productEvent.setQuantityChange(request.getAcceptedQuantity());
+                    productEvent.setDescription(String.format("Ürün kabul edildi - Sipariş: %s", order.getOrderNo()));
+                }
+
                 productEvent.setCreatedBy(user);
                 productEvent.setCreatedAt(LocalDateTime.now());
                 productEventRepository.save(productEvent);
@@ -147,7 +172,8 @@ public class ProductAcceptanceService {
                     priceHistory.setVat(orderProduct.getVat() != null ? orderProduct.getVat() : BigDecimal.ZERO);
                     priceHistory.setPaymentCondition(orderProduct.getPaymentCondition());
                     priceHistory.setPaymentConditionDefinition(orderProduct.getPaymentConditionDefinition());
-                    priceHistory.setQuantity(request.getAcceptedQuantity().intValue());
+                    priceHistory.setQuantity(request.getAcceptedQuantity());
+                    priceHistory.setRemainingQuantity(request.getAcceptedQuantity());
                     priceHistory.setRelatedOrder(order);
                     priceHistory.setCreatedBy(user);
                     priceHistory.setCreatedAt(LocalDateTime.now());
@@ -157,18 +183,47 @@ public class ProductAcceptanceService {
         }
 
         // Check if order should be auto-completed
-        checkAndCompleteOrder(orderProduct.getOrder());
+        checkAndCompleteOrder(orderProduct.getOrder(), user);
 
         return productAcceptanceMapper.toResponse(saved);
     }
 
     @Transactional(readOnly = true)
     public List<PendingProductResponse> getPendingProducts() {
-        // Get all IN_PROGRESS orders
-        List<Order> inProgressOrders = orderRepository.findByStatus(OrderStatus.PENDING_ACCEPTANCE);
+        // Get orders that need product acceptance
+        // PENDING_ACCEPTANCE: Standard orders waiting for acceptance
+        // Also include IN_PROGRESS orders that may have remaining products (includes
+        // SSH orders)
+        List<Order> pendingAcceptanceOrders = orderRepository.findByStatus(OrderStatus.PENDING_ACCEPTANCE);
+        List<Order> inProgressOrders = orderRepository.findByStatus(OrderStatus.IN_PROGRESS);
+        // Include cancelled STOCK orders (converted from customer orders) that still
+        // have unaccepted products
+        List<Order> cancelledStockOrders = orderRepository.findByStatus(OrderStatus.IPTAL_EDILDI);
 
         List<PendingProductResponse> pendingProducts = new ArrayList<>();
 
+        // Process PENDING_ACCEPTANCE orders
+        for (Order order : pendingAcceptanceOrders) {
+            for (OrderProduct op : order.getProducts()) {
+                if (op.getRemainingQuantity().compareTo(BigDecimal.ZERO) > 0) {
+                    PendingProductResponse response = PendingProductResponse.builder()
+                            .orderProductId(op.getId().toString())
+                            .orderId(order.getId().toString())
+                            .orderNumber(order.getOrderNo())
+                            .productName(op.getProductName())
+                            .productCode(op.getProductCode())
+                            .totalQuantity(op.getQuantity())
+                            .acceptedQuantity(op.getAcceptedQuantity())
+                            .remainingQuantity(op.getRemainingQuantity())
+                            .orderDate(order.getOrderDate())
+                            .convertedFromCustomer(order.isConvertedFromCustomer())
+                            .build();
+                    pendingProducts.add(response);
+                }
+            }
+        }
+
+        // Process IN_PROGRESS orders (includes SSH orders)
         for (Order order : inProgressOrders) {
             for (OrderProduct op : order.getProducts()) {
                 if (op.getRemainingQuantity().compareTo(BigDecimal.ZERO) > 0) {
@@ -181,11 +236,49 @@ public class ProductAcceptanceService {
                             .totalQuantity(op.getQuantity())
                             .acceptedQuantity(op.getAcceptedQuantity())
                             .remainingQuantity(op.getRemainingQuantity())
+                            .orderDate(order.getOrderDate())
+                            .convertedFromCustomer(order.isConvertedFromCustomer())
                             .build();
                     pendingProducts.add(response);
                 }
             }
         }
+
+        // Process cancelled STOCK orders (converted from customer orders)
+        for (Order order : cancelledStockOrders) {
+            // Only include STOCK type orders (these are converted customer orders)
+            if (order.getOrderType() != OrderType.STOCK) {
+                continue;
+            }
+            for (OrderProduct op : order.getProducts()) {
+                if (op.getRemainingQuantity().compareTo(BigDecimal.ZERO) > 0) {
+                    PendingProductResponse response = PendingProductResponse.builder()
+                            .orderProductId(op.getId().toString())
+                            .orderId(order.getId().toString())
+                            .orderNumber(order.getOrderNo())
+                            .productName(op.getProductName())
+                            .productCode(op.getProductCode())
+                            .totalQuantity(op.getQuantity())
+                            .acceptedQuantity(op.getAcceptedQuantity())
+                            .remainingQuantity(op.getRemainingQuantity())
+                            .orderDate(order.getOrderDate())
+                            .convertedFromCustomer(true)
+                            .build();
+                    pendingProducts.add(response);
+                }
+            }
+        }
+
+        // Sort by orderDate ascending (oldest first)
+        pendingProducts.sort((a, b) -> {
+            if (a.getOrderDate() == null && b.getOrderDate() == null)
+                return 0;
+            if (a.getOrderDate() == null)
+                return 1;
+            if (b.getOrderDate() == null)
+                return -1;
+            return a.getOrderDate().compareTo(b.getOrderDate());
+        });
 
         return pendingProducts;
     }
@@ -200,22 +293,203 @@ public class ProductAcceptanceService {
                 .collect(Collectors.toList());
     }
 
-    private void checkAndCompleteOrder(Order order) {
-        // With simplified status system, order stays IN_PROGRESS until all products are
-        // SHIPPED
-        // This method now just ensures order is in valid state (not auto-completing on
-        // acceptance)
+    @Transactional(readOnly = true)
+    public org.springframework.data.domain.Page<ProductAcceptanceResponse> getAllPaged(
+            String search,
+            ProductAcceptance.AcceptanceStatus status,
+            String brand,
+            String acceptedBy,
+            org.springframework.data.domain.Pageable pageable) {
+        String searchParam = (search != null && !search.isBlank()) ? search.trim() : null;
+
+        // Convert "ALL" defaults to null for the query
+        ProductAcceptance.AcceptanceStatus parsedStatus = status;
+        String parsedBrand = ("ALL".equals(brand)) ? null : brand;
+
+        // Handle "MARKASIZ" brand case -> we treat it as empty string or null in DB,
+        // but for now let's just use the parameter as is. If we want we could map it.
+        if ("MARKASIZ".equals(parsedBrand)) {
+            parsedBrand = "";
+        }
+
+        java.util.UUID parsedAcceptedBy = null;
+        if (acceptedBy != null && !acceptedBy.equals("ALL") && !acceptedBy.trim().isEmpty()) {
+            try {
+                parsedAcceptedBy = java.util.UUID.fromString(acceptedBy);
+            } catch (IllegalArgumentException e) {
+                // Ignore invalid UUIDs
+            }
+        }
+
+        return productAcceptanceRepository.findAllPaged(
+                searchParam, parsedStatus, parsedBrand, parsedAcceptedBy, pageable)
+                .map(productAcceptanceMapper::toResponse);
+    }
+
+    private void checkAndCompleteOrder(Order orderArg, User user) {
+        log.info("Checking order completion for order: {}", orderArg.getOrderNo());
+
+        // Reload order to ensure we have the latest product data (especially accepted
+        // quantities)
+        Order order = orderRepository.findById(orderArg.getId())
+                .orElse(orderArg);
+
         boolean allAccepted = order.getProducts().stream()
                 .allMatch(OrderProduct::isFullyAccepted);
+
+        log.info("Order {}: allAccepted = {}", order.getOrderNo(), allAccepted);
 
         if (allAccepted) {
             log.info("All products accepted for order {} - order remains IN_PROGRESS until shipped",
                     order.getOrderNo());
-            // Order stays IN_PROGRESS, will be completed by shipment finalization
+
             if (order.getStatus() == OrderStatus.PENDING_ACCEPTANCE) {
                 order.setStatus(OrderStatus.IN_PROGRESS);
                 orderRepository.save(order);
             }
+
+            // AUTO-SHIPMENT LOGIC
+            log.info("Checking auto-shipment for order type: {}", order.getOrderType());
+
+            if (order.getOrderType() == OrderType.CUSTOMER_SPECIFIC
+                    || order.getOrderType() == OrderType.AFTER_SALES_SERVICE) {
+
+                // Get pending shipments to avoid double shipping
+                List<Shipment> activeShipments = shipmentRepository.findByOrder(order).stream()
+                        .filter(s -> s.getStatus() != com.stokmate.domain.ShipmentStatus.FINALIZED)
+                        .collect(Collectors.toList());
+
+                log.info("Found {} active shipments for order {}", activeShipments.size(), order.getOrderNo());
+
+                List<ProductShipmentRequest> itemsToShip = new ArrayList<>();
+                for (OrderProduct op : order.getProducts()) {
+                    BigDecimal pendingQty = activeShipments.stream()
+                            .flatMap(s -> s.getItems().stream())
+                            .filter(item -> item.getOrderProduct() != null
+                                    && item.getOrderProduct().getId().equals(op.getId()))
+                            .map(item -> BigDecimal.valueOf(item.getShippedQuantity()))
+                            .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+                    BigDecimal availableQty = op.getRemainingShipQuantity().subtract(pendingQty);
+
+                    log.info("Product {}: Accepted={}, Shipped={}, Pending={}, Available={}",
+                            op.getProductName(), op.getAcceptedQuantity(), op.getShippedQuantity(), pendingQty,
+                            availableQty);
+
+                    if (availableQty.compareTo(BigDecimal.ZERO) > 0) {
+                        itemsToShip.add(ProductShipmentRequest.builder()
+                                .orderProductId(op.getId())
+                                .quantityToShip(availableQty)
+                                .build());
+                    }
+                }
+
+                log.info("Found {} items to auto-ship", itemsToShip.size());
+
+                if (!itemsToShip.isEmpty()) {
+                    log.info("Auto-creating shipment for order {} with {} items", order.getOrderNo(),
+                            itemsToShip.size());
+                    PartialShipmentRequest shipmentRequest = PartialShipmentRequest.builder()
+                            .orderId(order.getId())
+                            .productShipments(itemsToShip)
+                            .notes(String.format("Otomatik oluşturulan sevkiyat (Tüm ürünler kabul edildi) - %s",
+                                    LocalDateTime.now()
+                                            .format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))))
+                            .build();
+
+                    try {
+                        shipmentService.createPartialShipment(shipmentRequest, user.getId());
+                        log.info("Successfully auto-created shipment for order {}", order.getOrderNo());
+                    } catch (Exception e) {
+                        log.error("Failed to auto-create shipment for order {}", order.getOrderNo(), e);
+                    }
+                }
+            } else {
+                log.info("Order type {} not eligible for auto-shipment", order.getOrderType());
+            }
         }
+    }
+
+    // =============== ADMIN/MANAGER DELETE FUNCTIONALITY ===============
+
+    /**
+     * Delete a product acceptance (Admin/Manager only)
+     * This will rollback the accepted quantity and related changes
+     */
+    @Transactional
+    public void deleteAcceptance(String acceptanceId, User user) {
+        // Permission check
+        if (!user.getRole().canDeleteProductAcceptances()) {
+            throw new BadRequestException("Bu işlem için yetkiniz yok");
+        }
+
+        ProductAcceptance acceptance = productAcceptanceRepository.findById(acceptanceId)
+                .orElseThrow(() -> new NotFoundException("Ürün kabul kaydı bulunamadı"));
+
+        OrderProduct orderProduct = acceptance.getOrderProduct();
+        Order order = orderProduct.getOrder();
+        BigDecimal acceptedQty = acceptance.getAcceptedQuantity();
+
+        // Rollback accepted quantity on OrderProduct
+        BigDecimal currentAccepted = orderProduct.getAcceptedQuantity();
+        BigDecimal newAccepted = currentAccepted.subtract(acceptedQty);
+        orderProduct.setAcceptedQuantity(newAccepted.max(BigDecimal.ZERO));
+        orderProductRepository.save(orderProduct);
+
+        // For STOCK orders, rollback stock changes
+        if (order.getOrderType() == OrderType.STOCK) {
+            Product product = productRepository.findByCode(orderProduct.getProductCode()).orElse(null);
+
+            if (product != null) {
+                boolean isCancelledStock = order.isConvertedFromCustomer();
+
+                if (isCancelledStock) {
+                    // Rollback cancelled stock quantity
+                    BigDecimal oldCancelledQty = product.getCancelledStockQuantity();
+                    BigDecimal newCancelledQty = oldCancelledQty.subtract(acceptedQty);
+                    product.setCancelledStockQuantity(newCancelledQty.max(BigDecimal.ZERO));
+                    productRepository.save(product);
+
+                    // Create rollback event
+                    ProductEvent rollbackEvent = new ProductEvent();
+                    rollbackEvent.setProduct(product);
+                    rollbackEvent.setEventType("CANCELLED_STOCK_DELETION");
+                    rollbackEvent.setQuantityChange(acceptedQty.negate());
+                    rollbackEvent.setDescription(
+                            String.format("İptal stoğu kabulü silindi - Sipariş: %s", order.getOrderNo()));
+                    rollbackEvent.setCreatedBy(user);
+                    rollbackEvent.setCreatedAt(LocalDateTime.now());
+                    productEventRepository.save(rollbackEvent);
+                } else {
+                    // Create stock decrease event
+                    ProductEvent rollbackEvent = new ProductEvent();
+                    rollbackEvent.setProduct(product);
+                    rollbackEvent.setEventType("STOCK_ACCEPTANCE_DELETED");
+                    rollbackEvent.setQuantityChange(acceptedQty.negate());
+                    rollbackEvent.setDescription(String.format("Ürün kabulü silindi - Sipariş: %s - Silen: %s %s",
+                            order.getOrderNo(), user.getFirstName(), user.getLastName()));
+                    rollbackEvent.setCreatedBy(user);
+                    rollbackEvent.setCreatedAt(LocalDateTime.now());
+                    productEventRepository.save(rollbackEvent);
+                }
+            }
+        }
+
+        // Delete acceptance images from storage
+        if (acceptance.getImagePaths() != null) {
+            for (String imagePath : acceptance.getImagePaths()) {
+                try {
+                    storageService.delete(imagePath);
+                } catch (Exception e) {
+                    log.warn("Failed to delete acceptance image: {}", imagePath, e);
+                }
+            }
+        }
+
+        // Delete the acceptance
+        productAcceptanceRepository.delete(acceptance);
+
+        log.info("Product acceptance {} deleted by user {} for order {}",
+                acceptanceId, user.getId(), order.getOrderNo());
     }
 }

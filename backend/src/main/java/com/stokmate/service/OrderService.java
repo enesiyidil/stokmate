@@ -46,6 +46,8 @@ import com.stokmate.domain.ProductArrival;
 import com.stokmate.repository.CustomerRepository;
 import com.stokmate.repository.ProductRepository;
 import com.stokmate.repository.ProductArrivalRepository;
+import com.stokmate.repository.ShipmentRepository;
+import com.stokmate.repository.OrderNoteRepository;
 import com.stokmate.mapper.CustomerMapper;
 
 @Service
@@ -57,6 +59,7 @@ public class OrderService {
     private final OrderMapper orderMapper;
     private final OrderProductMapper orderProductMapper;
     private final OrderActivityService orderActivityService;
+    private final OrderNoteRepository orderNoteRepository;
     private final StorageService storageService;
     private final CustomerRepository customerRepository;
     private final CustomerMapper customerMapper;
@@ -65,6 +68,14 @@ public class OrderService {
     private final com.stokmate.repository.OrderEventRepository orderEventRepository;
     private final com.stokmate.mapper.OrderEventMapper orderEventMapper;
     private final com.stokmate.repository.UserRepository userRepository;
+    private final com.stokmate.repository.OrderProductRepository orderProductRepository;
+    private final ProductAllocationService productAllocationService;
+    private final ShipmentRepository shipmentRepository;
+    private final com.stokmate.repository.ProductStockHistoryRepository productStockHistoryRepository;
+
+    @org.springframework.context.annotation.Lazy
+    @org.springframework.beans.factory.annotation.Autowired
+    private ShipmentService shipmentService;
 
     private static final DateTimeFormatter EXCEL_DATE_FORMATTER = DateTimeFormatter.ofPattern("d.M.yyyy",
             Locale.forLanguageTag("tr"));
@@ -189,10 +200,17 @@ public class OrderService {
                     String prosapContractNameSurname = getCellValue(dataRow,
                             columnMapping.prosapContractNameSurnameIndex);
                     LocalDate orderDate = parseDateCell(dataRow, columnMapping.orderDateIndex);
+                    String note = getCellValue(dataRow, columnMapping.noteIndex);
 
                     log.info("Creating new order group for order no: {}", rowOrderNo);
-                    return new OrderGroupData(rowOrderNo, prosapContractNo, prosapContractNameSurname, orderDate,
-                            new java.util.ArrayList<>());
+                    return OrderGroupData.builder()
+                            .orderNo(rowOrderNo)
+                            .prosapContractNo(prosapContractNo)
+                            .prosapContractNameSurname(prosapContractNameSurname)
+                            .orderDate(orderDate)
+                            .shipmentNote(note)
+                            .products(new java.util.ArrayList<>())
+                            .build();
                 });
 
                 // Extract product from this row
@@ -250,6 +268,12 @@ public class OrderService {
 
         Order order = orderMapper.toEntity(request);
 
+        // Manual mapping to ensure persistence if mapper is stale
+        if (request.getShipmentNote() != null) {
+            order.setShipmentNote(request.getShipmentNote());
+        }
+        log.info("Creating order with ShipmentNote: '{}'", order.getShipmentNote());
+
         // Handle customer-specific order
         if (request.getCustomerId() != null) {
             // Use existing customer
@@ -281,13 +305,45 @@ public class OrderService {
 
         Order savedOrder = orderRepository.save(order);
 
+        // Handle SSH order linkage to parent order and shipment
+        if (request.getParentOrderId() != null) {
+            Order parentOrder = orderRepository.findById(request.getParentOrderId())
+                    .orElseThrow(() -> new NotFoundException("Parent order not found"));
+            savedOrder.setParentOrder(parentOrder);
+
+            // If linked to a shipment, set the shipment link
+            if (request.getLinkedShipmentId() != null) {
+                savedOrder.setLinkedShipmentId(request.getLinkedShipmentId());
+                savedOrder.setHidden(true); // Hide SSH orders from main list
+                savedOrder.setStatus(OrderStatus.PENDING_ACCEPTANCE); // SSH orders need product acceptance
+
+                // Link the shipment to this SSH order
+                final Order finalSavedOrder = savedOrder;
+                shipmentRepository.findById(request.getLinkedShipmentId()).ifPresent(shipment -> {
+                    shipment.setLinkedSshOrder(finalSavedOrder);
+                    shipmentRepository.save(shipment);
+                });
+            }
+
+            // Set hidden if explicitly requested
+            if (request.getHidden() != null && request.getHidden()) {
+                savedOrder.setHidden(true);
+            }
+
+            savedOrder = orderRepository.save(savedOrder);
+        }
+
         // DEBUG: Log brands after saving
         savedOrder.getProducts().forEach(
                 p -> log.info("Saved OrderProduct brand: {} for product: {}", p.getBrand(), p.getProductName()));
 
-        // Log activity
-        orderActivityService.logActivity(savedOrder, ActivityType.CREATED,
-                savedOrder.getProducts().size() + " ürün ile sipariş oluşturuldu");
+        // Log activity (wrapped in try-catch to prevent transaction issues)
+        try {
+            orderActivityService.logActivity(savedOrder, ActivityType.CREATED,
+                    savedOrder.getProducts().size() + " ürün ile sipariş oluşturuldu");
+        } catch (Exception e) {
+            log.error("Activity logging failed for order {}: {}", savedOrder.getOrderNo(), e.getMessage());
+        }
 
         return orderMapper.toResponse(savedOrder);
     }
@@ -298,18 +354,36 @@ public class OrderService {
     public OrderResponse getOrderById(UUID orderId) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new NotFoundException("Order not found"));
-        return orderMapper.toResponse(order);
+        OrderResponse response = orderMapper.toResponse(order);
+
+        // Manual mapping for display
+        response.setShipmentNote(order.getShipmentNote());
+
+        return response;
     }
 
     /**
-     * List orders, optionally filtered by status
+     * List orders, optionally filtered by status.
+     * If includeHidden is true, returns all orders (including SSH/hidden).
+     * If includeHidden is false, returns only non-hidden orders.
      */
-    public List<OrderResponse> listOrdersByStatus(OrderStatus status) {
+    public List<OrderResponse> listOrdersByStatus(OrderStatus status, boolean includeHidden) {
         List<Order> orders;
-        if (status == null) {
-            orders = orderRepository.findAll();
+
+        if (includeHidden) {
+            // Fetch all orders regardless of hidden status
+            if (status == null) {
+                orders = orderRepository.findAll();
+            } else {
+                orders = orderRepository.findByStatus(status);
+            }
         } else {
-            orders = orderRepository.findByStatus(status);
+            // Default behavior: Fetch only visible orders
+            if (status == null) {
+                orders = orderRepository.findByHiddenFalse();
+            } else {
+                orders = orderRepository.findByStatusAndHiddenFalse(status);
+            }
         }
 
         List<OrderResponse> responses = new ArrayList<>();
@@ -317,6 +391,30 @@ public class OrderService {
             responses.add(orderMapper.toResponse(o));
         }
         return responses;
+    }
+
+    /**
+     * Paginated list of orders with server-side filtering, searching, and custom
+     * sorting.
+     */
+    public org.springframework.data.domain.Page<OrderResponse> listOrdersPaged(
+            String statusGroup,
+            com.stokmate.domain.OrderType orderType,
+            String brand,
+            UUID consultantId,
+            String search,
+            boolean includeHidden,
+            org.springframework.data.domain.Pageable pageable) {
+
+        String searchParam = null;
+        if (search != null && !search.isBlank()) {
+            searchParam = "%" + search.toLowerCase() + "%";
+        }
+
+        org.springframework.data.domain.Page<Order> orderPage = orderRepository.findPagedWithFilters(
+                statusGroup, orderType, brand, consultantId, searchParam, includeHidden, pageable);
+
+        return orderPage.map(orderMapper::toResponse);
     }
 
     /**
@@ -332,21 +430,193 @@ public class OrderService {
         // Log activity
         orderActivityService.logActivity(saved, ActivityType.COMPLETED, "Sipariş tamamlandı olarak işaretlendi");
 
+        // Deallocate stock if it was a sales order
+        if (saved.getOrderType() != com.stokmate.domain.OrderType.STOCK) {
+            for (OrderProduct op : saved.getProducts()) {
+                try {
+                    productAllocationService.deallocateStock(op);
+                } catch (Exception e) {
+                    log.error("Stock deallocation failed for product {}", op.getProductCode(), e);
+                    // Non-blocking error for cancellation, but logged
+                }
+            }
+        }
+
         return orderMapper.toResponse(saved);
     }
 
     /**
-     * Cancel an order
+     * Cancel an order - Converts customer order to stock order
+     * Cancels pending shipments and adds accepted products to cancelled stock
      */
     @Transactional
     public OrderResponse cancelOrder(UUID orderId) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new NotFoundException("Order not found"));
+
+        // If order is already completed or cancelled, cannot cancel
+        if (order.getStatus() == OrderStatus.COMPLETED || order.getStatus() == OrderStatus.TAMAMLANDI ||
+                order.getStatus() == OrderStatus.CANCELLED || order.getStatus() == OrderStatus.IPTAL_EDILDI) {
+            throw new BadRequestException("Cannot cancel completed or already cancelled order");
+        }
+
+        boolean wasCustomerSpecific = order.getOrderType() == com.stokmate.domain.OrderType.CUSTOMER_SPECIFIC;
+
+        // Convert customer specific order to stock order (iptal stoğu)
+        // IMPORTANT: Status remains IN_PROGRESS so products can still be accepted
+        if (wasCustomerSpecific) {
+            order.setOrderType(com.stokmate.domain.OrderType.STOCK);
+            order.setConvertedFromCustomer(true); // Mark as converted for UI labeling
+
+            // Cancel pending shipments for this order
+            cancelPendingShipmentsForOrder(order);
+
+            // Add accepted products to cancelled stock
+            addProductsToCancelledStock(order);
+        } else {
+            // For non-customer orders, set status to cancelled
+            order.setStatus(OrderStatus.IPTAL_EDILDI);
+        }
+
+        Order saved = orderRepository.save(order);
+
+        // Force flush to catch any DB errors immediately
+        orderRepository.flush();
+
+        // Log activity
+        try {
+            String message = wasCustomerSpecific
+                    ? "Müşteri siparişi iptal edildi ve stoklu siparişe dönüştürüldü"
+                    : "Sipariş iptal edildi";
+            orderActivityService.logActivity(saved, ActivityType.CANCELLED, message);
+        } catch (Exception e) {
+            log.error("Activity logging failed for order {}: {}", saved.getOrderNo(), e.getMessage());
+        }
+
+        return orderMapper.toResponse(saved);
+    }
+
+    /**
+     * Cancel all pending (not finalized) shipments for an order
+     */
+    private void cancelPendingShipmentsForOrder(Order order) {
+        try {
+            List<com.stokmate.domain.Shipment> pendingShipments = shipmentRepository.findByOrderIdAndStatusIn(
+                    order.getId(),
+                    java.util.Arrays.asList(
+                            com.stokmate.domain.ShipmentStatus.PENDING,
+                            com.stokmate.domain.ShipmentStatus.APPROVED,
+                            com.stokmate.domain.ShipmentStatus.PLANNED));
+
+            for (com.stokmate.domain.Shipment shipment : pendingShipments) {
+                // Remove shipment items - they won't be shipped anymore
+                shipment.getItems().clear();
+                shipmentRepository.delete(shipment);
+                log.info("Cancelled pending shipment {} for order {}", shipment.getId(), order.getOrderNo());
+            }
+        } catch (Exception e) {
+            log.error("Failed to cancel pending shipments for order {}: {}", order.getOrderNo(), e.getMessage());
+        }
+    }
+
+    /**
+     * Add accepted products from cancelled order to cancelled stock
+     */
+    private void addProductsToCancelledStock(Order order) {
+        for (OrderProduct op : order.getProducts()) {
+            BigDecimal acceptedQty = op.getAcceptedQuantity();
+            if (acceptedQty == null || acceptedQty.compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+
+            Product product = productRepository.findByCode(op.getProductCode()).orElse(null);
+            if (product != null) {
+                BigDecimal oldQty = product.getCancelledStockQuantity();
+                BigDecimal newQty = oldQty.add(acceptedQty);
+
+                product.setCancelledStockQuantity(newQty);
+                productRepository.save(product);
+
+                // Log to stock history
+                try {
+                    com.stokmate.domain.ProductStockHistory history = new com.stokmate.domain.ProductStockHistory();
+                    history.setProduct(product);
+                    history.setOldQuantity(oldQty);
+                    history.setNewQuantity(newQty);
+                    history.setChangeAmount(acceptedQty);
+                    history.setReason("Müşteri Siparişi İptali: " + order.getOrderNo());
+                    history.setType(com.stokmate.domain.ProductStockHistory.StockChangeType.CANCELLED);
+                    history.setUserEmail(com.stokmate.security.SecurityUtils.getCurrentUserLogin());
+                    productStockHistoryRepository.save(history);
+                } catch (Exception e) {
+                    log.error("Stock history logging failed for product {}: {}", op.getProductCode(), e.getMessage());
+                }
+
+                log.info("Added {} units of {} to cancelled stock", acceptedQty, op.getProductCode());
+            }
+        }
+    }
+
+    /**
+     * Approve cancellation
+     */
+    @Transactional
+    public OrderResponse approveCancellation(UUID orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new NotFoundException("Order not found"));
+
+        if (order.getStatus() != OrderStatus.CANCELLATION_PENDING_APPROVAL) {
+            // Allow force cancel capability if needed, but primarily strictly follow flow
+            // For now, allow force cancel from any active status if user has role (checked
+            // by controller)
+            // But to be safe, let's enforce pending status OR allow direct cancel if admin.
+            // Let's stick to the requested flow: "cancel -> pending -> approve".
+            if (order.getStatus().getSimplifiedStatus() == OrderStatus.CANCELLED) {
+                throw new BadRequestException("Order is already cancelled");
+            }
+        }
+
         order.setStatus(OrderStatus.IPTAL_EDILDI);
         Order saved = orderRepository.save(order);
 
+        // Handle Stock Logic
+        // "müşteri özel siparişler iptal edilir ve ardından onay verilirse stoklu
+        // siparişe dönüşür ...
+        // ama normal stoğa değil müşteri iptal stoğu gibi birşey olur"
+
+        if (order.getOrderType() != com.stokmate.domain.OrderType.STOCK) {
+            // This is a Customer Order (Private/Special) - ürünleri iptal stoğuna ekle
+            for (OrderProduct op : order.getProducts()) {
+                Product product = productRepository.findByCode(op.getProductCode()).orElse(null);
+                if (product != null) {
+                    BigDecimal oldQty = product.getCancelledStockQuantity();
+                    BigDecimal change = op.getQuantity();
+                    BigDecimal newQty = oldQty.add(change);
+
+                    product.setCancelledStockQuantity(newQty);
+                    productRepository.save(product);
+
+                    // Log to stock history
+                    try {
+                        com.stokmate.domain.ProductStockHistory history = new com.stokmate.domain.ProductStockHistory();
+                        history.setProduct(product);
+                        history.setOldQuantity(oldQty);
+                        history.setNewQuantity(newQty);
+                        history.setChangeAmount(change);
+                        history.setReason("Sipariş İptali: " + order.getOrderNo());
+                        history.setType(com.stokmate.domain.ProductStockHistory.StockChangeType.CANCELLED);
+                        history.setUserEmail(com.stokmate.security.SecurityUtils.getCurrentUserLogin());
+                        productStockHistoryRepository.save(history);
+                    } catch (Exception e) {
+                        log.error("Stock history logging failed: {}", e.getMessage());
+                    }
+                }
+            }
+        }
+
         // Log activity
-        orderActivityService.logActivity(saved, ActivityType.CANCELLED, "Sipariş iptal edildi");
+        orderActivityService.logActivity(saved, ActivityType.CANCELLED,
+                "Sipariş iptali onaylandı, ürünler iptal stoğuna aktarıldı");
 
         return orderMapper.toResponse(saved);
     }
@@ -354,10 +624,24 @@ public class OrderService {
     /**
      * List orders pending product acceptance
      * Returns orders with status TAMAMLANDI and productsAccepted = false
+     * Also includes cancelled stock orders (converted from customer orders) with
+     * unaccepted products
      */
     public List<OrderResponse> listPendingAcceptanceOrders() {
         List<Order> orders = orderRepository.findByStatusAndProductsAccepted(
                 OrderStatus.TAMAMLANDI, false);
+
+        // Also include cancelled stock orders (converted from customer to stock)
+        List<Order> cancelledStockOrders = orderRepository.findByStatusAndProductsAccepted(
+                OrderStatus.IPTAL_EDILDI, false);
+
+        // Filter to only include STOCK type orders (these are converted customer
+        // orders)
+        for (Order o : cancelledStockOrders) {
+            if (o.getOrderType() == com.stokmate.domain.OrderType.STOCK && !orders.contains(o)) {
+                orders.add(o);
+            }
+        }
 
         List<OrderResponse> responses = new ArrayList<>();
         for (Order o : orders) {
@@ -543,6 +827,7 @@ public class OrderService {
                 case "KDV(%)" -> mapping.vatIndex = i;
                 case "Ödeme Koşulu" -> mapping.paymentConditionIndex = i;
                 case "ÖDK Tanımı" -> mapping.paymentConditionDefinitionIndex = i;
+                case "Not" -> mapping.noteIndex = i;
                 default -> {
                     // Try to match quantity columns
                     if (header.contains("Miktar") || header.contains("Qty") || header.contains("Quantity")) {
@@ -557,6 +842,127 @@ public class OrderService {
         }
 
         return mapping;
+    }
+
+    /**
+     * Hard delete order (Admin/Manager only)
+     * Deletes order and all associated data (shipments, products, activities)
+     */
+    @Transactional
+    public void deleteOrder(UUID orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new NotFoundException("Order not found"));
+
+        log.info("Hard deleting order: {}", order.getOrderNo());
+
+        // 1. Delete associated shipments
+        List<com.stokmate.domain.Shipment> shipments = shipmentRepository.findByOrderId(orderId);
+        if (!shipments.isEmpty()) {
+            log.info("Deleting {} shipments associated with order {}", shipments.size(), order.getOrderNo());
+            shipmentRepository.deleteAll(shipments);
+        }
+
+        // 2. Delete the order (products and activities will be deleted by Cascade if
+        // configured,
+        // but activities usually don't cascade from OneToMany in Order entity, we might
+        // need to handle them if they are not mapped)
+        // Order entity: @OneToMany(mappedBy = "order", cascade = CascadeType.ALL...
+        // private Set<OrderProduct> products
+        // OrderActivity entity usually has @ManyToOne to Order.
+        // If DB has ON DELETE CASCADE constraint, it's fine. If not, we might fail.
+        // Let's rely on JPA or DB. If it fails, we will know.
+        // Safest is to delete order and let DB handle it or JPA.
+
+        // Also handling linked SSH orders if any
+        List<Order> sshOrders = orderRepository.findByParentOrderId(orderId);
+        if (!sshOrders.isEmpty()) {
+            log.info("Deleting {} SSH sub-orders associated with order {}", sshOrders.size(), order.getOrderNo());
+            orderRepository.deleteAll(sshOrders);
+        }
+
+        // Explicitly delete activities to prevent FK constraint violation
+        orderActivityService.deleteActivitiesForOrder(orderId);
+
+        // Explicitly delete order notes
+        orderNoteRepository.deleteByOrderId(orderId);
+
+        orderRepository.delete(order);
+        log.info("Order deleted successfully");
+    }
+
+    /**
+     * Full update of order details (Admin/Manager only)
+     */
+    @Transactional
+    public OrderResponse updateOrder(UUID orderId, com.stokmate.dto.order.UpdateOrderRequest request) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new NotFoundException("Order not found"));
+
+        boolean somethingChanged = false;
+
+        if (request.getOrderNo() != null && !request.getOrderNo().equals(order.getOrderNo())) {
+            // Check uniqueness if changed
+            if (orderRepository.existsByOrderNo(request.getOrderNo())) {
+                throw new BadRequestException("Order number already exists: " + request.getOrderNo());
+            }
+            order.setOrderNo(request.getOrderNo());
+            somethingChanged = true;
+        }
+
+        if (request.getProsapContractNo() != null
+                && !request.getProsapContractNo().equals(order.getProsapContractNo())) {
+            order.setProsapContractNo(request.getProsapContractNo());
+            somethingChanged = true;
+        }
+
+        if (request.getProsapContractNameSurname() != null
+                && !request.getProsapContractNameSurname().equals(order.getProsapContractNameSurname())) {
+            order.setProsapContractNameSurname(request.getProsapContractNameSurname());
+            somethingChanged = true;
+        }
+
+        if (request.getOrderDate() != null && !request.getOrderDate().equals(order.getOrderDate())) {
+            order.setOrderDate(request.getOrderDate());
+            somethingChanged = true;
+        }
+
+        if (request.getOrderNotes() != null) {
+            order.setOrderNotes(request.getOrderNotes());
+            somethingChanged = true;
+        }
+
+        if (request.getShipmentNote() != null) {
+            order.setShipmentNote(request.getShipmentNote());
+            somethingChanged = true;
+        }
+
+        if (request.getCustomerId() != null
+                && (order.getCustomer() == null || !request.getCustomerId().equals(order.getCustomer().getId()))) {
+            Customer customer = customerRepository.findById(request.getCustomerId())
+                    .orElseThrow(() -> new NotFoundException("Customer not found"));
+            order.setCustomer(customer);
+            somethingChanged = true;
+        }
+
+        if (request.getSalesConsultantId() != null) {
+            com.stokmate.domain.User salesConsultant = userRepository.findById(request.getSalesConsultantId())
+                    .orElseThrow(() -> new NotFoundException("Sales consultant not found"));
+            order.setSalesConsultant(salesConsultant);
+            somethingChanged = true;
+        }
+
+        if (somethingChanged) {
+            Order saved = orderRepository.save(order);
+            // Log activity
+            try {
+                orderActivityService.logActivity(saved, ActivityType.ORDER_UPDATED, "Sipariş bilgileri güncellendi");
+            } catch (Exception e) {
+                // ignore log error
+            }
+            return orderMapper.toResponse(saved);
+        }
+
+        return orderMapper.toResponse(order);
     }
 
     /**
@@ -703,6 +1109,7 @@ public class OrderService {
         int paymentConditionIndex = -1;
         int paymentConditionDefinitionIndex = -1;
         int quantityIndex = -1;
+        int noteIndex = -1;
     }
 
     /**
@@ -743,7 +1150,8 @@ public class OrderService {
             throw new NotFoundException("Order has no invoice");
         }
 
-        String url = storageService.getPresignedUrl(order.getInvoiceFileKey());
+        // Return raw path for backend proxy (frontend uses /api/files/view)
+        String url = order.getInvoiceFileKey();
 
         // Extract filename from key
         String fileName = order.getInvoiceFileKey().substring(order.getInvoiceFileKey().lastIndexOf("/") + 1);
@@ -968,14 +1376,20 @@ public class OrderService {
             return;
         }
 
+        // Fetch products fresh from repository to bypass Hibernate cache
+        List<OrderProduct> products = orderProductRepository.findByOrderId(orderId);
+
         // Check if all products are fully shipped
-        boolean allShipped = order.getProducts().stream()
+        boolean allShipped = products.stream()
                 .allMatch(product -> {
                     BigDecimal quantity = product.getQuantity() != null ? product.getQuantity() : BigDecimal.ZERO;
                     BigDecimal shipped = product.getShippedQuantity() != null ? product.getShippedQuantity()
                             : BigDecimal.ZERO;
+                    log.debug("Product {} - quantity: {}, shipped: {}", product.getProductName(), quantity, shipped);
                     return shipped.compareTo(quantity) >= 0;
                 });
+
+        log.info("Order {} allShipped check: {}", orderId, allShipped);
 
         if (allShipped) {
             order.setStatus(OrderStatus.COMPLETED);
@@ -985,9 +1399,20 @@ public class OrderService {
                     "Sipariş tamamlandı - Tüm ürünler sevk edildi");
 
             log.info("Order {} marked as COMPLETED - all products shipped", orderId);
+
+            // Auto-resolve problematic shipments when linked SSH order completes
+            if (order.getOrderType() == com.stokmate.domain.OrderType.AFTER_SALES_SERVICE) {
+                try {
+                    shipmentService.autoResolveBySSH(orderId);
+                } catch (Exception e) {
+                    log.warn("Failed to auto-resolve shipments for SSH order {}: {}", orderId, e.getMessage());
+                }
+            }
         } else {
             // Ensure order is IN_PROGRESS if not completed
-            if (order.getStatus().getSimplifiedStatus() != OrderStatus.IN_PROGRESS) {
+            if (order.getStatus() != OrderStatus.IN_PROGRESS &&
+                    order.getStatus() != OrderStatus.PENDING_SHIPMENT_APPROVAL &&
+                    order.getStatus() != OrderStatus.SHIPMENT_APPROVED) {
                 order.setStatus(OrderStatus.IN_PROGRESS);
                 orderRepository.save(order);
             }

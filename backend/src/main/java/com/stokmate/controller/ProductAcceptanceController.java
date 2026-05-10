@@ -1,5 +1,6 @@
 package com.stokmate.controller;
 
+import com.stokmate.domain.ProductAcceptance;
 import com.stokmate.dto.acceptance.PendingProductResponse;
 import com.stokmate.dto.acceptance.ProductAcceptanceRequest;
 import com.stokmate.dto.acceptance.ProductAcceptanceResponse;
@@ -41,9 +42,32 @@ public class ProductAcceptanceController {
         return ResponseEntity.ok(productAcceptanceService.getPendingProducts());
     }
 
+    @GetMapping
+    public ResponseEntity<org.springframework.data.domain.Page<ProductAcceptanceResponse>> getAllPaged(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) ProductAcceptance.AcceptanceStatus status,
+            @RequestParam(required = false) String brand,
+            @RequestParam(required = false) String acceptedBy,
+            org.springframework.data.domain.Pageable pageable) {
+        return ResponseEntity.ok(productAcceptanceService.getAllPaged(
+                search, status, brand, acceptedBy, pageable));
+    }
+
     @GetMapping("/order/{orderId}")
     public ResponseEntity<List<ProductAcceptanceResponse>> getOrderAcceptances(
             @PathVariable(value = "orderId") String orderId) {
         return ResponseEntity.ok(productAcceptanceService.getOrderAcceptances(orderId));
+    }
+
+    /**
+     * Delete a product acceptance (Admin/Manager only)
+     */
+    @DeleteMapping("/{acceptanceId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    public ResponseEntity<Void> deleteAcceptance(
+            @PathVariable String acceptanceId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        productAcceptanceService.deleteAcceptance(acceptanceId, principal.getUser());
+        return ResponseEntity.ok().build();
     }
 }

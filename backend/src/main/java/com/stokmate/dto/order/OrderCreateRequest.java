@@ -76,4 +76,22 @@ public class OrderCreateRequest {
 
     @JsonProperty("orderNotes")
     private String orderNotes;
+
+    @JsonProperty("shipmentNote")
+    private String shipmentNote;
+
+    // SSH from problematic shipment fields
+    @JsonProperty("linkedShipmentId")
+    private UUID linkedShipmentId; // The shipment that triggered this SSH order
+
+    @JsonProperty("hidden")
+    private Boolean hidden; // Hide from main order list (for SSH orders)
+
+    public String getShipmentNote() {
+        return shipmentNote;
+    }
+
+    public void setShipmentNote(String shipmentNote) {
+        this.shipmentNote = shipmentNote;
+    }
 }

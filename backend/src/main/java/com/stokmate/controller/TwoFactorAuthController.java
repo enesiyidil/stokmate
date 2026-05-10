@@ -58,4 +58,20 @@ public class TwoFactorAuthController {
         boolean enabled = twoFactorAuthService.isTwoFactorEnabled(principal.getUser().getId());
         return Map.of("enabled", enabled);
     }
+
+    /**
+     * Verify 2FA code for client-side gating
+     */
+    @PostMapping("/verify-code")
+    public boolean verifyCode(@AuthenticationPrincipal UserPrincipal principal,
+            @RequestBody Map<String, String> request) {
+        String code = request.get("code");
+        if (code == null)
+            return false;
+        try {
+            return twoFactorAuthService.verifyCode(principal.getUser(), Integer.parseInt(code));
+        } catch (Exception e) {
+            return false;
+        }
+    }
 }

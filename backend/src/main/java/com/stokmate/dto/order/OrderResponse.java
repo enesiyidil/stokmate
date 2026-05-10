@@ -71,9 +71,45 @@ public class OrderResponse {
 
     private String orderNotes;
 
+    private String shipmentNote;
+
     // Partial delivery tracking fields (ORDER level)
     private Boolean partialDeliveryMarked;
     private String deliveryNotes;
     private UserBasicResponse deliveryLastUpdatedBy;
     private java.time.LocalDateTime deliveryLastUpdatedAt;
+
+    // SSH from problematic shipment fields
+    private boolean hidden;
+    private UUID linkedShipmentId;
+    private List<SshOrderSummary> childSshOrders; // SSH orders created from this order's problematic shipments
+    private List<ProblemShipmentSummary> problemShipments; // Completed shipments with problems (no SSH yet)
+
+    // Flag to indicate this order was converted from a customer-specific order
+    // (iptal stoğu)
+    private boolean convertedFromCustomer;
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class SshOrderSummary {
+        private UUID id;
+        private String orderNo;
+        private UUID linkedShipmentId;
+        private String problemType;
+        private LocalDate orderDate;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class ProblemShipmentSummary {
+        private UUID shipmentId;
+        private String problemType;
+        private java.time.LocalDateTime completedAt;
+        private boolean hasSshOrder;
+        private UUID sshOrderId;
+    }
 }

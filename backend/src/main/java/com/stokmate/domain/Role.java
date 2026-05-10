@@ -96,4 +96,111 @@ public enum Role {
     public boolean canCancelOrders() {
         return this == DIRECTOR || this == MANAGER || this == ADMIN;
     }
+
+    /**
+     * Check if this role can modify approved shipments (date change, withdraw,
+     * cancel)
+     */
+    public boolean canModifyApprovedShipments() {
+        return this == ADMIN || this == MANAGER;
+    }
+
+    /**
+     * Check if this role can delete product acceptances
+     */
+    public boolean canDeleteProductAcceptances() {
+        return this == ADMIN || this == MANAGER;
+    }
+
+    /**
+     * Check if this role can fully edit orders (all fields)
+     */
+    public boolean canFullyEditOrders() {
+        return this == ADMIN || this == MANAGER;
+    }
+
+    /**
+     * Check if this role can delete orders
+     */
+    public boolean canDeleteOrders() {
+        return this == ADMIN || this == MANAGER;
+    }
+
+    /**
+     * Check if this role can set past dates for shipment planning
+     */
+    public boolean canSetPastShipmentDates() {
+        return this == ADMIN || this == MANAGER;
+    }
+
+    /**
+     * Check if this role can submit products for shipment (Sevke Sun)
+     */
+    public boolean canSubmitForShipment() {
+        return this == STORE_MANAGER || this == STORE_EMPLOYEE || this == OPERATIONS_MANAGER
+                || this == DIRECTOR || this == MANAGER || this == ADMIN;
+    }
+
+    /**
+     * Check if this role can view cross conversions
+     */
+    public boolean canViewCrossConversions() {
+        return true; // All roles can view
+    }
+
+    /**
+     * Check if this role can create cross conversions
+     */
+    public boolean canCreateCrossConversion() {
+        return this == ADMIN || this == MANAGER || this == DIRECTOR || this == STORE_MANAGER || this == STORE_EMPLOYEE;
+    }
+
+    /**
+     * Check if this role can update cross conversions
+     */
+    public boolean canUpdateCrossConversion() {
+        return this == ADMIN || this == MANAGER || this == DIRECTOR;
+    }
+
+    /**
+     * Check if this role can delete cross conversions
+     */
+    public boolean canDeleteCrossConversion() {
+        return this == ADMIN || this == MANAGER;
+    }
+
+    /**
+     * Check if this role can view balance ledger
+     */
+    public boolean canViewBalanceLedger() {
+        return this == ADMIN || this == MANAGER || this == DIRECTOR || this == STORE_MANAGER || this == STORE_EMPLOYEE;
+    }
+
+    /**
+     * Check if this role can create balance ledger entries
+     */
+    public boolean canCreateBalanceLedger() {
+        return this == ADMIN || this == MANAGER || this == DIRECTOR || this == STORE_MANAGER || this == STORE_EMPLOYEE;
+    }
+
+    /**
+     * Check if this role can add payments to balance ledger
+     */
+    public boolean canAddBalancePayment() {
+        return this == ADMIN || this == MANAGER || this == DIRECTOR || this == STORE_MANAGER || this == STORE_EMPLOYEE;
+    }
+
+    /**
+     * Check if this role can update balance ledger entries
+     */
+    public boolean canUpdateBalanceLedger() {
+        return this == ADMIN || this == MANAGER || this == DIRECTOR;
+    }
+
+    /**
+     * Check if this role can delete balance ledger entries
+     */
+    public boolean canDeleteBalanceLedger() {
+        return this == ADMIN || this == MANAGER || this == DIRECTOR;
+    }
 }

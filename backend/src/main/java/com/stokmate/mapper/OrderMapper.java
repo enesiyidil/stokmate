@@ -29,6 +29,9 @@ public abstract class OrderMapper {
     @Mapping(target = "salesConsultant", expression = "java(mapSalesConsultant(order))")
     @Mapping(target = "brand", expression = "java(getBrandFromFirstProduct(order))")
     @Mapping(target = "products", expression = "java(mapProductsWithPendingQuantities(order))")
+    @Mapping(target = "parentOrderId", expression = "java(order.getParentOrder() != null ? order.getParentOrder().getId() : null)")
+    @Mapping(target = "childSshOrders", expression = "java(mapChildSshOrders(order))")
+    @Mapping(target = "problemShipments", expression = "java(mapProblemShipments(order))")
     public abstract OrderResponse toResponse(Order order);
 
     /**
@@ -40,7 +43,13 @@ public abstract class OrderMapper {
         }
 
         // Get pending shipments for this order
-        Map<UUID, BigDecimal> pendingQuantities = calculatePendingQuantities(order.getId());
+        Map<UUID, BigDecimal> pendingQuantities;
+        try {
+            pendingQuantities = calculatePendingQuantities(order.getId());
+        } catch (Exception e) {
+            System.out.println("[WARN] calculatePendingQuantities failed: " + e.getMessage());
+            pendingQuantities = new HashMap<>();
+        }
 
         java.util.List<OrderProductResponse> responses = new ArrayList<>();
         for (OrderProduct product : order.getProducts()) {
@@ -72,7 +81,8 @@ public abstract class OrderMapper {
             // Get shipments that are pending completion (not yet approved)
             List<Shipment> pendingShipments = shipmentRepository.findByOrderIdAndStatusIn(
                     orderId,
-                    Arrays.asList(ShipmentStatus.PENDING_COMPLETION, ShipmentStatus.COMPLETED));
+                    Arrays.asList(ShipmentStatus.PENDING, ShipmentStatus.APPROVED, ShipmentStatus.PLANNED,
+                            ShipmentStatus.COMPLETED));
 
             for (Shipment shipment : pendingShipments) {
                 if (shipment.getItems() != null) {
@@ -135,6 +145,85 @@ public abstract class OrderMapper {
         return null;
     }
 
+    @org.springframework.beans.factory.annotation.Autowired
+    protected com.stokmate.repository.OrderRepository orderRepository;
+
+    /**
+     * Map child SSH orders created from problematic shipments of this order
+     */
+    public java.util.List<OrderResponse.SshOrderSummary> mapChildSshOrders(Order order) {
+        if (order == null || order.getId() == null) {
+            return new ArrayList<>();
+        }
+
+        try {
+            List<Order> childOrders = orderRepository.findByParentOrderId(order.getId());
+            if (childOrders == null || childOrders.isEmpty())
+                return new ArrayList<>();
+
+            return childOrders.stream()
+                    .filter(child -> child.getLinkedShipmentId() != null)
+                    .map(child -> {
+                        // Find the problem type from linked shipment
+                        String problemType = null;
+                        try {
+                            var shipment = shipmentRepository.findById(child.getLinkedShipmentId());
+                            if (shipment.isPresent() && shipment.get().getProblemType() != null) {
+                                problemType = shipment.get().getProblemType().name();
+                            }
+                        } catch (Exception e) {
+                            // Ignore
+                        }
+
+                        return OrderResponse.SshOrderSummary.builder()
+                                .id(child.getId())
+                                .orderNo(child.getOrderNo())
+                                .linkedShipmentId(child.getLinkedShipmentId())
+                                .problemType(problemType)
+                                .orderDate(child.getOrderDate())
+                                .build();
+                    })
+                    .collect(java.util.stream.Collectors.toList());
+        } catch (Exception e) {
+            System.out.println("[WARN] mapChildSshOrders failed: " + e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
+    /**
+     * Map problematic shipments for this order (showing which have SSH orders)
+     */
+    public java.util.List<OrderResponse.ProblemShipmentSummary> mapProblemShipments(Order order) {
+        try {
+            if (order.getId() == null) {
+                return new ArrayList<>();
+            }
+
+            List<com.stokmate.dto.shipment.ProblemShipmentDTO> problemShipments = shipmentRepository
+                    .findProblemShipmentsByOrderId(order.getId());
+
+            if (problemShipments == null || problemShipments.isEmpty())
+                return new ArrayList<>();
+
+            return problemShipments.stream()
+                    .map(dto -> {
+                        boolean hasSsh = dto.getLinkedSshOrderId() != null;
+                        return OrderResponse.ProblemShipmentSummary.builder()
+                                .shipmentId(dto.getShipmentId())
+                                .problemType(dto.getProblemType() != null ? dto.getProblemType().name() : null)
+                                .completedAt(dto.getActualShipmentDate())
+                                .hasSshOrder(hasSsh)
+                                .sshOrderId(hasSsh ? dto.getLinkedSshOrderId() : null)
+                                .build();
+                    })
+                    .collect(java.util.stream.Collectors.toList());
+        } catch (Exception e) {
+            System.out.println("[ERROR] mapProblemShipments: " + e.getMessage());
+            e.printStackTrace();
+            return new ArrayList<>();
+        }
+    }
+
     @Mapping(target = "acceptedQuantity", source = "acceptedQuantity")
     @Mapping(target = "shippedQuantity", source = "shippedQuantity")
     @Mapping(target = "remainingQuantity", expression = "java(orderProduct.getRemainingQuantity())")
@@ -169,5 +258,7 @@ public abstract class OrderMapper {
     @Mapping(target = "deliveryLastUpdatedBy", ignore = true)
     @Mapping(target = "deliveryLastUpdatedAt", ignore = true)
     @Mapping(target = "parentOrder", ignore = true)
+    @Mapping(target = "hidden", ignore = true)
+    @Mapping(target = "linkedShipmentId", ignore = true)
     public abstract Order toEntity(OrderCreateRequest request);
 }

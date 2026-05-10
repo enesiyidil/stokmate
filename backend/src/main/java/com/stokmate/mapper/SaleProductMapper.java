@@ -17,15 +17,8 @@ public class SaleProductMapper {
             return null;
         }
 
-        String imageUrl = null;
-        if (saleProduct.getProduct().getImageUrl() != null) {
-            try {
-                imageUrl = storageService.getPresignedUrl(saleProduct.getProduct().getImageUrl());
-            } catch (Exception e) {
-                // Ignore error, return null or original url
-                imageUrl = null;
-            }
-        }
+        // Return raw path for backend proxy (frontend uses /api/files/view)
+        String imageUrl = saleProduct.getProduct().getImageUrl();
 
         return SaleProductResponse.builder()
                 .id(saleProduct.getId())
@@ -33,6 +26,8 @@ public class SaleProductMapper {
                 .productCode(saleProduct.getProduct().getCode())
                 .productName(saleProduct.getProduct().getName())
                 .productImageUrl(imageUrl)
+                .brand(saleProduct.getProduct().getBrand() != null ? saleProduct.getProduct().getBrand().toString()
+                        : null)
                 .quantity(saleProduct.getQuantity())
                 .unitPriceExcludingVat(saleProduct.getUnitPriceExcludingVat())
                 .vatRate(saleProduct.getVatRate())

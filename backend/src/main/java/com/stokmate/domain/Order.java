@@ -19,7 +19,7 @@ import java.util.UUID;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.PrePersist;
-import jakarta.persistence.Lob;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -113,9 +113,26 @@ public class Order extends AuditableEntity {
     @JoinColumn(name = "parent_order_id")
     private Order parentOrder; // For SSH sub-orders
 
-    @Lob
+    // Hide SSH orders created from problematic shipments from main orders list
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    @Builder.Default
+    private boolean hidden = false;
+
+    // Track which shipment triggered this SSH order (for problematic delivery SSH)
+    @Column(name = "linked_shipment_id")
+    private UUID linkedShipmentId;
+
+    // Flag to indicate this order was converted from a customer-specific order
+    // (iptal stoğu)
+    @Column(name = "converted_from_customer", nullable = false, columnDefinition = "boolean default false")
+    @Builder.Default
+    private boolean convertedFromCustomer = false;
+
     @Column(columnDefinition = "TEXT")
     private String orderNotes;
+
+    @Column(columnDefinition = "TEXT")
+    private String shipmentNote;
 
     @PrePersist
     public void prePersist() {

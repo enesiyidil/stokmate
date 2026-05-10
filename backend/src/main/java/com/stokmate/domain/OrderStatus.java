@@ -20,7 +20,8 @@ public enum OrderStatus {
     SSH_ORDER_CREATED, // -> IN_PROGRESS
     DEVAM_EDIYOR, // -> IN_PROGRESS (legacy Turkish)
     TAMAMLANDI, // -> COMPLETED (legacy Turkish)
-    IPTAL_EDILDI; // -> CANCELLED (legacy Turkish)
+    IPTAL_EDILDI, // -> CANCELLED (legacy Turkish)
+    CANCELLATION_PENDING_APPROVAL; // İptal Onayı Bekliyor
 
     /**
      * Get the simplified status for display
@@ -29,6 +30,7 @@ public enum OrderStatus {
         return switch (this) {
             case COMPLETED, DELIVERED, TAMAMLANDI -> COMPLETED;
             case CANCELLED, IPTAL_EDILDI -> CANCELLED;
+            case CANCELLATION_PENDING_APPROVAL -> IN_PROGRESS; // Still active until approved
             default -> IN_PROGRESS;
         };
     }
@@ -37,6 +39,9 @@ public enum OrderStatus {
      * Get display name in Turkish
      */
     public String getDisplayName() {
+        if (this == CANCELLATION_PENDING_APPROVAL) {
+            return "İptal Onayı Bekliyor";
+        }
         return switch (this.getSimplifiedStatus()) {
             case COMPLETED -> "Tamamlandı";
             case CANCELLED -> "İptal Edildi";
