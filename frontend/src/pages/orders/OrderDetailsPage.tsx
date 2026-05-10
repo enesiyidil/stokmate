@@ -3,7 +3,7 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useCancelOrderMutation, useApproveCancellationMutation, useUploadInvoiceMutation, useGetInvoiceUrlQuery, useGetOrderQuery, useUpdateSalesConsultantMutation, useUpdateBrandMutation, useGetOrderNotesQuery, useAddOrderNoteMutation, useStrikeOrderNoteMutation, useDeleteOrderMutation, useUpdateOrderMutation } from '../../services/orderApi'
 import { useCreatePartialShipmentMutation } from '../../services/shipmentApi'
 import { useGetOrderActivitiesQuery } from '../../services/orderActivityApi'
-import { useListOrderReceiptsQuery } from '../../services/orderReceiptApi'
+import { useGetReceiptsForOrderQuery } from '../../services/orderReceiptApi'
 import { formatDistanceToNow } from 'date-fns'
 import { tr } from 'date-fns/locale'
 import { useTopbar } from '../../context/TopbarContext'
@@ -35,7 +35,7 @@ export default function OrderDetailsPage() {
     const [showCancelConfirm, setShowCancelConfirm] = useState(false)
     const { data: order, isLoading, refetch } = useGetOrderQuery(id!)
     const { data: activities = [] } = useGetOrderActivitiesQuery(id!)
-    const { data: receipts = [] } = useListOrderReceiptsQuery({ orderId: id! })
+    const { data: receipts = [] } = useGetReceiptsForOrderQuery(id!)
     const [cancelOrder, { isLoading: isCanceling }] = useCancelOrderMutation()
     const [uploadInvoice] = useUploadInvoiceMutation()
     const { data: invoiceData } = useGetInvoiceUrlQuery(id!, { skip: !order?.hasInvoice })
