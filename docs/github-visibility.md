@@ -1,6 +1,14 @@
 # GitHub visibility checklist
 
-Do this **after** the rewritten monorepo is on `enesiyidil/stokmate` and a secret scan is clean.
+The local monorepo history has already been rewritten and scanned. It has **not** been force-pushed.
+
+When you explicitly approve overwriting `enesiyidil/stokmate`:
+
+```bash
+git push --force-with-lease -u origin main
+```
+
+Do this **after** that push lands and a secret scan is clean.
 
 ```bash
 gh repo edit enesiyidil/stokmate \
