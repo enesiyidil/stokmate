@@ -2,5 +2,11 @@ target/
 .idea/
 .vscode/
 .env
+.env.*
+!.env.example
 *.iml
 *.log
+*.zip
+# Local dumps only — keep Flyway migrations
+/*.sql
+!src/main/resources/db/migration/*.sql

@@ -22,7 +22,7 @@ public class GenerateOrderReportRequest {
 
     private List<UUID> salesConsultantIds; // Optional, null = all
 
-    private List<String> brands; // Optional, null = all (OAK, MAPLE, PINE)
+    private List<String> brands; // Optional, null = all (OAK, PINE, MAPLE)
 
     private String title; // Optional custom title
 }

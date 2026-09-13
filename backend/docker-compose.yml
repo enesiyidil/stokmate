@@ -1,4 +1,5 @@
-version: "3.8"
+# Backend-only dependencies for local `mvn spring-boot:run`.
+# Prefer the repository-root docker-compose.yml to run the full stack.
 
 services:
   postgres:
@@ -8,7 +9,7 @@ services:
     environment:
       POSTGRES_DB: ${DB_NAME:-stokmate}
       POSTGRES_USER: ${DB_USERNAME:-stokmate}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-stokmate}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme-db-password}
     ports:
       - "5432:5432"
     volumes:
@@ -27,26 +28,6 @@ services:
       - "9001:9001"
     volumes:
       - minio_data:/data
-
-  app:
-    build: .
-    container_name: stokmate-app
-    depends_on:
-      - postgres
-      - minio
-    environment:
-      DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-stokmate}
-      DB_USERNAME: ${DB_USERNAME:-stokmate}
-      DB_PASSWORD: ${DB_PASSWORD:-stokmate}
-      JWT_SECRET: ${JWT_SECRET:-super-secret-change-me-please}
-      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@stokmate.local}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
-      MINIO_URL: http://minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
-      MINIO_BUCKET: ${MINIO_BUCKET:-invoices}
-    ports:
-      - "8080:8080"
 
 volumes:
   postgres_data:

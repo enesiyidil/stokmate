@@ -156,15 +156,6 @@ public class CrossConversionService {
     }
 
     private String getBrandDisplayName(Brand brand) {
-        switch (brand) {
-            case OAK:
-                return "Doğtaş";
-            case MAPLE:
-                return "Maple";
-            case PINE:
-                return "Pine";
-            default:
-                return brand.name();
-        }
+        return brand != null ? brand.getDisplayName() : "";
     }
 }

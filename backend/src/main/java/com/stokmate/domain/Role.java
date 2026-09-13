@@ -2,7 +2,7 @@ package com.stokmate.domain;
 
 public enum Role {
     ADMIN,
-    MANAGER, // UI displays as "Craft"
+    MANAGER,
     DIRECTOR,
     STORE_MANAGER,
     STORE_EMPLOYEE,
@@ -17,7 +17,7 @@ public enum Role {
     public String getDisplayName() {
         return switch (this) {
             case ADMIN -> "Admin";
-            case MANAGER -> "Craft";
+            case MANAGER -> "Yönetici";
             case DIRECTOR -> "Direktör";
             case STORE_MANAGER -> "Mağaza Sorumlusu";
             case STORE_EMPLOYEE -> "Mağaza Çalışanı";

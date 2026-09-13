@@ -134,11 +134,6 @@ public class ShipmentReportService {
 
                 // Logo box
                 drawRect(cs, x, y - h, logoW, h, 1.0f);
-                // drawCenteredText(cs, normalizeText("CRAFT LOGO"), x, y - 20, logoW,
-                // PDType1Font.HELVETICA, 8);
-                // drawCenteredText(cs, normalizeText("GELECEK"), x, y - 32, logoW,
-                // PDType1Font.HELVETICA, 8);
-                // New Logo Text: "StokMate" in Navy Blue
                 drawCenteredTextColored(cs, "StokMate", x, y - 32, logoW, PDType1Font.HELVETICA_BOLD, 14, NAVY_R,
                                 NAVY_G, NAVY_B);
 
@@ -532,7 +527,7 @@ public class ShipmentReportService {
                                         7);
                 }
 
-                // NOTE: "CRAFT YONGEM" yazisi KALDIRILDI (istenen)
+                // Footer brand mark was removed from the delivery slip.
         }
 
         // =========================

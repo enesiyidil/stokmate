@@ -1,11 +1,21 @@
 package com.stokmate.domain;
 
 /**
- * Brand enumeration for products and orders
- * Each brand has a specific color representation in the UI
+ * Sample product brands shipped with the open-source seed data.
+ * Replace these enum values (and the matching Flyway mapping) with your own catalog.
  */
 public enum Brand {
-    OAK, // Doğtaş - Dark Brown (#5D4037)
-    PINE, // Pine - Turquoise (#00ACC1)
-    MAPLE // Maple - Red (#D32F2F)
+    OAK("Oak"),
+    PINE("Pine"),
+    MAPLE("Maple");
+
+    private final String displayName;
+
+    Brand(String displayName) {
+        this.displayName = displayName;
+    }
+
+    public String getDisplayName() {
+        return displayName;
+    }
 }
