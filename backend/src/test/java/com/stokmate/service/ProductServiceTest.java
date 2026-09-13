@@ -4,7 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
+
+import java.util.Set;
 
 import com.stokmate.domain.Product;
 import com.stokmate.domain.ProductStockHistory;
@@ -171,7 +174,7 @@ class ProductServiceTest {
             // Arrange
             ProductRequest request = new ProductRequest();
             request.setCode("NEW001");
-            request.setKeywords(java.util.Set.of("keyword1", "keyword2"));
+            request.setKeywords(Set.of("keyword1", "keyword2"));
 
             Product product = createProduct();
             product.setKeywords(null);
@@ -186,7 +189,7 @@ class ProductServiceTest {
             productService.create(request);
 
             // Assert
-            assertThat(product.getKeywords()).isEqualTo("keyword1,keyword2");
+            assertThat(product.getKeywords()).containsExactlyInAnyOrder("keyword1", "keyword2");
         }
     }
 
@@ -326,8 +329,12 @@ class ProductServiceTest {
             // Act
             productService.delete(productId);
 
-            // Assert
-            verify(productRepository).delete(product);
+            // Assert — products are soft-deleted
+            verify(productRepository).save(product);
+            verify(productRepository, never()).delete(any(Product.class));
+            assertThat(product.isDeleted()).isTrue();
+            assertThat(product.getIsDeleted()).isTrue();
+            assertThat(product.getDeletionDate()).isNotNull();
         }
 
         @Test
@@ -602,7 +609,7 @@ class ProductServiceTest {
         void search_ShouldHandleEmptyQuery() {
             // Arrange
             Page<Product> emptyPage = Page.empty();
-            when(productRepository.search("", any(Pageable.class))).thenReturn(emptyPage);
+            when(productRepository.search(eq(""), any(Pageable.class))).thenReturn(emptyPage);
 
             // Act
             Page<ProductResponse> result = productService.search("", Pageable.unpaged());
