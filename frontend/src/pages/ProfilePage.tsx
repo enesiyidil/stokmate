@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { User as UserIcon, Mail, Shield, Phone, MapPin } from 'lucide-react'
 import { useTopbar } from '../context/TopbarContext'
 import { useAppSelector } from '../hooks/useAuth'
+import { getRoleDisplayName } from '../constants/roles'
 
 export default function ProfilePage() {
     const { setTopbarContent } = useTopbar()
@@ -30,13 +31,7 @@ export default function ProfilePage() {
                                 : user?.email}
                         </h2>
                         <p className="text-amber-700 font-medium">
-                            {user?.role === 'ADMIN' ? 'Admin' :
-                                user?.role === 'MANAGER' ? 'Craft' :
-                                    user?.role === 'DIRECTOR' ? 'Direktör' :
-                                        user?.role === 'STORE_MANAGER' ? 'Mağaza Sorumlusu' :
-                                            user?.role === 'STORE_EMPLOYEE' ? 'Mağaza Çalışanı' :
-                                                user?.role === 'OPERATIONS_MANAGER' ? 'Operasyon Sorumlusu' :
-                                                    user?.role === 'LOGISTICS_MANAGER' ? 'Lojistik Sorumlusu' : user?.role}
+                            {getRoleDisplayName(user?.role || '')}
                         </p>
                     </div>
                 </div>
@@ -61,13 +56,7 @@ export default function ProfilePage() {
                         <div>
                             <p className="text-sm text-amber-600 font-medium">Rol</p>
                             <p className="text-amber-900 font-semibold">
-                                {user?.role === 'ADMIN' ? 'Admin' :
-                                    user?.role === 'MANAGER' ? 'Craft' :
-                                        user?.role === 'DIRECTOR' ? 'Direktör' :
-                                            user?.role === 'STORE_MANAGER' ? 'Mağaza Sorumlusu' :
-                                                user?.role === 'STORE_EMPLOYEE' ? 'Mağaza Çalışanı' :
-                                                    user?.role === 'OPERATIONS_MANAGER' ? 'Operasyon Sorumlusu' :
-                                                        user?.role === 'LOGISTICS_MANAGER' ? 'Lojistik Sorumlusu' : user?.role}
+                                {getRoleDisplayName(user?.role || '')}
                             </p>
                         </div>
                     </div>

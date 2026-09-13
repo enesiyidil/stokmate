@@ -8,7 +8,7 @@ import Pagination from '../components/common/Pagination'
 import BrandBadge from '../components/common/BrandBadge'
 import AddCrossConversionModal from '../components/crossconversion/AddCrossConversionModal'
 import EditCrossConversionModal from '../components/crossconversion/EditCrossConversionModal'
-import type { Brand } from '../constants/brandConstants'
+import { BRAND_ONLY_FILTER_OPTIONS, type Brand } from '../constants/brandConstants'
 
 export default function CrossConversionsPage() {
     const { setTopbarContent } = useTopbar()
@@ -103,23 +103,13 @@ export default function CrossConversionsPage() {
                         label: 'Nereden',
                         value: sourceBrandFilter,
                         onChange: handleSourceBrandChange,
-                        options: [
-                            { key: 'ALL', label: 'Tümü' },
-                            { key: 'OAK', label: 'Doğtaş', activeColor: 'bg-red-600' },
-                            { key: 'MAPLE', label: 'Maple', activeColor: 'bg-blue-600' },
-                            { key: 'PINE', label: 'Pine', activeColor: 'bg-purple-600' },
-                        ]
+                        options: BRAND_ONLY_FILTER_OPTIONS
                     },
                     {
                         label: 'Nereye',
                         value: targetBrandFilter,
                         onChange: handleTargetBrandChange,
-                        options: [
-                            { key: 'ALL', label: 'Tümü' },
-                            { key: 'OAK', label: 'Doğtaş', activeColor: 'bg-red-600' },
-                            { key: 'MAPLE', label: 'Maple', activeColor: 'bg-blue-600' },
-                            { key: 'PINE', label: 'Pine', activeColor: 'bg-purple-600' },
-                        ]
+                        options: BRAND_ONLY_FILTER_OPTIONS
                     },
                 ]}
                 searchPlaceholder="Müşteri adı, sözleşme no veya sipariş no..."

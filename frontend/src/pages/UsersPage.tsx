@@ -146,7 +146,7 @@ export default function UsersPage() {
     const getRoleLabel = (role: string) => {
         switch (role) {
             case 'ADMIN': return 'Admin'
-            case 'MANAGER': return 'Craft (Yönetici)'
+            case 'MANAGER': return 'Yönetici'
             case 'DIRECTOR': return 'Direktör'
             case 'OPERATIONS_MANAGER': return 'Operasyon Yöneticisi'
             case 'LOGISTICS_MANAGER': return 'Lojistik Yöneticisi'

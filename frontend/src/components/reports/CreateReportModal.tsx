@@ -8,6 +8,7 @@ import {
 } from '../../services/reportApi'
 import { useGetSalesConsultantsQuery } from '../../services/userApi'
 import { useAppSelector } from '../../hooks/useAuth'
+import { BRANDS, BRAND_LABELS } from '../../constants/brandConstants'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api'
 
@@ -22,9 +23,6 @@ const REPORT_TYPES: { type: ReportType; label: string; desc: string; icon: React
     { type: 'STOCK_SALE', label: 'Stoklu Satış Raporu', desc: 'Stok satışları, maliyet ve kâr analizi', icon: <ShoppingBag size={28} /> },
     { type: 'SHIPMENT', label: 'Sevkiyat Raporu', desc: 'Sevkiyat süreçleri, zaman çizelgesi ve durum analizi', icon: <Truck size={28} /> }
 ]
-
-const BRANDS = ['OAK', 'MAPLE', 'PINE']
-const BRAND_LABELS: Record<string, string> = { OAK: 'Doğtaş', MAPLE: 'Maple', PINE: 'Pine' }
 
 export default function CreateReportModal({ onClose }: Props) {
     const token = useAppSelector(state => state.auth.token)

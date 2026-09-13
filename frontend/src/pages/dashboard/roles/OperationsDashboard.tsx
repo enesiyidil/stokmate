@@ -2,6 +2,7 @@ import { useState } from "react";
 import { CheckSquare, Truck, Plus, Upload, ShoppingBag } from "lucide-react";
 import { CalendarWidget, MessagesWidget, ShortcutsWidget } from "../../../components/dashboard/DashboardWidgets";
 import { AnalogClock } from "../../../components/dashboard/AnalogClock";
+import { BRAND_STOCK_SHORTCUTS } from "../../../constants/brandConstants";
 import AddOrderReceiptModal from "../../../components/orders/AddOrderReceiptModal";
 import AddOrderModal from "../../../components/orders/AddOrderModal";
 import BulkUploadModal from "../../../components/orders/BulkUploadModal";
@@ -31,25 +32,10 @@ export default function OperationsDashboard() {
             icon: Upload,
             color: 'purple'
         },
-        // Brand Shortcuts
-        {
-            title: 'Doğtaş Stok',
-            path: '/products?brand=OAK',
+        ...BRAND_STOCK_SHORTCUTS.map((shortcut) => ({
+            ...shortcut,
             icon: ShoppingBag,
-            color: 'amber' // Approximate for Brown/Red
-        },
-        {
-            title: 'Maple Stok',
-            path: '/products?brand=MAPLE',
-            icon: ShoppingBag,
-            color: 'red' // Maple uses red/yellow
-        },
-        {
-            title: 'Pine Stok',
-            path: '/products?brand=PINE',
-            icon: ShoppingBag,
-            color: 'blue' // Pine uses turquoise/blue
-        },
+        })),
         // Other navs
         { title: 'Sevkiyat Planlama', path: '/shipment', icon: Truck, color: 'gray' },
     ];

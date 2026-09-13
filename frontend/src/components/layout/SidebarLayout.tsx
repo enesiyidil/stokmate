@@ -193,7 +193,7 @@ function SidebarLayoutContent({ children }: SidebarLayoutProps) {
                             {!isCollapsed && (
                                 <div className="flex-1 animate-fade-in">
                                     <h1 className="text-xl font-bold text-amber-100 flex items-center gap-1">
-                                        StokMate <span className="text-amber-400 mx-1">|</span> StokMate
+                                        StokMate
                                     </h1>
                                     <p className="text-xs text-amber-300">Stok Yönetimi</p>
                                 </div>

@@ -137,7 +137,7 @@ export default function LoginPage() {
                                 className="text-2xl font-semibold text-amber-900 border-l-2 border-amber-600 pl-3"
                                 style={{ animation: 'glow 3s ease-in-out infinite' }}
                             >
-                                StokMate
+                                Inventory
                             </span>
                         </div>
                         <p

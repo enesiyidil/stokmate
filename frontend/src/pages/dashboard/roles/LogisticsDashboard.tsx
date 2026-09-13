@@ -1,29 +1,13 @@
 import { ShoppingBag } from "lucide-react";
 import { CalendarWidget, MessagesWidget, ShortcutsWidget } from "../../../components/dashboard/DashboardWidgets";
 import { AnalogClock } from "../../../components/dashboard/AnalogClock";
+import { BRAND_STOCK_SHORTCUTS } from "../../../constants/brandConstants";
 
 export default function LogisticsDashboard() {
-    const shortcuts = [
-        // Brand Shortcuts
-        {
-            title: 'Doğtaş Stok',
-            path: '/products?brand=OAK',
-            icon: ShoppingBag,
-            color: 'amber'
-        },
-        {
-            title: 'Maple Stok',
-            path: '/products?brand=MAPLE',
-            icon: ShoppingBag,
-            color: 'red'
-        },
-        {
-            title: 'Pine Stok',
-            path: '/products?brand=PINE',
-            icon: ShoppingBag,
-            color: 'blue'
-        }
-    ];
+    const shortcuts = BRAND_STOCK_SHORTCUTS.map((shortcut) => ({
+        ...shortcut,
+        icon: ShoppingBag,
+    }));
 
     return (
         <div className="flex flex-col h-[calc(100vh-170px)] gap-6">

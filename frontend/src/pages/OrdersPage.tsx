@@ -10,7 +10,7 @@ import BulkUploadModal from '../components/orders/BulkUploadModal'
 import OtpVerificationModal from '../components/common/OtpVerificationModal'
 import FilterSearchBar from '../components/common/FilterSearchBar'
 import Pagination from '../components/common/Pagination'
-import type { Brand } from '../constants/brandConstants'
+import { BRAND_FILTER_OPTIONS, type Brand } from '../constants/brandConstants'
 import { useAppSelector } from '../hooks/useAuth'
 
 export default function OrdersPage() {
@@ -206,9 +206,7 @@ export default function OrdersPage() {
                         onChange: handleBrandFilter,
                         options: [
                             { key: 'ALL', label: 'Tümü' },
-                            { key: 'OAK', label: 'Doğtaş', activeColor: 'bg-red-600' },
-                            { key: 'MAPLE', label: 'Maple', activeColor: 'bg-blue-600' },
-                            { key: 'PINE', label: 'Pine', activeColor: 'bg-purple-600' },
+                            ...BRAND_FILTER_OPTIONS.filter((option) => option.key !== 'ALL'),
                         ]
                     }
                 ]}

@@ -12,7 +12,7 @@ import { useAppSelector } from '../../hooks/useAuth'
 import { useGetSalesConsultantsQuery } from '../../services/userApi'
 import CustomerModal from '../../components/customers/CustomerModal'
 import BrandBadge from '../../components/common/BrandBadge'
-import { BRANDS } from '../../constants/brandConstants'
+import { BRANDS, getBrandLabel } from '../../constants/brandConstants'
 import AddOrderModal from '../../components/orders/AddOrderModal'
 import UpdateOrderModal from '../../components/orders/UpdateOrderModal'
 import { Trash2, Settings } from 'lucide-react'
@@ -1084,7 +1084,7 @@ export default function OrderDetailsPage() {
                                 <option value="">-- Marka Seçiniz --</option>
                                 {BRANDS.map(brand => (
                                     <option key={brand} value={brand}>
-                                        {brand}
+                                        {getBrandLabel(brand)}
                                     </option>
                                 ))}
                             </select>

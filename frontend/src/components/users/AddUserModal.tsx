@@ -94,7 +94,7 @@ export default function AddUserModal({ onClose, onSuccess }: AddUserModalProps) 
                             <option value="LOGISTICS_MANAGER">Lojistik Yöneticisi</option>
                             <option value="OPERATIONS_MANAGER">Operasyon Yöneticisi</option>
                             <option value="DIRECTOR">Direktör</option>
-                            <option value="MANAGER">Craft (Yönetici)</option>
+                            <option value="MANAGER">Yönetici</option>
                         </select>
                     </div>
 

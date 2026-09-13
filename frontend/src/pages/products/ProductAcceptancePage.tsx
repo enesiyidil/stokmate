@@ -11,6 +11,7 @@ import Pagination from '../../components/common/Pagination'
 import ConfirmModal from '../../components/common/ConfirmModal'
 import { useToast } from '../../context/ToastContext'
 import { useAppSelector } from '../../hooks/useAuth'
+import { BRAND_FILTER_OPTIONS, getBrandBadgeClass, getBrandLabel, type BrandFilter } from '../../constants/brandConstants'
 
 export default function ProductAcceptancePage() {
     const [searchParams] = useSearchParams()
@@ -22,7 +23,7 @@ export default function ProductAcceptancePage() {
         (searchParams.get('status') as 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED') || 'ALL'
     )
     const [acceptedByFilter, setAcceptedByFilter] = useState<string>('ALL')
-    const [brandFilter, setBrandFilter] = useState<'ALL' | 'OAK' | 'MAPLE' | 'PINE' | 'MARKASIZ'>('ALL')
+    const [brandFilter, setBrandFilter] = useState<BrandFilter>('ALL')
     const [searchQuery, setSearchQuery] = useState('')
     const [debouncedSearch, setDebouncedSearch] = useState('')
     const [page, setPage] = useState(0)
@@ -132,13 +133,7 @@ export default function ProductAcceptancePage() {
                         label: 'Marka',
                         value: brandFilter,
                         onChange: handleBrandChange,
-                        options: [
-                            { key: 'ALL', label: 'Tümü' },
-                            { key: 'OAK', label: 'Doğtaş', activeColor: 'bg-red-600' },
-                            { key: 'MAPLE', label: 'Maple', activeColor: 'bg-blue-600' },
-                            { key: 'PINE', label: 'Pine', activeColor: 'bg-purple-600' },
-                            { key: 'MARKASIZ', label: 'Markasız', activeColor: 'bg-gray-600' }
-                        ]
+                        options: BRAND_FILTER_OPTIONS
                     }
                 ]}
                 searchPlaceholder="Sipariş no, ürün adı veya kodu ile ara..."
@@ -255,14 +250,8 @@ export default function ProductAcceptancePage() {
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <span className={`px-2.5 py-1 rounded-lg text-xs font-medium border ${acceptance.brand === 'OAK' ? 'bg-red-50 text-red-700 border-red-100' :
-                                                acceptance.brand === 'MAPLE' ? 'bg-blue-50 text-blue-700 border-blue-100' :
-                                                    acceptance.brand === 'PINE' ? 'bg-purple-50 text-purple-700 border-purple-100' :
-                                                        'bg-gray-50 text-gray-700 border-gray-100'
-                                                }`}>
-                                                {acceptance.brand === 'OAK' ? 'Doğtaş' :
-                                                    acceptance.brand === 'MAPLE' ? 'Maple' :
-                                                        acceptance.brand === 'PINE' ? 'Pine' : 'Markasız'}
+                                            <span className={`px-2.5 py-1 rounded-lg text-xs font-medium border ${getBrandBadgeClass(acceptance.brand)}`}>
+                                                {getBrandLabel(acceptance.brand)}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4">

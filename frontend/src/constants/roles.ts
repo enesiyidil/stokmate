@@ -1,7 +1,7 @@
 // Role display name mapping
 export const ROLE_DISPLAY_NAMES: Record<string, string> = {
     ADMIN: 'Admin',
-    MANAGER: 'Craft', // Database: MANAGER, UI: Craft
+    MANAGER: 'Yönetici',
     DIRECTOR: 'Direktör',
     STORE_MANAGER: 'Mağaza Sorumlusu',
     STORE_EMPLOYEE: 'Mağaza Çalışanı',

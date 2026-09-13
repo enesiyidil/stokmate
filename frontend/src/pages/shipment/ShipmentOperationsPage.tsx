@@ -12,7 +12,7 @@ import ConfirmModal from '../../components/common/ConfirmModal'
 import BrandBadge from '../../components/common/BrandBadge'
 import { useAppSelector } from '../../hooks/useAuth'
 import { useToast } from '../../context/ToastContext'
-import type { Brand } from '../../constants/brandConstants'
+import { BRAND_FILTER_OPTIONS, type Brand, type BrandFilter } from '../../constants/brandConstants'
 
 type TabKey = 'all' | 'pending' | 'awaiting' | 'ready' | 'completed'
 
@@ -59,7 +59,7 @@ const ShipmentOperationsPage: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState(() => searchParams.get('search') || '')
     const [debouncedSearch, setDebouncedSearch] = useState(() => searchParams.get('search') || '')
     const [deliveryFilter, setDeliveryFilter] = useState<'ALL' | 'PROBLEM_FREE' | 'PROBLEMATIC' | 'NOT_DELIVERED'>('ALL')
-    const [brandFilter, setBrandFilter] = useState<'ALL' | 'OAK' | 'PINE' | 'MAPLE' | 'MARKASIZ'>('ALL')
+    const [brandFilter, setBrandFilter] = useState<BrandFilter>('ALL')
     const [problemResolvedFilter, setProblemResolvedFilter] = useState<'ALL' | 'RESOLVED' | 'UNRESOLVED'>('ALL')
     const [page, setPage] = useState(0)
 
@@ -508,13 +508,7 @@ const ShipmentOperationsPage: React.FC = () => {
                         label: 'Marka',
                         value: brandFilter,
                         onChange: handleBrandChange,
-                        options: [
-                            { key: 'ALL', label: 'Tümü' },
-                            { key: 'OAK', label: 'Doğtaş', activeColor: 'bg-red-600' },
-                            { key: 'MAPLE', label: 'Maple', activeColor: 'bg-blue-600' },
-                            { key: 'PINE', label: 'Pine', activeColor: 'bg-purple-600' },
-                            { key: 'MARKASIZ', label: 'Markasız', activeColor: 'bg-gray-600' }
-                        ]
+                        options: BRAND_FILTER_OPTIONS
                     },
                     {
                         label: 'Sorun Durumu',

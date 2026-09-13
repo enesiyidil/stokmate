@@ -3,7 +3,7 @@ import { Package, Plus, Edit2, Trash2, AlertCircle, X, Eye } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useGetProductsQuery, useDeleteProductMutation, useUploadProductImageMutation } from '../../services/productApi'
 import type { ProductResponse } from '../../services/productApi'
-import type { Brand } from '../../constants/brandConstants'
+import { BRAND_FILTER_OPTIONS, type Brand, type BrandFilter } from '../../constants/brandConstants'
 import AddProductModal from '../../components/products/AddProductModal'
 import ImageCropperModal from '../../components/products/ImageCropperModal'
 import { useTopbar } from '../../context/TopbarContext'
@@ -47,8 +47,8 @@ export default function ProductsPage() {
     const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL')
     const [stockFilter, setStockFilter] = useState<'ALL' | 'IN_STOCK' | 'OUT_OF_STOCK'>('ALL')
     // Initialize brand filter from URL param if present
-    const [brandFilter, setBrandFilter] = useState<'ALL' | 'OAK' | 'MAPLE' | 'PINE' | 'MARKASIZ'>(
-        (searchParams.get('brand') as any) || 'ALL'
+    const [brandFilter, setBrandFilter] = useState<BrandFilter>(
+        (searchParams.get('brand') as BrandFilter) || 'ALL'
     )
 
     // Image upload states
@@ -194,13 +194,7 @@ export default function ProductsPage() {
                         label: 'Marka',
                         value: brandFilter,
                         onChange: handleBrandChange,
-                        options: [
-                            { key: 'ALL', label: 'Tümü' },
-                            { key: 'OAK', label: 'Doğtaş', activeColor: 'bg-red-600' },
-                            { key: 'MAPLE', label: 'Maple', activeColor: 'bg-blue-600' },
-                            { key: 'PINE', label: 'Pine', activeColor: 'bg-purple-600' },
-                            { key: 'MARKASIZ', label: 'Markasız', activeColor: 'bg-gray-600' }
-                        ]
+                        options: BRAND_FILTER_OPTIONS
                     }
                 ]}
                 searchPlaceholder="Ürün adı, kodu veya marka ile ara..."

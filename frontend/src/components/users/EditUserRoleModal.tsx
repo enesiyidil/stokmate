@@ -15,7 +15,7 @@ interface EditUserRoleModalProps {
 
 const ROLES = [
     { value: 'ADMIN', label: 'Admin' },
-    { value: 'MANAGER', label: 'Craft' },
+    { value: 'MANAGER', label: 'Yönetici' },
     { value: 'DIRECTOR', label: 'Direktör' },
     { value: 'STORE_MANAGER', label: 'Mağaza Sorumlusu' },
     { value: 'STORE_EMPLOYEE', label: 'Mağaza Çalışanı' },

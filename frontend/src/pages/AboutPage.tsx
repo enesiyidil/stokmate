@@ -66,14 +66,14 @@ const AboutPage: React.FC = () => {
                                 <Tag className="w-5 h-5 text-amber-600" />
                                 <span className="text-sm text-amber-700">Sürüm</span>
                             </div>
-                            <p className="text-lg font-bold text-amber-900 font-mono">v1-b2.8.245</p>
+                            <p className="text-lg font-bold text-amber-900 font-mono">v1.0.0</p>
                         </div>
                         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                             <div className="flex items-center gap-3 mb-2">
                                 <Code className="w-5 h-5 text-blue-600" />
                                 <span className="text-sm text-blue-700">Ortam</span>
                             </div>
-                            <p className="text-lg font-bold text-blue-900">Canlı</p>
+                            <p className="text-lg font-bold text-blue-900">Open Source</p>
                         </div>
                         <div className="bg-green-50 border border-green-200 rounded-xl p-4">
                             <div className="flex items-center gap-3 mb-2">
@@ -110,21 +110,23 @@ const AboutPage: React.FC = () => {
                         Destek & İletişim
                     </h2>
                     <p className="text-amber-800 mb-4">
-                        Her türlü soru, geri bildirim ve destek talepleriniz için:
+                        Sorular, hata bildirimleri ve katkılar için GitHub Issues kullanın.
                     </p>
                     <a
-                        href="mailto:support@stokmate.com"
+                        href="https://github.com/enesiyidil/stokmate/issues"
+                        target="_blank"
+                        rel="noreferrer"
                         className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-600 to-orange-600 text-white rounded-lg hover:from-amber-700 hover:to-orange-700 transition-all shadow-md"
                     >
                         <Mail className="w-4 h-4" />
-                        support@stokmate.com
+                        GitHub Issues
                     </a>
                 </div>
 
                 {/* Footer */}
                 <div className="text-center py-4">
                     <p className="text-amber-600 text-sm">
-                        © 2026 StokMate. Tüm hakları saklıdır.
+                        © 2026 Enes İyidil. Released under the MIT License.
                     </p>
                 </div>
             </div>

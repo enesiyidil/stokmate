@@ -30,7 +30,7 @@ export default function NotFoundPage() {
                                 <Sparkles className="w-6 h-6 text-amber-600 animate-pulse" />
                             </h1>
                             <span className="text-2xl font-light text-stone-700 border-l-2 border-stone-400 pl-3">
-                                StokMate
+                                Inventory
                             </span>
                         </div>
                     </div>
