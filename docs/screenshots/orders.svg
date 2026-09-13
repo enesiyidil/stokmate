@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#faf6f0"/>
+  <rect width="240" height="720" fill="#1c1917"/>
+  <text x="28" y="48" fill="#fde68a" font-family="Segoe UI, sans-serif" font-size="22" font-weight="700">StokMate</text>
+  <rect x="264" y="24" width="992" height="72" rx="16" fill="#fff" stroke="#ecd9c3"/>
+  <text x="288" y="68" fill="#78350f" font-family="Segoe UI, sans-serif" font-size="24" font-weight="700">Orders</text>
+  <rect x="264" y="120" width="992" height="560" rx="16" fill="#fff" stroke="#ecd9c3"/>
+  <text x="288" y="168" fill="#a8a29e" font-family="Segoe UI, sans-serif" font-size="13">ORDER</text>
+  <text x="480" y="168" fill="#a8a29e" font-family="Segoe UI, sans-serif" font-size="13">CUSTOMER</text>
+  <text x="780" y="168" fill="#a8a29e" font-family="Segoe UI, sans-serif" font-size="13">BRAND</text>
+  <text x="980" y="168" fill="#a8a29e" font-family="Segoe UI, sans-serif" font-size="13">STATUS</text>
+  <text x="288" y="220" fill="#1c1917" font-family="Segoe UI, sans-serif" font-size="16">ORD-1042</text>
+  <text x="480" y="220" fill="#44403c" font-family="Segoe UI, sans-serif" font-size="16">Ada Y1lmaz</text>
+  <rect x="780" y="200" width="64" height="26" rx="13" fill="#5D4037"/>
+  <text x="812" y="218" text-anchor="middle" fill="#fff" font-family="Segoe UI, sans-serif" font-size="12">Oak</text>
+  <rect x="980" y="200" width="88" height="26" rx="13" fill="#16a34a"/>
+  <text x="1024" y="218" text-anchor="middle" fill="#fff" font-family="Segoe UI, sans-serif" font-size="12">Open</text>
+  <text x="288" y="276" fill="#1c1917" font-family="Segoe UI, sans-serif" font-size="16">ORD-1043</text>
+  <text x="480" y="276" fill="#44403c" font-family="Segoe UI, sans-serif" font-size="16">Mert Kaya</text>
+  <rect x="780" y="256" width="72" height="26" rx="13" fill="#D32F2F"/>
+  <text x="816" y="274" text-anchor="middle" fill="#fff" font-family="Segoe UI, sans-serif" font-size="12">Maple</text>
+  <rect x="980" y="256" width="88" height="26" rx="13" fill="#ca8a04"/>
+  <text x="1024" y="274" text-anchor="middle" fill="#fff" font-family="Segoe UI, sans-serif" font-size="12">Planned</text>
+</svg>

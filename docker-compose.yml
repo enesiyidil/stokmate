@@ -1,0 +1,78 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: stokmate-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-stokmate}
+      POSTGRES_USER: ${DB_USERNAME:-stokmate}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme-db-password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-stokmate} -d ${DB_NAME:-stokmate}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    container_name: stokmate-minio
+    command: server /data --console-address ":9001"
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: stokmate-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-stokmate}
+      DB_USERNAME: ${DB_USERNAME:-stokmate}
+      DB_PASSWORD: ${DB_PASSWORD:-changeme-db-password}
+      JWT_SECRET: ${JWT_SECRET:-changeme-please-change-secret-key-should-be-long}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-86400000}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@stokmate.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme-admin-password}
+      MINIO_URL: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-invoices}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      APP_FRONTEND_URL: ${APP_FRONTEND_URL:-http://localhost:8080}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-demo}
+      FLYWAY_ENABLED: ${FLYWAY_ENABLED:-false}
+    ports:
+      - "9090:9090"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: stokmate-frontend
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+
+volumes:
+  postgres_data:
+  minio_data:

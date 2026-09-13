@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#faf6f0"/>
+  <rect width="240" height="720" fill="#1c1917"/>
+  <text x="28" y="48" fill="#fde68a" font-family="Segoe UI, sans-serif" font-size="22" font-weight="700">StokMate</text>
+  <text x="28" y="110" fill="#e7e5e4" font-family="Segoe UI, sans-serif" font-size="14">Dashboard</text>
+  <text x="28" y="148" fill="#a8a29e" font-family="Segoe UI, sans-serif" font-size="14">Products</text>
+  <text x="28" y="186" fill="#a8a29e" font-family="Segoe UI, sans-serif" font-size="14">Orders</text>
+  <text x="28" y="224" fill="#a8a29e" font-family="Segoe UI, sans-serif" font-size="14">Shipments</text>
+  <rect x="264" y="24" width="992" height="72" rx="16" fill="#fff" stroke="#ecd9c3"/>
+  <text x="288" y="68" fill="#78350f" font-family="Segoe UI, sans-serif" font-size="24" font-weight="700">Operations dashboard</text>
+  <rect x="264" y="120" width="480" height="360" rx="16" fill="#fff" stroke="#ecd9c3"/>
+  <text x="288" y="160" fill="#78350f" font-family="Segoe UI, sans-serif" font-size="18" font-weight="600">Announcements</text>
+  <rect x="288" y="184" width="432" height="64" rx="10" fill="#fff7ed"/>
+  <rect x="288" y="260" width="432" height="64" rx="10" fill="#fff7ed"/>
+  <rect x="760" y="120" width="496" height="360" rx="16" fill="#fff" stroke="#ecd9c3"/>
+  <circle cx="1008" cy="280" r="90" fill="#1c1917"/>
+  <text x="1008" y="288" text-anchor="middle" fill="#fde68a" font-family="Segoe UI, sans-serif" font-size="28">10:24</text>
+  <rect x="264" y="500" width="320" height="180" rx="16" fill="#fff" stroke="#ecd9c3"/>
+  <text x="288" y="548" fill="#78350f" font-family="Segoe UI, sans-serif" font-size="18" font-weight="600">Oak stock</text>
+  <rect x="600" y="500" width="320" height="180" rx="16" fill="#fff" stroke="#ecd9c3"/>
+  <text x="624" y="548" fill="#0e7490" font-family="Segoe UI, sans-serif" font-size="18" font-weight="600">Pine stock</text>
+  <rect x="936" y="500" width="320" height="180" rx="16" fill="#fff" stroke="#ecd9c3"/>
+  <text x="960" y="548" fill="#b91c1c" font-family="Segoe UI, sans-serif" font-size="18" font-weight="600">Maple stock</text>
+</svg>

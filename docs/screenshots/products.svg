@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#faf6f0"/>
+  <rect width="240" height="720" fill="#1c1917"/>
+  <text x="28" y="48" fill="#fde68a" font-family="Segoe UI, sans-serif" font-size="22" font-weight="700">StokMate</text>
+  <rect x="264" y="24" width="992" height="72" rx="16" fill="#fff" stroke="#ecd9c3"/>
+  <text x="288" y="68" fill="#78350f" font-family="Segoe UI, sans-serif" font-size="24" font-weight="700">Products</text>
+  <rect x="280" y="116" width="80" height="36" rx="18" fill="#1c1917"/>
+  <text x="320" y="140" text-anchor="middle" fill="#fff" font-family="Segoe UI, sans-serif" font-size="13">All</text>
+  <rect x="372" y="116" width="80" height="36" rx="18" fill="#92400e"/>
+  <text x="412" y="140" text-anchor="middle" fill="#fff" font-family="Segoe UI, sans-serif" font-size="13">Oak</text>
+  <rect x="464" y="116" width="80" height="36" rx="18" fill="#0891b2"/>
+  <text x="504" y="140" text-anchor="middle" fill="#fff" font-family="Segoe UI, sans-serif" font-size="13">Pine</text>
+  <rect x="556" y="116" width="88" height="36" rx="18" fill="#dc2626"/>
+  <text x="600" y="140" text-anchor="middle" fill="#fff" font-family="Segoe UI, sans-serif" font-size="13">Maple</text>
+  <rect x="264" y="172" width="992" height="520" rx="16" fill="#fff" stroke="#ecd9c3"/>
+  <text x="288" y="216" fill="#a8a29e" font-family="Segoe UI, sans-serif" font-size="13">CODE</text>
+  <text x="480" y="216" fill="#a8a29e" font-family="Segoe UI, sans-serif" font-size="13">NAME</text>
+  <text x="820" y="216" fill="#a8a29e" font-family="Segoe UI, sans-serif" font-size="13">BRAND</text>
+  <text x="1040" y="216" fill="#a8a29e" font-family="Segoe UI, sans-serif" font-size="13">STOCK</text>
+  <text x="288" y="268" fill="#44403c" font-family="Segoe UI, sans-serif" font-size="16">OAK-SOFA-01</text>
+  <text x="480" y="268" fill="#1c1917" font-family="Segoe UI, sans-serif" font-size="16">Oak Sofa 3-seat</text>
+  <rect x="820" y="248" width="64" height="26" rx="13" fill="#5D4037"/>
+  <text x="852" y="266" text-anchor="middle" fill="#fff" font-family="Segoe UI, sans-serif" font-size="12">Oak</text>
+  <text x="1040" y="268" fill="#1c1917" font-family="Segoe UI, sans-serif" font-size="16">12</text>
+  <text x="288" y="324" fill="#44403c" font-family="Segoe UI, sans-serif" font-size="16">PINE-TBL-01</text>
+  <text x="480" y="324" fill="#1c1917" font-family="Segoe UI, sans-serif" font-size="16">Pine Dining Table</text>
+  <rect x="820" y="304" width="64" height="26" rx="13" fill="#00ACC1"/>
+  <text x="852" y="322" text-anchor="middle" fill="#fff" font-family="Segoe UI, sans-serif" font-size="12">Pine</text>
+  <text x="1040" y="324" fill="#1c1917" font-family="Segoe UI, sans-serif" font-size="16">8</text>
+  <text x="288" y="380" fill="#44403c" font-family="Segoe UI, sans-serif" font-size="16">MAPLE-CHR-01</text>
+  <text x="480" y="380" fill="#1c1917" font-family="Segoe UI, sans-serif" font-size="16">Maple Accent Chair</text>
+  <rect x="820" y="360" width="72" height="26" rx="13" fill="#D32F2F"/>
+  <text x="856" y="378" text-anchor="middle" fill="#fff" font-family="Segoe UI, sans-serif" font-size="12">Maple</text>
+  <text x="1040" y="380" fill="#1c1917" font-family="Segoe UI, sans-serif" font-size="16">20</text>
+</svg>
