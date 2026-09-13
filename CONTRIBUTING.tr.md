@@ -4,10 +4,13 @@ Katkın için teşekkürler. Bu depo bir monorepo: `backend/` (Java 17 / Spring 
 
 ## Nasıl çalışılır
 
+`main` korumalıdır. Oraya doğrudan push etmeyin. Fork açın, pull request gönderin, maintainer incelemesini bekleyin.
+
 1. Repoyu fork’layın ve `main` üzerinden bir dal açın.
 2. Dal adı işi anlatsın (`fix/login-timeout`, `docs/readme-typo`).
 3. Pull request’leri dar tutun. Her PR tek bir konu.
 4. Erken geri bildirim için taslak PR açabilirsiniz.
+5. CI yeşil kalmalı. Birleştirmeden önce `@enesiyidil` onaylamalı.
 
 ## Backend
 

@@ -4,10 +4,13 @@ Thanks for helping. This repository is a monorepo: `backend/` (Java 17 / Spring 
 
 ## How to work
 
+`main` is protected. Do not push there. Fork the repo, open a pull request, and wait for maintainer review.
+
 1. Fork the repo and create a branch from `main`.
 2. Use a descriptive branch name (`fix/login-timeout`, `docs/readme-typo`).
 3. Keep pull requests focused. One concern per PR.
 4. Open a draft PR early if you want feedback.
+5. CI should stay green. The maintainer (`@enesiyidil`) must approve before merge.
 
 ## Backend
 
